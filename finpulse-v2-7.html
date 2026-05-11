@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinPulse — Track every dollar. See every ripple.</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#f5f4f0;--surface:#fff;--surface2:#f8f7f4;--surface3:#eeece7;
+  --border:#e4e2db;--border2:#d4d1c8;--accent:#1a6b4a;--accent-light:#edf5f0;
+  --accent-mid:#2d9e6e;--danger:#c0392b;--danger-light:#fdf2f1;
+  --warning:#b7791f;--warning-light:#fef9f0;--text:#1a1916;--text2:#6b6960;--text3:#a8a49a;
+  --radius:12px;--radius-sm:8px;
+  --shadow:0 1px 3px rgba(0,0,0,0.06),0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:0 4px 12px rgba(0,0,0,0.08),0 2px 4px rgba(0,0,0,0.04);
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;}
+
+/* LOADING */
+.loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;}
+.spinner{width:32px;height:32px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:13px;color:var(--text3);}
+
+/* AUTH */
+.auth-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:24px;}
+.auth-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:40px;width:100%;max-width:420px;box-shadow:var(--shadow-md);}
+.auth-logo{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+.auth-logo-mark{width:36px;height:36px;background:var(--accent-mid);border-radius:9px;display:flex;align-items:center;justify-content:center;}
+.auth-logo-mark svg{width:22px;height:22px;}
+.auth-logo-text{font-family:'Playfair Display',serif;font-size:24px;font-weight:700;letter-spacing:-0.3px;}
+.auth-logo-text .fin{color:#111816;}.auth-logo-text .pulse{color:var(--accent);}
+.auth-tagline{font-size:12px;color:var(--text3);margin-bottom:28px;padding-left:46px;}
+.auth-title{font-family:'Playfair Display',serif;font-size:22px;font-weight:600;margin-bottom:4px;letter-spacing:-0.3px;}
+.auth-sub{font-size:13px;color:var(--text2);margin-bottom:20px;}
+.auth-form{display:flex;flex-direction:column;gap:10px;}
+.auth-input{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px;font-size:14px;color:var(--text);font-family:'Inter',sans-serif;outline:none;transition:border 0.12s;width:100%;}
+.auth-input:focus{border-color:var(--accent);background:var(--surface);}
+.auth-input::placeholder{color:var(--text3);}
+.auth-btn{background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:14px;font-weight:600;font-family:'Inter',sans-serif;cursor:pointer;transition:background 0.12s;width:100%;margin-top:4px;}
+.auth-btn:hover{background:#155a3d;}.auth-btn:disabled{background:var(--text3);cursor:not-allowed;}
+.auth-switch{text-align:center;font-size:13px;color:var(--text2);margin-top:16px;}
+.auth-switch a{color:var(--accent);font-weight:600;cursor:pointer;}
+.auth-error{background:var(--danger-light);border:1px solid #f5c4bb;border-radius:var(--radius-sm);padding:10px 12px;font-size:12.5px;color:var(--danger);margin-bottom:12px;display:none;}
+.auth-success{background:var(--accent-light);border:1px solid #c3ddd1;border-radius:var(--radius-sm);padding:10px 12px;font-size:12.5px;color:var(--accent);margin-bottom:12px;display:none;}
+
+/* APP */
+.app{display:none;}
+.layout{display:flex;min-height:100vh;}
+
+/* SIDEBAR */
+.sidebar{width:232px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:0;position:fixed;height:100vh;z-index:100;box-shadow:var(--shadow);}
+.sidebar-top{padding:20px 16px 16px;}
+.logo-wrap{display:flex;align-items:center;gap:9px;margin-bottom:4px;}
+.logo-icon{width:32px;height:32px;background:var(--accent-mid);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.logo-icon svg{width:20px;height:20px;}
+.logo{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;letter-spacing:-0.3px;}
+.logo .fin{color:#111816;}.logo .pulse{color:var(--accent);}
+.logo-tagline{font-size:10px;color:var(--text3);padding:0 4px;margin-bottom:20px;line-height:1.5;font-style:italic;}
+.nav-label{font-size:10.5px;font-weight:600;letter-spacing:0.6px;text-transform:uppercase;color:var(--text3);padding:0 10px;margin:12px 0 4px;}
+.nav-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--radius-sm);color:var(--text2);font-size:13.5px;font-weight:500;cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all 0.1s;margin-bottom:1px;}
+.nav-item:hover{background:var(--surface2);color:var(--text);}
+.nav-item.active{background:var(--accent-light);color:var(--accent);font-weight:600;}
+.nav-dot{width:6px;height:6px;border-radius:50%;background:var(--border2);flex-shrink:0;}
+.nav-item.active .nav-dot{background:var(--accent);}
+.sidebar-footer{margin-top:auto;padding:12px 16px 16px;border-top:1px solid var(--border);}
+.user-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.user-avatar{width:28px;height:28px;border-radius:50%;background:var(--accent-light);border:1px solid #c3ddd1;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0;}
+.user-email{font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+.signout-btn{font-size:11px;color:var(--text3);background:none;border:none;cursor:pointer;font-family:'Inter',sans-serif;transition:color 0.1s;}
+.signout-btn:hover{color:var(--danger);}
+.trial-widget{background:var(--accent-light);border:1px solid #c3ddd1;border-radius:var(--radius);padding:12px;}
+.trial-title{font-size:12px;font-weight:600;color:var(--accent);margin-bottom:2px;}
+.trial-sub{font-size:11px;color:#4a8c6e;}
+.trial-bar{height:3px;background:#c3ddd1;border-radius:99px;margin-top:8px;overflow:hidden;}
+.trial-fill{height:100%;width:3%;background:var(--accent);border-radius:99px;}
+
+/* MAIN */
+.main{margin-left:232px;flex:1;padding:28px 32px;max-width:calc(100vw - 232px);}
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--border);}
+.topbar h2{font-family:'Playfair Display',serif;font-size:26px;font-weight:600;letter-spacing:-0.5px;}
+.topbar p{font-size:13px;color:var(--text2);margin-top:2px;}
+.topbar-actions{display:flex;gap:8px;}
+.btn{padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.12s;border:none;}
+.btn-outline{background:var(--surface);color:var(--text2);border:1px solid var(--border2);box-shadow:var(--shadow);}
+.btn-outline:hover{color:var(--text);}
+.btn-solid{background:var(--accent);color:#fff;font-weight:600;}
+.btn-solid:hover{background:#155a3d;}
+
+/* P&L */
+.pnl-banner{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-radius:var(--radius);margin-bottom:20px;border:1px solid;}
+.pnl-banner.profit{background:var(--accent-light);border-color:#c3ddd1;}
+.pnl-banner.loss{background:#fdf2f1;border-color:#f5c4bb;}
+.pnl-eyebrow{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text3);}
+.pnl-amount{font-family:'DM Serif Display',serif;font-size:32px;font-weight:400;letter-spacing:-0.5px;line-height:1;}
+.pnl-banner.profit .pnl-amount{color:var(--accent);}
+.pnl-banner.loss .pnl-amount{color:var(--danger);}
+.pnl-sub{font-size:12px;color:var(--text2);margin-top:3px;}
+.pnl-carry{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 14px;font-size:12px;color:var(--text2);}
+.pnl-months{display:flex;gap:6px;margin-top:6px;justify-content:flex-end;}
+.pnl-pill{font-size:11px;font-weight:500;padding:3px 10px;border-radius:99px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;transition:all 0.12s;}
+.pnl-pill.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+/* STATS */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);}
+.stat-divider{width:28px;height:2px;border-radius:99px;margin-bottom:10px;}
+.stat-divider.pos{background:var(--accent)}.stat-divider.neg{background:var(--danger)}.stat-divider.warn{background:var(--warning)}
+.stat-label{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:0.3px;text-transform:uppercase;margin-bottom:6px;}
+.stat-value{font-family:'DM Serif Display',serif;font-size:28px;font-weight:400;letter-spacing:-0.3px;}
+.stat-value.pos{color:var(--accent)}.stat-value.neg{color:var(--danger)}.stat-value.warn{color:var(--warning)}
+.stat-sub{font-size:11px;color:var(--text3);margin-top:5px;}
+
+/* CONTENT GRID */
+.content-grid{display:grid;grid-template-columns:1fr 292px;gap:16px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;}
+.card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.card-title{font-family:'Playfair Display',serif;font-size:15px;font-weight:600;letter-spacing:-0.2px;}
+.card-meta{font-size:11.5px;color:var(--text3);font-weight:500;}
+.card-body{padding:16px 18px;}
+
+/* CALENDAR */
+.cal-nav{display:flex;align-items:center;gap:8px;}
+.cal-btn{width:24px;height:24px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text2);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;}
+.cal-month{font-size:12px;font-weight:600;color:var(--text2);}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+.cal-dow{text-align:center;font-size:10px;font-weight:700;color:var(--text3);padding:6px 0;text-transform:uppercase;letter-spacing:0.5px;}
+.cal-day{border-radius:6px;padding:6px 5px 5px;min-height:88px;cursor:pointer;border:1px solid var(--border);background:var(--surface2);transition:all 0.1s;display:flex;flex-direction:column;}
+.cal-day:hover{border-color:var(--accent);background:var(--accent-light);}
+.cal-day.today{border-color:var(--accent);background:var(--accent-light);box-shadow:0 0 0 2px rgba(26,107,74,0.1);}
+.cal-day.empty{opacity:0;pointer-events:none;}
+.cal-day.past{opacity:0.5;}
+.day-num{font-size:11px;font-weight:700;color:var(--text3);margin-bottom:4px;}
+.cal-day.today .day-num{color:var(--accent);}
+.day-section-top{min-height:16px;}
+.day-section-mid{flex:1;display:flex;align-items:center;}
+.day-section-bot{margin-top:auto;border-top:1px solid var(--border);padding-top:4px;display:flex;flex-direction:column;gap:1px;}
+.day-bal-label{font-size:7.5px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;}
+.day-balance{font-family:'DM Serif Display',serif;font-size:12px;font-weight:400;}
+.day-balance.pos{color:var(--accent)}.day-balance.neg{color:var(--danger)}.day-balance.warn{color:var(--warning)}
+.day-event{font-size:9px;font-weight:500;padding:1px 4px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.day-event.bill{background:var(--danger-light);color:var(--danger);}
+.day-event.income{background:var(--accent-light);color:var(--accent);}
+.day-event.spend{background:var(--warning-light);color:var(--warning);}
+.ripple-bar{background:var(--warning-light);border:1px solid #e9d5aa;border-left:3px solid var(--warning);border-radius:var(--radius-sm);padding:11px 14px;display:flex;gap:10px;align-items:flex-start;font-size:12.5px;color:var(--text2);line-height:1.5;margin-top:14px;}
+
+/* CATEGORY RINGS */
+.cat-row{display:flex;align-items:center;gap:10px;padding:4px 0;}
+.cat-ring-wrap{position:relative;width:38px;height:38px;flex-shrink:0;}
+.cat-ring{width:38px;height:38px;transform:rotate(-90deg);}
+.ring-bg{fill:none;stroke:var(--border);stroke-width:3;}
+.ring-fill{fill:none;stroke-width:3;stroke-linecap:round;animation:ringIn 1.2s cubic-bezier(.4,0,.2,1) both;}
+.cat-icon-inner{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;}
+.cat-info{flex:1;min-width:0;}
+.cat-name{font-size:12.5px;font-weight:500;color:var(--text);}
+.cat-right{text-align:right;flex-shrink:0;}
+.cat-spent{font-family:'DM Serif Display',serif;font-size:15px;color:var(--text);}
+.prog-pct{font-size:11px;color:var(--text3);}
+.progress-bar{height:4px;background:var(--surface3);border-radius:99px;overflow:hidden;margin-top:4px;}
+.progress-fill{height:100%;border-radius:99px;}
+.progress-fill.pos{background:var(--accent)}.progress-fill.warn{background:var(--warning)}.progress-fill.neg{background:var(--danger)}
+@keyframes ringIn{from{stroke-dasharray:0 100}}
+.cat-row:nth-child(1) .ring-fill{animation-delay:.1s}.cat-row:nth-child(2) .ring-fill{animation-delay:.2s}.cat-row:nth-child(3) .ring-fill{animation-delay:.3s}.cat-row:nth-child(4) .ring-fill{animation-delay:.4s}.cat-row:nth-child(5) .ring-fill{animation-delay:.5s}
+
+/* BILLS */
+.bill-list{display:flex;flex-direction:column;gap:6px;}
+.bill-row{display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);}
+.bill-row.paid{opacity:0.45;}
+.bill-chk{width:17px;height:17px;border-radius:50%;border:1.5px solid var(--border2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:9px;color:transparent;flex-shrink:0;transition:all 0.15s;}
+.bill-chk.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+.bill-info{flex:1;min-width:0;}
+.bill-name{font-size:12.5px;font-weight:500;}
+.bill-due{font-size:10.5px;color:var(--text3);margin-top:1px;}
+.bill-amt{font-family:'DM Serif Display',serif;font-size:15px;color:var(--danger);flex-shrink:0;}
+
+/* MODALS */
+.overlay{position:fixed;inset:0;background:rgba(26,25,22,0.4);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:999;opacity:0;pointer-events:none;transition:opacity 0.2s;}
+.overlay.on{opacity:1;pointer-events:all;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:400px;box-shadow:var(--shadow-md);transform:translateY(16px);transition:transform 0.22s;}
+.overlay.on .modal{transform:translateY(0);}
+.modal-eyebrow{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:5px;}
+.modal-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:600;margin-bottom:16px;letter-spacing:-0.3px;}
+.modal-amt{font-family:'DM Serif Display',serif;font-size:40px;line-height:1;letter-spacing:-1px;}
+.modal-merch{font-size:13px;color:var(--text2);margin:4px 0 22px;}
+.streak-pill{display:inline-flex;align-items:center;gap:5px;background:var(--warning-light);border:1px solid #e9d5aa;border-radius:99px;padding:4px 10px;font-size:11.5px;color:var(--warning);font-weight:500;margin-bottom:18px;}
+.cat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px;}
+.cat-tile{border:1.5px solid var(--border);background:var(--surface2);border-radius:var(--radius-sm);padding:12px 6px;cursor:pointer;text-align:center;transition:all 0.12s;}
+.cat-tile:hover,.cat-tile.on{border-color:var(--accent);background:var(--accent-light);}
+.cat-em{font-size:20px;display:block;margin-bottom:4px;}
+.cat-lbl{font-size:11px;font-weight:600;color:var(--text);}
+.confirm-btn{width:100%;padding:13px;background:var(--accent);border:none;border-radius:var(--radius-sm);font-family:'Inter',sans-serif;font-weight:600;font-size:13.5px;color:#fff;cursor:pointer;transition:background 0.12s;}
+.confirm-btn:hover{background:#155a3d;}
+.form-stack{display:flex;flex-direction:column;gap:10px;}
+.form-row{display:flex;gap:8px;}
+.finput{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 11px;font-size:13px;color:var(--text);font-family:'Inter',sans-serif;outline:none;transition:border 0.1s;}
+.finput:focus{border-color:var(--accent);}
+.finput::placeholder{color:var(--text3);}
+.fselect{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 11px;font-size:13px;color:var(--text);font-family:'Inter',sans-serif;outline:none;cursor:pointer;}
+
+/* CARD FINDER */
+.goal-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px;}
+.goal-tile{border:1.5px solid var(--border);background:var(--surface2);border-radius:var(--radius);padding:16px;cursor:pointer;transition:all 0.12s;}
+.goal-tile:hover,.goal-tile.on{border-color:var(--accent);background:var(--accent-light);}
+.goal-em{font-size:22px;margin-bottom:5px;}
+.goal-lbl{font-size:13px;font-weight:600;color:var(--text);}
+.rec-label{font-size:10.5px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;}
+.rec-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:8px;}
+.rec-name{font-family:'Playfair Display',serif;font-size:15px;font-weight:600;color:var(--text);margin-bottom:3px;}
+.rec-perk{font-size:12.5px;color:var(--accent);font-weight:500;margin-bottom:2px;}
+.rec-bonus{font-size:12px;color:var(--text3);}
+.rec-apply{display:inline-block;margin-top:8px;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none;background:var(--accent-light);border:1px solid #c3ddd1;padding:4px 10px;border-radius:99px;transition:all 0.12s;}
+.rec-apply:hover{background:var(--accent);color:#fff;}
+
+/* INSIGHTS */
+.ins-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);}
+.ins-row:last-child{border-bottom:none;padding-bottom:0;}
+.ins-name{font-size:13px;font-weight:500;}
+.ins-sub{font-size:11px;color:var(--text3);margin-top:1px;}
+.ins-amt{font-family:'DM Serif Display',serif;font-size:16px;}
+.ins-amt.pos{color:var(--accent)}.ins-amt.neg{color:var(--danger)}
+.ins-tip{background:var(--accent-light);border:1px solid #c3ddd1;border-left:3px solid var(--accent);border-radius:var(--radius-sm);padding:13px 15px;font-size:13px;color:#2d5a46;line-height:1.6;}
+
+/* DREAMS TAB */
+.dreams-hero{background:var(--accent-light);border:1px solid #c3ddd1;border-radius:var(--radius);padding:24px 28px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;}
+.dreams-hero-left h3{font-family:'Playfair Display',serif;font-size:22px;font-weight:600;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px;}
+.dreams-hero-left p{font-size:13px;color:var(--text2);line-height:1.5;}
+.opp-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.opp-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;text-align:center;}
+.opp-card.highlight{background:var(--accent-light);border-color:#c3ddd1;}
+.opp-yr{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;}
+.opp-val{font-family:'DM Serif Display',serif;font-size:20px;color:var(--accent);}
+.opp-gain{font-size:10px;color:var(--accent-mid);margin-top:2px;}
+.slider-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.slider-row label{font-size:12px;color:var(--text2);min-width:70px;}
+.slider-row input[type=range]{flex:1;}
+.slider-row .slider-val{font-size:13px;font-weight:600;color:var(--text);min-width:70px;text-align:right;}
+.dreams-input{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 11px;font-size:13px;color:var(--text);font-family:'Inter',sans-serif;outline:none;transition:border 0.12s;width:90px;text-align:right;}
+.dreams-input:focus{border-color:var(--accent);}
+.coach-box{background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;color:var(--text2);line-height:1.6;margin-top:14px;}
+/* RIPPLE PROMPT */
+.ripple-prompt{background:var(--accent-light);border:1px solid #c3ddd1;border-radius:var(--radius-sm);padding:12px 14px;margin-top:12px;display:none;}
+.ripple-prompt-title{font-size:12px;font-weight:600;color:var(--accent);margin-bottom:8px;}
+.ripple-boxes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.ripple-box{background:var(--surface);border:1px solid #c3ddd1;border-radius:6px;padding:7px 4px;text-align:center;}
+.ripple-box-yr{font-size:9px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-bottom:3px;}
+.ripple-box-val{font-family:'DM Serif Display',serif;font-size:13px;color:var(--accent);}
+.ripple-prompt-sub{font-size:11px;color:var(--text3);margin-top:8px;text-align:center;}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading-screen" class="loading-screen">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading FinPulse...</div>
+</div>
+
+<!-- AUTH -->
+<div id="auth-screen" class="auth-screen" style="display:none;">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-mark">
+        <svg viewBox="0 0 18 18" fill="none"><rect x="1" y="3" width="16" height="2.5" rx="1" fill="rgba(255,255,255,0.22)"/><rect x="3.5" y="1" width="2" height="4" rx="1" fill="rgba(255,255,255,0.9)"/><rect x="12.5" y="1" width="2" height="4" rx="1" fill="rgba(255,255,255,0.9)"/><rect x="1" y="7" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.4)"/><rect x="6.75" y="7" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.4)"/><rect x="12.5" y="7" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.9)"/><rect x="1" y="12" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.4)"/><rect x="6.75" y="12" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.9)"/><rect x="12.5" y="12" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.2)"/><circle cx="14.75" cy="13.75" r="2.5" fill="#00e5a0"/></svg>
+      </div>
+      <div class="auth-logo-text"><span class="fin">Fin</span><span class="pulse">Pulse</span></div>
+    </div>
+    <div class="auth-tagline">Track every dollar. See every ripple.</div>
+
+    <div id="signin-form">
+      <div class="auth-title">Welcome back</div>
+      <div class="auth-sub">Sign in to your account</div>
+      <div class="auth-error" id="signin-error"></div>
+      <div class="auth-form">
+        <input class="auth-input" id="signin-email" type="email" placeholder="Email address">
+        <input class="auth-input" id="signin-password" type="password" placeholder="Password">
+        <button class="auth-btn" id="signin-btn" onclick="signIn()">Sign In</button>
+      </div>
+      <div class="auth-switch">No account? <a onclick="toggleAuth('signup')">Start your free trial →</a></div>
+    </div>
+
+    <div id="signup-form" style="display:none;">
+      <div class="auth-title">Start free — 30 days</div>
+      <div class="auth-sub">Then just $3/month. No credit card needed.</div>
+      <div class="auth-error" id="signup-error"></div>
+      <div class="auth-success" id="signup-success"></div>
+      <div class="auth-form">
+        <input class="auth-input" id="signup-name" type="text" placeholder="First name">
+        <input class="auth-input" id="signup-email" type="email" placeholder="Email address">
+        <input class="auth-input" id="signup-password" type="password" placeholder="Password (min 6 characters)">
+        <button class="auth-btn" id="signup-btn" onclick="signUp()">Create My Account — Free</button>
+      </div>
+      <div class="auth-switch">Already have an account? <a onclick="toggleAuth('signin')">Sign in</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="app">
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <div class="logo-wrap">
+        <div class="logo-icon">
+          <svg viewBox="0 0 18 18" fill="none"><rect x="1" y="3" width="16" height="2.5" rx="1" fill="rgba(255,255,255,0.22)"/><rect x="3.5" y="1" width="2" height="4" rx="1" fill="rgba(255,255,255,0.9)"/><rect x="12.5" y="1" width="2" height="4" rx="1" fill="rgba(255,255,255,0.9)"/><rect x="1" y="7" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.4)"/><rect x="6.75" y="7" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.4)"/><rect x="12.5" y="7" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.9)"/><rect x="1" y="12" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.4)"/><rect x="6.75" y="12" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.9)"/><rect x="12.5" y="12" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.2)"/><circle cx="14.75" cy="13.75" r="2.5" fill="#00e5a0"/></svg>
+        </div>
+        <div class="logo"><span class="fin">Fin</span><span class="pulse">Pulse</span></div>
+      </div>
+      <div class="logo-tagline">Not where did it go.<br>What happens if I spend today.</div>
+      <div class="nav-label">Overview</div>
+      <button class="nav-item active" onclick="showView('calendar',this)"><span class="nav-dot"></span> Calendar</button>
+      <button class="nav-item" onclick="showView('bills',this)"><span class="nav-dot"></span> Bills</button>
+      <button class="nav-item" onclick="showView('insights',this)"><span class="nav-dot"></span> Insights</button>
+      <div class="nav-label">Tools</div>
+      <button class="nav-item" onclick="showView('dreams',this)"><span class="nav-dot"></span> ✦ Dreams</button>
+      <button class="nav-item" onclick="showView('cards',this)"><span class="nav-dot"></span> Card Finder</button>
+      <button class="nav-item" onclick="showView('settings',this)"><span class="nav-dot"></span> Settings</button>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-row">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-email" id="user-email">...</div>
+        <button class="signout-btn" onclick="signOut()">Sign out</button>
+      </div>
+      <div class="trial-widget">
+        <div class="trial-title">Free Trial — Day 1</div>
+        <div class="trial-sub">30 days free. Then $3/mo.</div>
+        <div class="trial-bar"><div class="trial-fill"></div></div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- CALENDAR -->
+    <div id="view-calendar">
+      <div class="topbar">
+        <div><h2>January 2026</h2><p>Track every dollar. See every ripple.</p></div>
+        <div class="topbar-actions">
+          <button class="btn btn-outline" onclick="openAdd()">+ Add Transaction</button>
+          <button class="btn btn-solid" onclick="openCat()">Categorize Purchase</button>
+        </div>
+      </div>
+
+      <div class="pnl-banner profit" id="pnl-banner">
+        <div>
+          <div class="pnl-eyebrow">Monthly Summary</div>
+          <div class="pnl-amount" id="pnl-amount">+$2,282</div>
+          <div class="pnl-sub" id="pnl-sub">Net profit this month — carries into February →</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="pnl-carry">→ February starts with <strong id="pnl-carry-amt" style="margin-left:4px;">$1,606</strong></div>
+          <div class="pnl-months">
+            <div class="pnl-pill active" onclick="switchMonth(this,'jan')">Jan</div>
+            <div class="pnl-pill" onclick="switchMonth(this,'feb')">Feb</div>
+            <div class="pnl-pill" onclick="switchMonth(this,'mar')">Mar</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-divider pos"></div><div class="stat-label">Starting Balance</div><div class="stat-value pos" id="stat-start">$3,914</div><div class="stat-sub">January 1, 2026</div></div>
+        <div class="stat-card"><div class="stat-divider warn"></div><div class="stat-label">Projected End Balance</div><div class="stat-value warn" id="stat-end">$1,606</div><div class="stat-sub">Projected Jan 31</div></div>
+        <div class="stat-card"><div class="stat-divider neg"></div><div class="stat-label">Total Cash Out</div><div class="stat-value neg" id="stat-out">−$10,967</div><div class="stat-sub">This month</div></div>
+        <div class="stat-card"><div class="stat-divider pos"></div><div class="stat-label">Total Cash In</div><div class="stat-value pos" id="stat-in">+$13,249</div><div class="stat-sub">This month</div></div>
+      </div>
+
+      <div class="content-grid">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Expense Calendar</span>
+            <div class="cal-nav"><button class="cal-btn">‹</button><span class="cal-month">January 2026</span><button class="cal-btn">›</button></div>
+          </div>
+          <div class="card-body">
+            <div class="cal-grid" id="cal-grid"></div>
+            <div class="ripple-bar">
+              <span style="font-size:14px;flex-shrink:0;">⚡</span>
+              <span><strong style="color:var(--text);">Heads up!</strong> If you spend more than $200 today, your account could dip below $1,000 before the month ends. You've got $413 left to work with — you're doing great, just keep an eye on it!</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div class="card">
+            <div class="card-header"><span class="card-title">Monthly Budget</span><span class="card-meta">57% used</span></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
+              <div class="cat-row"><div class="cat-ring-wrap"><svg class="cat-ring" viewBox="0 0 36 36"><circle class="ring-bg" cx="18" cy="18" r="15.9"/><circle class="ring-fill" cx="18" cy="18" r="15.9" stroke="#b7791f" stroke-dasharray="76 24"/></svg><span class="cat-icon-inner">🛒</span></div><div class="cat-info"><div class="cat-name">Groceries</div><div class="progress-bar"><div class="progress-fill warn" style="width:76%"></div></div></div><div class="cat-right"><div class="cat-spent">$380</div><div class="prog-pct">/ $500</div></div></div>
+              <div class="cat-row"><div class="cat-ring-wrap"><svg class="cat-ring" viewBox="0 0 36 36"><circle class="ring-bg" cx="18" cy="18" r="15.9"/><circle class="ring-fill" cx="18" cy="18" r="15.9" stroke="#c0392b" stroke-dasharray="96 4"/></svg><span class="cat-icon-inner">🍽️</span></div><div class="cat-info"><div class="cat-name">Dining Out</div><div class="progress-bar"><div class="progress-fill neg" style="width:96%"></div></div></div><div class="cat-right"><div class="cat-spent">$240</div><div class="prog-pct">/ $250</div></div></div>
+              <div class="cat-row"><div class="cat-ring-wrap"><svg class="cat-ring" viewBox="0 0 36 36"><circle class="ring-bg" cx="18" cy="18" r="15.9"/><circle class="ring-fill" cx="18" cy="18" r="15.9" stroke="#1a6b4a" stroke-dasharray="45 55"/></svg><span class="cat-icon-inner">🚗</span></div><div class="cat-info"><div class="cat-name">Transport</div><div class="progress-bar"><div class="progress-fill pos" style="width:45%"></div></div></div><div class="cat-right"><div class="cat-spent">$90</div><div class="prog-pct">/ $200</div></div></div>
+              <div class="cat-row"><div class="cat-ring-wrap"><svg class="cat-ring" viewBox="0 0 36 36"><circle class="ring-bg" cx="18" cy="18" r="15.9"/><circle class="ring-fill" cx="18" cy="18" r="15.9" stroke="#c0392b" stroke-dasharray="100 0"/></svg><span class="cat-icon-inner">🏠</span></div><div class="cat-info"><div class="cat-name">Housing</div><div class="progress-bar"><div class="progress-fill neg" style="width:100%"></div></div></div><div class="cat-right"><div class="cat-spent">$1,618</div><div class="prog-pct">/ $1,618</div></div></div>
+              <div class="cat-row"><div class="cat-ring-wrap"><svg class="cat-ring" viewBox="0 0 36 36"><circle class="ring-bg" cx="18" cy="18" r="15.9"/><circle class="ring-fill" cx="18" cy="18" r="15.9" stroke="#1a6b4a" stroke-dasharray="27 73"/></svg><span class="cat-icon-inner">💊</span></div><div class="cat-info"><div class="cat-name">Health</div><div class="progress-bar"><div class="progress-fill pos" style="width:27%"></div></div></div><div class="cat-right"><div class="cat-spent">$40</div><div class="prog-pct">/ $150</div></div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Upcoming Bills</span><span class="card-meta">5 remaining</span></div>
+            <div class="card-body"><div class="bill-list" id="bill-list"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BILLS -->
+    <div id="view-bills" style="display:none;">
+      <div class="topbar"><div><h2>Bills</h2><p>All your recurring payments.</p></div></div>
+      <div class="card" style="max-width:600px;"><div class="card-header"><span class="card-title">January 2026</span><span class="card-meta">$2,698 total</span></div><div class="card-body"><div class="bill-list" id="bill-list-full"></div></div></div>
+    </div>
+
+    <!-- INSIGHTS -->
+    <div id="view-insights" style="display:none;">
+      <div class="topbar"><div><h2>Insights</h2><p>What your money is telling you.</p></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="card"><div class="card-header"><span class="card-title">Largest Expenses</span></div><div class="card-body">
+          <div class="ins-row"><div><div class="ins-name">Rent</div><div class="ins-sub">Housing · Jan 2</div></div><div class="ins-amt neg">−$1,618</div></div>
+          <div class="ins-row"><div><div class="ins-name">Amex Gold</div><div class="ins-sub">Credit Card · Jan 23</div></div><div class="ins-amt neg">−$1,080</div></div>
+          <div class="ins-row"><div><div class="ins-name">Shopping</div><div class="ins-sub">Retail · Multiple</div></div><div class="ins-amt neg">−$1,000</div></div>
+          <div class="ins-row"><div><div class="ins-name">Car</div><div class="ins-sub">Transport</div></div><div class="ins-amt neg">−$637</div></div>
+        </div></div>
+        <div class="card"><div class="card-header"><span class="card-title">Income Sources</span></div><div class="card-body">
+          <div class="ins-row"><div><div class="ins-name">Elina</div><div class="ins-sub">Primary income</div></div><div class="ins-amt pos">+$2,634</div></div>
+          <div class="ins-row"><div><div class="ins-name">Sam</div><div class="ins-sub">Jan 9 & Jan 23</div></div><div class="ins-amt pos">+$3,299</div></div>
+          <div class="ins-row"><div><div class="ins-name">Papa</div><div class="ins-sub">Jan 19 & Jan 26</div></div><div class="ins-amt pos">+$2,400</div></div>
+          <div class="ins-row"><div><div class="ins-name">Mama</div><div class="ins-sub">Jan 23</div></div><div class="ins-amt pos">+$1,200</div></div>
+        </div></div>
+        <div class="card" style="grid-column:span 2;"><div class="card-header"><span class="card-title">FinPulse Insight</span></div><div class="card-body"><div class="ins-tip">Your dining out spend is at <strong>96% of budget</strong> with 19 days remaining. At this pace you'll overspend by ~$180. Cooking at home 3 more times this week saves around <strong>$45</strong> and keeps you in the green.</div></div></div>
+      </div>
+    </div>
+
+    <!-- CARD FINDER -->
+    <div id="view-cards" style="display:none;">
+      <div class="topbar"><div><h2>Card Finder</h2><p>Matched to how you actually spend.</p></div></div>
+      <div class="card" style="max-width:560px;">
+        <div class="card-header"><span class="card-title">What matters most to you?</span></div>
+        <div class="card-body">
+          <div class="goal-grid">
+            <div class="goal-tile" onclick="pickGoal(this,'cashback')"><div class="goal-em">💵</div><div class="goal-lbl">Cash Back</div></div>
+            <div class="goal-tile" onclick="pickGoal(this,'travel')"><div class="goal-em">✈️</div><div class="goal-lbl">Travel Points</div></div>
+            <div class="goal-tile" onclick="pickGoal(this,'dining')"><div class="goal-em">🍽️</div><div class="goal-lbl">Dining Rewards</div></div>
+            <div class="goal-tile" onclick="pickGoal(this,'debt')"><div class="goal-em">📉</div><div class="goal-lbl">0% APR / Pay Off Debt</div></div>
+          </div>
+          <div id="card-results" style="display:none;"><div class="rec-label">Recommended for you</div><div id="card-recs"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DREAMS -->
+    <div id="view-dreams" style="display:none;">
+      <div class="topbar">
+        <div><h2>Dreams</h2><p>See what your money could become.</p></div>
+      </div>
+      <div class="dreams-hero">
+        <div class="dreams-hero-left">
+          <h3>Before you spend it — see what it could be.</h3>
+          <p>Every dollar has a future version of itself. Here's what yours looks like.</p>
+        </div>
+        <div style="font-size:36px;">✦</div>
+      </div>
+      <div class="card" style="max-width:620px;">
+        <div class="card-header"><span class="card-title">Opportunity Cost Calculator</span><span class="card-meta">S&P 500 · 10.5% avg/yr</span></div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;">
+              <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">If I buy it</div>
+              <div style="font-family:'DM Serif Display',serif;font-size:26px;color:var(--text);" id="d-purchase">$5,000</div>
+              <div style="font-size:11px;color:var(--danger);font-weight:600;margin-top:3px;">gone today</div>
+            </div>
+            <div style="background:var(--accent-light);border:1px solid #c3ddd1;border-radius:var(--radius-sm);padding:14px 16px;">
+              <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">If I invest it</div>
+              <div style="font-family:'DM Serif Display',serif;font-size:26px;color:var(--accent);" id="d-future">$8,154</div>
+              <div style="font-size:11px;color:var(--accent-mid);margin-top:3px;" id="d-sub">in 5 years</div>
+            </div>
+          </div>
+
+          <div class="slider-row">
+            <label>Purchase</label>
+            <input type="range" min="100" max="100000" step="100" value="5000" id="d-amt-slider" oninput="dSyncAmt('slider')">
+            <input type="text" class="dreams-input" id="d-amt-input" value="$5,000" oninput="dSyncAmt('text')" onblur="dFormatInput()">
+          </div>
+          <div class="slider-row" style="margin-bottom:16px;">
+            <label>Years</label>
+            <input type="range" min="1" max="50" step="1" value="5" id="d-yr-slider" oninput="dUpdate()">
+            <span class="slider-val" id="d-yr-out">5 years</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;" id="d-milestones"></div>
+
+          <div style="display:flex;gap:12px;font-size:11px;color:var(--text3);margin-bottom:8px;">
+            <span style="display:flex;align-items:center;gap:4px;"><span style="width:16px;height:2px;background:var(--accent);display:inline-block;border-radius:2px;"></span>S&P 500 growth</span>
+            <span style="display:flex;align-items:center;gap:4px;"><span style="width:16px;height:0;border-top:2px dashed var(--danger);display:inline-block;"></span>Your purchase</span>
+          </div>
+          <div style="position:relative;width:100%;height:200px;margin-bottom:14px;">
+            <canvas id="d-chart" role="img" aria-label="Line chart showing S&P 500 investment growth vs purchase price"></canvas>
+          </div>
+          <div class="coach-box" id="d-coach"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div id="view-settings" style="display:none;">
+      <div class="topbar"><div><h2>Settings</h2><p>Manage your account.</p></div></div>
+      <div class="card" style="max-width:500px;">
+        <div class="card-header"><span class="card-title">Subscription</span></div>
+        <div class="card-body">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:14px;">
+            <div><div style="font-size:14px;font-weight:600;">FinPulse Monthly</div><div style="font-size:12px;color:var(--text3);margin-top:2px;">Free trial active</div></div>
+            <div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--accent);">$3<span style="font-size:13px;font-family:'Inter',sans-serif;color:var(--text2);"> / mo</span></div>
+          </div>
+          <button class="confirm-btn">Upgrade Now — Lock in $3 / month</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+</div>
+
+<!-- CATEGORIZE MODAL -->
+<div class="overlay" id="cat-modal">
+  <div class="modal">
+    <div class="modal-eyebrow">New purchase</div>
+    <div class="modal-title">What was this charge?</div>
+    <div class="streak-pill">🔥 14-day streak — keep it going</div>
+    <div class="modal-amt">$47.32</div>
+    <div class="modal-merch">Trader Joe's · Jan 10, 2026</div>
+    <div class="cat-grid">
+      <div class="cat-tile" onclick="pickCat(this)"><span class="cat-em">🛒</span><span class="cat-lbl">Groceries</span></div>
+      <div class="cat-tile" onclick="pickCat(this)"><span class="cat-em">🍕</span><span class="cat-lbl">Dining Out</span></div>
+      <div class="cat-tile" onclick="pickCat(this)"><span class="cat-em">🏠</span><span class="cat-lbl">Housing</span></div>
+      <div class="cat-tile" onclick="pickCat(this)"><span class="cat-em">🚗</span><span class="cat-lbl">Transport</span></div>
+      <div class="cat-tile" onclick="pickCat(this)"><span class="cat-em">💊</span><span class="cat-lbl">Health</span></div>
+      <div class="cat-tile" onclick="pickCat(this)"><span class="cat-em">📦</span><span class="cat-lbl">Other</span></div>
+    </div>
+    <button class="confirm-btn" onclick="confirmCat()">Confirm Category</button>
+  </div>
+</div>
+
+<!-- ADD TRANSACTION MODAL -->
+<div class="overlay" id="add-modal">
+  <div class="modal">
+    <div class="modal-eyebrow">Manual entry</div>
+    <div class="modal-title" style="margin-bottom:18px;">Add Transaction</div>
+    <div class="form-stack">
+      <input class="finput" type="text" id="add-desc" placeholder="Description (e.g. Whole Foods)">
+      <div class="form-row">
+        <input class="finput" type="number" id="add-amount" placeholder="Amount" oninput="checkRipple()">
+        <select class="fselect" id="add-type" onchange="checkRipple()"><option>Expense</option><option>Income</option><option>Bill</option></select>
+      </div>
+      <input class="finput" type="date" value="2026-01-10">
+      <select class="fselect"><option>Groceries</option><option>Dining Out</option><option>Housing</option><option>Transport</option><option>Health</option><option>Other</option></select>
+
+      <!-- RIPPLE PROMPT -->
+      <div class="ripple-prompt" id="ripple-prompt">
+        <div class="ripple-prompt-title" id="ripple-title">💡 That $500 invested could be...</div>
+        <div class="ripple-boxes" id="ripple-boxes"></div>
+        <div class="ripple-prompt-sub">Just something to think about. <span style="color:var(--accent);cursor:pointer;font-weight:600;" onclick="closeModal('add-modal');showView('dreams',document.querySelector('.nav-item:nth-child(5)'))">See full breakdown →</span></div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:4px;">
+        <button class="confirm-btn" style="flex:1;" onclick="closeModal('add-modal')">Save Transaction</button>
+        <button class="btn btn-outline" style="padding:13px 16px;" onclick="closeModal('add-modal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://qllshfubwzdoiyavypan.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsbHNoZnVid3pkb2l5YXZ5cGFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0NDk2NjMsImV4cCI6MjA5NDAyNTY2M30.NoA_c4ULuptDzLF46f49KV0Pg5V-BuqyEslmi047_mc';
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+async function init() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) showApp(session.user);
+  else showAuth();
+}
+
+function showApp(user) {
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  const email = user.email || '';
+  document.getElementById('user-email').textContent = email;
+  document.getElementById('user-avatar').textContent = email.charAt(0).toUpperCase();
+  renderCalendar();
+  renderBills('bill-list');
+}
+
+function showAuth() {
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+function toggleAuth(mode) {
+  document.getElementById('signin-form').style.display = mode === 'signin' ? 'block' : 'none';
+  document.getElementById('signup-form').style.display = mode === 'signup' ? 'block' : 'none';
+}
+
+async function signIn() {
+  const email = document.getElementById('signin-email').value.trim();
+  const password = document.getElementById('signin-password').value;
+  const btn = document.getElementById('signin-btn');
+  const err = document.getElementById('signin-error');
+  err.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Signing in...';
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) { err.textContent = error.message; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Sign In'; }
+  else showApp(data.user);
+}
+
+async function signUp() {
+  const name = document.getElementById('signup-name').value.trim();
+  const email = document.getElementById('signup-email').value.trim();
+  const password = document.getElementById('signup-password').value;
+  const btn = document.getElementById('signup-btn');
+  const err = document.getElementById('signup-error');
+  const suc = document.getElementById('signup-success');
+  err.style.display = 'none'; suc.style.display = 'none';
+  if (!name || !email || !password) { err.textContent = 'Please fill in all fields.'; err.style.display = 'block'; return; }
+  if (password.length < 6) { err.textContent = 'Password must be at least 6 characters.'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = 'Creating account...';
+  const { error } = await sb.auth.signUp({ email, password, options: { data: { full_name: name } } });
+  if (error) { err.textContent = error.message; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Create My Account — Free'; }
+  else { suc.textContent = '✓ Account created! Check your email to confirm, then sign in.'; suc.style.display = 'block'; btn.disabled = false; btn.textContent = 'Create My Account — Free'; }
+}
+
+async function signOut() { await sb.auth.signOut(); showAuth(); }
+
+sb.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_IN' && session) showApp(session.user);
+  if (event === 'SIGNED_OUT') showAuth();
+});
+
+const calData = {
+  1:{balance:3747,income:[],expenses:[{type:'bill',label:'−$167'}]},
+  2:{balance:2129,income:[],expenses:[{type:'bill',label:'−$1,618 Rent'}]},
+  3:{balance:1717,income:[],expenses:[{type:'bill',label:'−$412'}]},
+  4:{balance:1610,income:[],expenses:[{type:'spend',label:'−$107'}]},
+  5:{balance:1410,income:[],expenses:[{type:'spend',label:'−$200'}]},
+  7:{balance:1260,income:[],expenses:[{type:'spend',label:'−$150'}]},
+  9:{balance:2783,income:[{label:'+$1,523 Sam'}],expenses:[]},
+  10:{balance:2533,income:[],expenses:[{type:'spend',label:'−$250'}]},
+  11:{balance:2433,income:[],expenses:[{type:'spend',label:'−$100'}]},
+  14:{balance:3433,income:[{label:'+$1,000'}],expenses:[]},
+  15:{balance:3483,income:[{label:'+$50'}],expenses:[]},
+  17:{balance:3233,income:[],expenses:[{type:'spend',label:'−$250'}]},
+  19:{balance:4433,income:[{label:'+$1,200 Papa'}],expenses:[]},
+  20:{balance:10173,income:[{label:'+$5,740'}],expenses:[]},
+  22:{balance:10123,income:[],expenses:[{type:'spend',label:'−$50'}]},
+  23:{balance:1871,income:[],expenses:[{type:'bill',label:'−$8,252'}]},
+  25:{balance:1871,income:[],expenses:[]},
+  26:{balance:2966,income:[{label:'+$1,094'}],expenses:[]},
+  27:{balance:2821,income:[],expenses:[{type:'spend',label:'−$145'}]},
+  30:{balance:2506,income:[],expenses:[{type:'bill',label:'−$315'}]},
+};
+
+function renderCalendar() {
+  const grid = document.getElementById('cal-grid'); if(!grid) return;
+  const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let html = dows.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+  const fd = new Date(2026,0,1).getDay();
+  for(let i=0;i<fd;i++) html+=`<div class="cal-day empty"></div>`;
+  for(let d=1;d<=31;d++){
+    const data=calData[d];
+    const isT=d===10,isP=d<10;
+    let cls='cal-day'+(isT?' today':'')+(isP?' past':'');
+    let inner='';
+    if(data){
+      const bc=data.balance>2000?'pos':data.balance>1000?'warn':'neg';
+      const inc=data.income.length?`<div class="day-section-top">${data.income.map(e=>`<div class="day-event income">${e.label}</div>`).join('')}</div>`:`<div class="day-section-top"></div>`;
+      const exp=data.expenses.length?`<div class="day-section-mid">${data.expenses.map(e=>`<div class="day-event ${e.type}">${e.label}</div>`).join('')}</div>`:`<div class="day-section-mid"></div>`;
+      const bal=`<div class="day-section-bot"><div class="day-bal-label">Balance</div><div class="day-balance ${bc}">$${data.balance.toLocaleString()}</div></div>`;
+      inner=inc+exp+bal;
+    }
+    html+=`<div class="${cls}" onclick="openCat()"><div class="day-num">${d}</div>${inner}</div>`;
+  }
+  grid.innerHTML=html;
+}
+
+const bills=[
+  {name:'Rent',amt:1618,due:'Jan 2',paid:true},
+  {name:'Car Insurance',amt:360,due:'Jan 20',paid:false},
+  {name:'Wifi',amt:25,due:'Jan 22',paid:false},
+  {name:'Cricket Mobile',amt:145,due:'Jan 27',paid:false},
+  {name:'Bubble Cable',amt:40,due:'Jan 30',paid:false},
+  {name:'Affirm',amt:105,due:'Jan 26',paid:false},
+];
+function renderBills(id='bill-list'){
+  const el=document.getElementById(id);if(!el)return;
+  el.innerHTML=bills.map((b,i)=>`
+    <div class="bill-row ${b.paid?'paid':''}">
+      <div class="bill-chk ${b.paid?'on':''}" onclick="toggleBill(${i},'${id}')">✓</div>
+      <div class="bill-info"><div class="bill-name">${b.name}</div><div class="bill-due">Due ${b.due}</div></div>
+      <div class="bill-amt">−$${b.amt.toLocaleString()}</div>
+    </div>`).join('');
+}
+function toggleBill(i,id){bills[i].paid=!bills[i].paid;renderBills('bill-list');renderBills('bill-list-full');}
+
+const monthData={
+  jan:{startBal:3914,endBal:1606,cashIn:13249,cashOut:10967,next:'February'},
+  feb:{startBal:1606,endBal:2190,cashIn:9800,cashOut:9216,next:'March'},
+  mar:{startBal:2190,endBal:3050,cashIn:10200,cashOut:9340,next:'April'},
+};
+function switchMonth(el,month){
+  document.querySelectorAll('.pnl-pill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  const d=monthData[month],pnl=d.cashIn-d.cashOut,isP=pnl>=0;
+  const amtEl=document.getElementById('pnl-amount');
+  amtEl.style.opacity='0';amtEl.style.transform='translateY(6px)';
+  setTimeout(()=>{
+    document.getElementById('pnl-banner').className='pnl-banner '+(isP?'profit':'loss');
+    amtEl.textContent=(isP?'+':'−')+'$'+Math.abs(pnl).toLocaleString();
+    document.getElementById('pnl-sub').textContent=isP?`Net profit — carries into ${d.next} →`:`Net loss — ${d.next} starts short →`;
+    document.getElementById('pnl-carry-amt').textContent='$'+d.endBal.toLocaleString();
+    document.getElementById('stat-start').textContent='$'+d.startBal.toLocaleString();
+    document.getElementById('stat-end').textContent='$'+d.endBal.toLocaleString();
+    document.getElementById('stat-in').textContent='+$'+d.cashIn.toLocaleString();
+    document.getElementById('stat-out').textContent='−$'+d.cashOut.toLocaleString();
+    amtEl.style.transition='all 0.35s ease';amtEl.style.opacity='1';amtEl.style.transform='translateY(0)';
+  },150);
+}
+
+function showView(v,btn){
+  document.querySelectorAll('[id^="view-"]').forEach(e=>e.style.display='none');
+  document.getElementById('view-'+v).style.display='block';
+  document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  if(v==='bills')renderBills('bill-list-full');
+}
+
+function openCat(){document.getElementById('cat-modal').classList.add('on');}
+function openAdd(){document.getElementById('add-modal').classList.add('on');}
+function closeModal(id){document.getElementById(id).classList.remove('on');}
+document.querySelectorAll('.overlay').forEach(el=>el.addEventListener('click',function(e){if(e.target===this)this.classList.remove('on');}));
+let selCat=null;
+function pickCat(el){document.querySelectorAll('#cat-modal .cat-tile').forEach(b=>b.classList.remove('on'));el.classList.add('on');selCat=el.querySelector('.cat-lbl').textContent;}
+function confirmCat(){if(!selCat)return;closeModal('cat-modal');selCat=null;document.querySelectorAll('#cat-modal .cat-tile').forEach(b=>b.classList.remove('on'));}
+
+const cardRecs={
+  cashback:[{n:'Amex Blue Cash Preferred',p:'6% back on groceries, 3% on gas',b:'$250 welcome bonus',url:'https://www.americanexpress.com/us/credit-cards/card/blue-cash-preferred/'},{n:'Chase Freedom Unlimited',p:'1.5% back on all purchases',b:'$200 welcome bonus',url:'https://creditcards.chase.com/cash-back-credit-cards/freedom/unlimited'}],
+  travel:[{n:'Chase Sapphire Preferred',p:'3× on dining, 2× on travel',b:'60,000 points — $750 value',url:'https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred'},{n:'Amex Gold',p:'4× on dining & groceries',b:'60,000 Membership Rewards points',url:'https://www.americanexpress.com/us/credit-cards/card/gold-card/'}],
+  dining:[{n:'Amex Gold',p:'4× points at restaurants worldwide',b:'$250 dining credit per year',url:'https://www.americanexpress.com/us/credit-cards/card/gold-card/'},{n:'Capital One SavorOne',p:'3% on dining & entertainment',b:'$200 cash bonus',url:'https://capitalone.com/credit-cards/savorone/'}],
+  debt:[{n:'Citi Diamond Preferred',p:'0% APR for 21 months on transfers',b:'No annual fee',url:'https://www.citi.com/credit-cards/citi-diamond-preferred-credit-card'},{n:'Wells Fargo Reflect',p:'0% APR for up to 21 months',b:'Cell phone protection included',url:'https://creditcards.wellsfargo.com/reflect-visa-credit-card/'}],
+};
+function pickGoal(el,goal){
+  document.querySelectorAll('.goal-tile').forEach(b=>b.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById('card-results').style.display='block';
+  document.getElementById('card-recs').innerHTML=cardRecs[goal].map(r=>`
+    <div class="rec-card">
+      <div class="rec-name">${r.n}</div>
+      <div class="rec-perk">${r.p}</div>
+      <div class="rec-bonus">Welcome offer: ${r.b}</div>
+      <a class="rec-apply" href="${r.url}" target="_blank">Apply Now →</a>
+    </div>`).join('');
+}
+
+// ── DREAMS CALCULATOR ─────────────────────────────────────────
+const RATE = 0.105;
+let dAmount = 5000;
+let dChart;
+
+function dCompound(p, y) { return Math.round(p * Math.pow(1 + RATE, y)); }
+function dFmt(n) { return '$' + n.toLocaleString(); }
+
+function dSyncAmt(source) {
+  if (source === 'slider') {
+    dAmount = parseInt(document.getElementById('d-amt-slider').value);
+    document.getElementById('d-amt-input').value = dFmt(dAmount);
+  } else {
+    const raw = document.getElementById('d-amt-input').value.replace(/[$,]/g, '');
+    const parsed = parseInt(raw);
+    if (!isNaN(parsed) && parsed > 0) {
+      dAmount = parsed;
+      document.getElementById('d-amt-slider').value = Math.min(dAmount, 100000);
+    }
+  }
+  dUpdate();
+}
+
+function dFormatInput() {
+  const raw = document.getElementById('d-amt-input').value.replace(/[$,]/g, '');
+  const parsed = parseInt(raw);
+  if (!isNaN(parsed) && parsed > 0) {
+    dAmount = parsed;
+    document.getElementById('d-amt-input').value = dFmt(dAmount);
+    document.getElementById('d-amt-slider').value = Math.min(dAmount, 100000);
+    dUpdate();
+  }
+}
+
+function dCoachLine(amount, years, future) {
+  const gain = future - amount;
+  if (amount >= 50000) return `That's life-changing money. Invested today it becomes ${dFmt(future)} in ${years} years — a ${dFmt(gain)} gain while you sleep.`;
+  if (amount >= 20000) return `Serious money. In ${years} years that becomes ${dFmt(future)} — a ${dFmt(gain)} gain sitting in an index fund. Time is the unfair advantage most people never use.`;
+  if (amount >= 5000) return `In ${years} years, that ${dFmt(amount)} becomes ${dFmt(future)}. A ${dFmt(gain)} gain without doing a single thing. That's the quiet power of patience.`;
+  if (amount >= 1000) return `Even ${dFmt(amount)} compounds into something real. ${dFmt(future)} in ${years} years — a ${dFmt(gain)} gain. Small decisions repeated over time create big outcomes.`;
+  return `${dFmt(amount)} might not feel like much, but in ${years} years it's ${dFmt(future)}. Every dollar has a future version of itself.`;
+}
+
+function dUpdate() {
+  const el = document.getElementById('d-yr-slider');
+  if (!el) return;
+  const years = parseInt(el.value);
+  const future = dCompound(dAmount, years);
+
+  document.getElementById('d-yr-out').textContent = years + ' year' + (years === 1 ? '' : 's');
+  document.getElementById('d-purchase').textContent = dFmt(dAmount);
+  document.getElementById('d-future').textContent = dFmt(future);
+  document.getElementById('d-sub').textContent = 'in ' + years + ' year' + (years === 1 ? '' : 's');
+  document.getElementById('d-coach').textContent = dCoachLine(dAmount, years, future);
+
+  const milestones = [5, 10, 20, 50];
+  document.getElementById('d-milestones').innerHTML = milestones.map(y => {
+    const val = dCompound(dAmount, y);
+    const isActive = y === years;
+    return `<div style="background:${isActive ? 'var(--accent-light)' : 'var(--surface2)'};border:1px solid ${isActive ? '#c3ddd1' : 'var(--border)'};border-radius:var(--radius-sm);padding:9px 6px;text-align:center;">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">${y} yr${y===1?'':'s'}</div>
+      <div style="font-family:'DM Serif Display',serif;font-size:15px;color:${isActive ? 'var(--accent)' : 'var(--text)'};">${dFmt(val)}</div>
+    </div>`;
+  }).join('');
+
+  const step = years <= 10 ? 1 : years <= 20 ? 2 : years <= 30 ? 3 : 5;
+  const labels = [], growthData = [], flatData = [];
+  for (let y = 0; y <= years; y += step) {
+    labels.push(y === 0 ? 'Now' : 'Yr ' + y);
+    growthData.push(dCompound(dAmount, y));
+    flatData.push(dAmount);
+  }
+
+  const purchaseLabelPlugin = {
+    id: 'pl',
+    afterDraw(c) {
+      const m = c.getDatasetMeta(1);
+      if (!m.data || m.data.length < 2) return;
+      const pt = m.data[m.data.length - 2];
+      if (!pt) return;
+      c.ctx.save();
+      c.ctx.font = '500 10px system-ui,sans-serif';
+      c.ctx.fillStyle = '#c0392b';
+      c.ctx.textAlign = 'center';
+      c.ctx.textBaseline = 'bottom';
+      c.ctx.fillText('your purchase', pt.x, pt.y - 4);
+      c.ctx.restore();
+    }
+  };
+
+  if (dChart) {
+    dChart.data.labels = labels;
+    dChart.data.datasets[0].data = growthData;
+    dChart.data.datasets[1].data = flatData;
+    dChart.update();
+  } else {
+    if (typeof Chart === 'undefined') return;
+    dChart = new Chart(document.getElementById('d-chart'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'S&P 500', data: growthData, borderColor: '#1a6b4a', backgroundColor: 'rgba(26,107,74,0.07)', fill: true, tension: 0.4, pointRadius: 2, borderWidth: 2 },
+          { label: 'Purchase', data: flatData, borderColor: '#c0392b', backgroundColor: 'transparent', fill: false, tension: 0, pointRadius: 0, borderWidth: 1.5, borderDash: [5, 4] }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        layout: { padding: { top: 20 } },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + dFmt(ctx.parsed.y) } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 }, maxTicksLimit: 8 } },
+          y: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { font: { size: 10 }, callback: v => v >= 1000000 ? '$' + (v/1000000).toFixed(1) + 'M' : v >= 1000 ? '$' + Math.round(v/1000) + 'k' : '$' + v } }
+        }
+      },
+      plugins: [purchaseLabelPlugin]
+    });
+  }
+}
+
+// Load Chart.js for Dreams tab
+const chartScript = document.createElement('script');
+chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+chartScript.onload = () => { if (document.getElementById('d-chart')) dUpdate(); };
+document.head.appendChild(chartScript);
+
+// ── RIPPLE PROMPT ──────────────────────────────────────────────
+function checkRipple() {
+  const amount = parseFloat(document.getElementById('add-amount').value);
+  const type = document.getElementById('add-type').value;
+  const prompt = document.getElementById('ripple-prompt');
+  if (amount >= 500 && type === 'Expense') {
+    document.getElementById('ripple-title').textContent = `💡 That ${dFmt(Math.round(amount))} invested could be...`;
+    const yrs = [5, 10, 15, 20];
+    document.getElementById('ripple-boxes').innerHTML = yrs.map(y => {
+      const val = dCompound(amount, y);
+      return `<div class="ripple-box">
+        <div class="ripple-box-yr">${y} yr${y===1?'':'s'}</div>
+        <div class="ripple-box-val">${dFmt(val)}</div>
+      </div>`;
+    }).join('');
+    prompt.style.display = 'block';
+    prompt.style.animation = 'fadeUp 0.25s ease both';
+  } else {
+    prompt.style.display = 'none';
+  }
+}
+
+init();
+</script>
+</body>
+</html>
