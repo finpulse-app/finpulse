@@ -1305,8 +1305,8 @@ async function signUp() {
 async function signOut() { await sb.auth.signOut(); currentUser = null; showAuth(); }
 
 sb.auth.onAuthStateChange((event, session) => {
-  if (event === 'SIGNED_IN' && session) { currentUser = session.user; showApp(session.user); }
-  if (event === 'SIGNED_OUT') showAuth();
+  if (session && session.user) { currentUser = session.user; showApp(session.user); }
+  else if (event === 'SIGNED_OUT' || event === 'INITIAL_SESSION') { currentUser = null; showAuth(); }
 });
 
 // ── DATA LAYER ─────────────────────────────────────────────────
