@@ -4439,7 +4439,9 @@ async function saveLoanFromModal() {
     lender: cat
   };
 
+  const userId = currentUser && currentUser.id, loadVersion = _dataLoadVersion;
   const saved = await saveTxn(txn);
+  if (!currentUser || currentUser.id !== userId || loadVersion !== _dataLoadVersion) return;
   if (btn) { btn.disabled = false; btn.textContent = 'Add to My Debt Plan'; }
   if (!saved) return;
   showToast('Loan added to your debt plan');
@@ -6812,6 +6814,8 @@ async function rippleStillBuy() {
   if (!await saveTxn(p.txnObj)) return;
   document.getElementById('ripple-overlay').style.display = 'none';
   _ripplePending = null;
+  bsSelectedCat = null;
+  bsPendingTxn = null;
   showToast(p.description + ' · $' + fmt(p.amount) + ' recorded');
   renderBottomSheetBody();
 }

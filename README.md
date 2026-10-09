@@ -37,3 +37,5 @@ are deferred; extra-payment allocation remains disabled. Auth password screening
 and public RLS performance notices are documented in `phase1/V150_FIX_REPORT.md`.
 
 New transaction and import writes now persist their UUIDs before sending, confirm every returned row, and recover pending batches after reload. Imports allow up to 500 selected rows per request. Expense, category, income and loan editors retain input on failure. These changes require no additional database migration.
+
+Fourteen live Auth/Data API checks passed with two disposable accounts, including real password sign-in, ownership isolation, UUID retries and payment/deletion/undo operations. Both accounts signed out and were removed with their test records; cleanup was verified. Email confirmation is currently disabled in the project and was not changed. Full browser integration with live Auth remains a release check.

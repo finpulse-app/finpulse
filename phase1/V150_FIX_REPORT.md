@@ -51,7 +51,7 @@ and website deployment remain unchanged; the updated client remains a draft.
 Live metadata checks confirmed the deployed function bodies match the tested SQL,
 empty search paths, anonymous execute denial, RLS on receipts, and no client
 SELECT/INSERT/UPDATE access to receipts. An unauthenticated function call was
-rejected and created no receipt. No signed-in financial mutation was run live.
+rejected and created no receipt. The initial verification did not mutate signed-in financial rows. The live integration follow-up below used only disposable test accounts.
 
 Security advisor: the new [no-policy information notice](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy)
 is intentional: private receipts deny all direct client access, and the private
@@ -62,9 +62,7 @@ and the [new index not yet used](https://supabase.com/docs/guides/database/datab
 
 ## Remaining release checks
 
-Verify real Supabase sign-in,
-email confirmation, two-account API behavior and staged read/write flows before
-release. Real statement imports and device checks remain. Bill settlement marks
+The live Auth/Data API follow-up below verifies sign-in and two-account API behavior. Full browser flows against the live service and email delivery/confirmation (currently disabled) still need release verification. Real statement imports and device checks remain. Bill settlement marks
 are device-local, twice-monthly business-day shifts are deferred, and extra-payment
 allocation remains disabled. No local developer tools or browser package installs
 were required; test dependencies run on GitHub's machines.
@@ -75,4 +73,12 @@ All remaining transaction write paths now check returned errors, thrown failures
 
 New entries and statement imports store stable client-generated UUIDs in account-scoped browser storage before sending. A duplicate-key response on retry triggers owner-scoped reads of the original IDs; every row must be present before success is shown. Read requests are grouped in 100-ID chunks. One pending insert batch blocks a different batch until confirmed. Imports allow at most 500 selected rows per request. Clearing browser storage before an ambiguous save is checked removes this retry protection. System notes use the same confirmed write path.
 
-The expanded client suite passes 59 tests locally; new browser fault checks and live anonymous API checks are queued for GitHub validation. The live API check uses only the existing public anon key, reads Auth settings and confirms anonymous reads return no account records. It creates no users, sends no emails and changes no financial records. Full authenticated sign-in and two-account Data API behavior remain unverified.
+The expanded client suite passes 59 tests locally; new browser fault checks and live anonymous API checks are queued for GitHub validation. The live API check uses only the existing public anon key, reads Auth settings and confirms anonymous reads return no account records. It creates no users, sends no emails and changes no financial records. Authenticated sign-in and two-account Data API behavior were subsequently verified as described below.
+
+## Live authenticated integration verification
+
+Fourteen real Auth/Data API checks passed on October 9, 2026. Two disposable accounts used generated credentials held only in process memory. Current Auth settings enable automatic confirmation, so signup returned sessions without sending emails. Both accounts could sign in with passwords and verify their users. Owner-scoped reads, updates, insert ownership checks and settings isolation passed; foreign-account loan mutation and ownership transfer were rejected. A stable UUID insert retry returned the original row after a duplicate-key error. Live regular/extra payment, operation replay, deletion and undo matched exact principal and row IDs.
+
+Both accounts signed out globally (HTTP 204). They and their synthetic data were then removed through exact ID/email predicates. Follow-up SQL confirmed zero remaining test users, sessions, transactions, settings or receipts. Existing accounts and financial records were not changed. No credentials or tokens are committed. Email delivery was not tested and Auth configuration was not changed.
+
+The first follow-up CI run passed client/formula and live anonymous API checks but could not start PostgreSQL because Docker Hub rate-limited its image pull. The workflow now uses [Docker's verified PostgreSQL image on ECR Public](https://gallery.ecr.aws/docker/library/postgres). A browser test trying to fill the read-only calculated loan payment field was corrected to enter APR and use the actual calculator. Final browser/database checks are pending the updated run.
