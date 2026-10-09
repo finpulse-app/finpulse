@@ -225,5 +225,11 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
     const batch=Array.from({length:1001},(_,i)=>({...expense,description:'Row '+i}));
     assert.equal(await c.fpInsertTransactions(batch),true);assert.equal(c.transactions.length,1001);assert.equal(b.db.length,1001);assert.equal(new Set(b.db.map(x=>x.id)).size,1001);assert.equal(Object.keys(c._cache).length,0);
   });
+
+  await test('expense focus timer tolerates replacement by delete confirmation',()=>{
+    let timer,removed=false;const c=make(['openExpenseEdit'],{transactions:[{id:'expense',description:'Coffee',amount:10,date:'2026-10-09'}],setTimeout:fn=>{timer=fn;}});
+    const getter=c.document.getElementById;c.document.getElementById=id=>removed && id==='ee-desc'?null:getter(id);
+    c.openExpenseEdit('expense');removed=true;assert.doesNotThrow(()=>timer());
+  });
   console.log('TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
 })();

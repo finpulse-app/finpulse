@@ -1326,7 +1326,10 @@ function openExpenseEdit(txnId) {
   document.getElementById('ee-amount').value = txn.amount || '';
   document.getElementById('ee-date').value = txn.date || txn.anchor_date || '';
   document.getElementById('edit-expense-overlay').style.display = 'flex';
-  setTimeout(function(){ document.getElementById('ee-desc').select(); }, 80);
+  setTimeout(function(){
+    const input = document.getElementById('ee-desc');
+    if (input && _editExpenseTxnId === txn.id) input.select();
+  }, 80);
 }
 
 async function saveExpenseEdit() {

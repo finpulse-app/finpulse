@@ -1,7 +1,7 @@
 # FinPulse v150 review candidate
 
 Draft PR: https://github.com/finpulse-app/finpulse/pull/1
-Verified code revision: `ba652e70b2faa6668f77f7fcd73be0586e723dea`.
+Initial verified code revision: `ba652e70b2faa6668f77f7fcd73be0586e723dea`.
 All seven jobs passed in [GitHub Actions run 37989499589](https://github.com/finpulse-app/finpulse/actions/runs/37989499589).
 
 ## Implemented
@@ -73,7 +73,7 @@ All remaining transaction write paths now check returned errors, thrown failures
 
 New entries and statement imports store stable client-generated UUIDs in account-scoped browser storage before sending. A duplicate-key response on retry triggers owner-scoped reads of the original IDs; every row must be present before success is shown. Read requests are grouped in 100-ID chunks. One pending insert batch blocks a different batch until confirmed. Clearing browser storage before an ambiguous save is checked removes this retry protection. System notes use the same confirmed write path.
 
-The expanded client suite passes 60 tests locally; new browser fault checks and live anonymous API checks are queued for GitHub validation. The live API check uses only the existing public anon key, reads Auth settings and confirms anonymous reads return no account records. It creates no users, sends no emails and changes no financial records. Authenticated sign-in and two-account Data API behavior were subsequently verified as described below.
+The expanded client suite passes 61 tests locally; browser fault checks and live anonymous API checks run in GitHub Actions; see the pull request for the final verified revision and check results. The live API check uses only the existing public anon key, reads Auth settings and confirms anonymous reads return no account records. It creates no users, sends no emails and changes no financial records. Authenticated sign-in and two-account Data API behavior were subsequently verified as described below.
 
 ## Live authenticated integration verification
 
@@ -81,6 +81,8 @@ Fourteen real Auth/Data API checks passed on October 9, 2026. Two disposable acc
 
 Both accounts signed out globally (HTTP 204). They and their synthetic data were then removed through exact ID/email predicates. Follow-up SQL confirmed zero remaining test users, sessions, transactions, settings or receipts. Existing accounts and financial records were not changed. No credentials or tokens are committed. Email delivery was not tested and Auth configuration was not changed.
 
-The first follow-up CI run passed client/formula and live anonymous API checks but could not start PostgreSQL because Docker Hub rate-limited its image pull. The workflow now uses [Docker's verified PostgreSQL image on ECR Public](https://gallery.ecr.aws/docker/library/postgres). A browser test trying to fill the read-only calculated loan payment field was corrected to enter APR and use the actual calculator. Final browser/database checks are pending the updated run.
+The first follow-up CI run passed client/formula and live anonymous API checks but could not start PostgreSQL because Docker Hub rate-limited its image pull. The workflow now uses [Docker's verified PostgreSQL image on ECR Public](https://gallery.ecr.aws/docker/library/postgres). A browser test trying to fill the read-only calculated loan payment field was corrected to enter APR and use the actual calculator. See the pull request check results for the final browser/database run.
 
 Large imports also recover when the Data API truncates the insert response at its row limit: all original UUIDs are read in 100-ID groups before the batch is confirmed. A 1,001-row test verifies this without duplicate inserts or partial success.
+
+Browser failure checks also exposed an expense-dialog focus callback firing after the delete prompt had replaced its input. The callback now checks that the field and original edit are still present before selecting it; this race is covered in the client suite.
