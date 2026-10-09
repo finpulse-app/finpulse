@@ -10,8 +10,8 @@ grant usage on schema auth, public to authenticated, anon;
 grant execute on function auth.uid() to authenticated, anon;
 create table public.transactions(
  id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade,
- type text not null check(type in ('income','expense','bill','loan','note')), description text,
- amount numeric, date date, category text, recurring boolean default false, frequency text, anchor_date date,
+ type text not null check(type in ('income','expense','bill','loan','note')), description text not null,
+ amount numeric not null, date date not null, category text, recurring boolean default false, frequency text, anchor_date date,
  apr numeric, min_payment numeric, balance numeric, lender text, created_at timestamptz default now(),
  original_balance numeric, original_min_payment numeric, principal_applied numeric, loan_id text
 );

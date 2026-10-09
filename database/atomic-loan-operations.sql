@@ -1,6 +1,7 @@
 -- Deployment SQL, not a CLI-generated migration filename. Review/apply before
 -- deploying this client. No production DDL is executed by the test workflow.
 begin;
+create index if not exists transactions_user_id_idx on public.transactions(user_id);
 create schema if not exists finpulse_private;
 revoke all on schema finpulse_private from public, anon;
 grant usage on schema finpulse_private to authenticated;

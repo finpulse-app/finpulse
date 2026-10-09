@@ -1549,7 +1549,8 @@ async function fpAtomicMutation(kind, payload, key) {
     if (!pending) {
       pending = { id: crypto.randomUUID(), kind: kind, payload: payload };
       // Persist before sending: a reload after a lost response must reuse this ID.
-      localStorage.setItem(storageKey, JSON.stringify(pending));
+      try { localStorage.setItem(storageKey, JSON.stringify(pending)); }
+      catch(e) { throw new Error('This device could not remember the change for a safe retry. Please free some browser storage and try again.'); }
     }
     const response = await sb.rpc('fp_mutate_transaction', {
       p_operation_id: pending.id, p_kind: pending.kind, p_payload: pending.payload
@@ -1561,7 +1562,7 @@ async function fpAtomicMutation(kind, payload, key) {
         try { localStorage.removeItem(storageKey); } catch(e) {}
       }
       throw new Error(response.error.code === 'PGRST202'
-        ? 'Loan changes need the database upgrade before this version can be used.'
+        ? 'Loan changes are temporarily unavailable. Please try again later.'
         : response.error.message || 'Change was not saved. Please retry.');
     }
     const data = response.data;
