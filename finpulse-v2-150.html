@@ -1844,7 +1844,7 @@ async function fpInsertTransactions(records) {
   const key = 'insert', storageKey = fpOperationStorageKey(key);
   _fpMutationBusy = true;
   try {
-    if (!payload.length || payload.length > 500) throw new Error('Import up to 500 selected transactions at a time.');
+    if (!payload.length) throw new Error('Select transactions to import.');
     let pending = fpPendingOperation(key);
     if (pending && (pending.kind !== 'insert' || JSON.stringify(pending.payload) !== JSON.stringify(payload))) {
       throw new Error('Check the previous pending save before adding a different transaction.');
@@ -1860,9 +1860,10 @@ async function fpInsertTransactions(records) {
       throw new Error('Pending save could not be verified.');
     }
     let response = await sb.from('transactions').insert(pending.records).select();
-    if (response.error && response.error.code === '23505') {
-      // A prior request may already have committed. Check every original UUID;
-      // never replace an existing row or turn a partial confirmation into success.
+    if ((response.error && response.error.code === '23505')
+        || (!response.error && Array.isArray(response.data) && response.data.length < pending.records.length)) {
+      // A retry may already have committed, or the API's row limit may truncate
+      // its response. Confirm every UUID; never replace an existing row.
       const ids=pending.records.map(function(r){return r.id;}), queries=[];
       for(let i=0;i<ids.length;i+=100) queries.push(sb.from('transactions').select().eq('user_id',userId).in('id',ids.slice(i,i+100)));
       const confirmed=await Promise.all(queries);

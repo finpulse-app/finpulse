@@ -157,6 +157,7 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
         if(payload.some(p=>db.some(r=>r.id===p.id)))return{data:null,error:{code:'23505',message:'duplicate'}};
         db.push(...payload.map(r=>({...r})));
         if(mode==='lost'){mode='ok';throw Error('lost after commit');}
+        if(mode==='truncated'){mode='ok';return{data:payload.slice(0,1).map(r=>({...r})),error:null};}
         return{data:payload.map(r=>({...r})),error:null};
       }
       const found=db.filter(r=>filters.every(([k,v,op])=>op==='in'?v.includes(r[k]):r[k]===v));
@@ -217,6 +218,12 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   });
   await test('failed import keeps preview and rows available for retry',async()=>{
     const rows=[{...expense,include:true}];const c=make(['confirmStatementImport'],{_pendingImportRows:rows,fpInsertTransactions:async()=>false,updateImportSummary(){}});c.document.getElementById('import-preview').style.display='block';await c.confirmStatementImport();assert.equal(c._pendingImportRows,rows);assert.equal(c._els['import-preview'].style.display,'block');assert.equal(c._els['import-confirm-btn'].disabled,false);assert.equal(c._messages.length,0);
+  });
+
+  await test('large import confirms every UUID when API truncates insert response',async()=>{
+    const b=writeBackend('truncated'),c=make(insertNames,{sb:b.sb,crypto:{randomUUID:b.id}});
+    const batch=Array.from({length:1001},(_,i)=>({...expense,description:'Row '+i}));
+    assert.equal(await c.fpInsertTransactions(batch),true);assert.equal(c.transactions.length,1001);assert.equal(b.db.length,1001);assert.equal(new Set(b.db.map(x=>x.id)).size,1001);assert.equal(Object.keys(c._cache).length,0);
   });
   console.log('TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
 })();
