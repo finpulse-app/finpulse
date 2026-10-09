@@ -7,6 +7,7 @@
       insert(p) { spec.op = 'insert'; spec.payload = p; return api; },
       update(p) { spec.op = 'update'; spec.payload = p; return api; },
       delete() { spec.op = 'delete'; return api; },
+      in(c, v) { spec.filters.push([c, v, 'in']); return api; },
       eq(c, v) { spec.filters.push([c, v]); return api; },
       order(c, o) { spec.order = [c, o && o.ascending === false ? 'desc' : 'asc']; return api; },
       single() { spec.single = true; return api; },

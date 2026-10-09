@@ -31,7 +31,9 @@ passes per time zone. Eighteen historical comparisons are unavailable because v1
 is missing, and 12 checks are skipped; missing comparisons are not passes.
 
 Browser checks use a fake backend. Real Supabase Auth/Data API integration,
-remaining transaction-write failure handling and device/import checks still need
+authenticated account integration and device/import checks still need
 verification before deployment. Bill marks remain device-local; business-day shifts
 are deferred; extra-payment allocation remains disabled. Auth password screening
 and public RLS performance notices are documented in `phase1/V150_FIX_REPORT.md`.
+
+New transaction and import writes now persist their UUIDs before sending, confirm every returned row, and recover pending batches after reload. Imports allow up to 500 selected rows per request. Expense, category, income and loan editors retain input on failure. These changes require no additional database migration.

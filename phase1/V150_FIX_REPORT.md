@@ -62,10 +62,17 @@ and the [new index not yet used](https://supabase.com/docs/guides/database/datab
 
 ## Remaining release checks
 
-Other transaction writes (including loan edits, new entries and imports) still
-need consistent error and account-transition handling. Verify real Supabase sign-in,
+Verify real Supabase sign-in,
 email confirmation, two-account API behavior and staged read/write flows before
 release. Real statement imports and device checks remain. Bill settlement marks
 are device-local, twice-monthly business-day shifts are deferred, and extra-payment
 allocation remains disabled. No local developer tools or browser package installs
 were required; test dependencies run on GitHub's machines.
+
+## Transaction form and import follow-up
+
+All remaining transaction write paths now check returned errors, thrown failures and missing confirmations. Expense/category/loan/income editors commit local state only from an owner-scoped returned row. Failure retains the form and inputs; zero loan balances stay zero. Loan payment category and amount edits are blocked to preserve principal linkage.
+
+New entries and statement imports store stable client-generated UUIDs in account-scoped browser storage before sending. A duplicate-key response on retry triggers owner-scoped reads of the original IDs; every row must be present before success is shown. Read requests are grouped in 100-ID chunks. One pending insert batch blocks a different batch until confirmed. Imports allow at most 500 selected rows per request. Clearing browser storage before an ambiguous save is checked removes this retry protection. System notes use the same confirmed write path.
+
+The expanded client suite passes 59 tests locally; new browser fault checks and live anonymous API checks are queued for GitHub validation. The live API check uses only the existing public anon key, reads Auth settings and confirms anonymous reads return no account records. It creates no users, sends no emails and changes no financial records. Full authenticated sign-in and two-account Data API behavior remain unverified.

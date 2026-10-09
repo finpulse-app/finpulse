@@ -6,10 +6,10 @@ const FILE = path.resolve(process.argv[2] || '../../finpulse-v2-149.html');
 const TZID = process.env.TZ || 'UTC';
 const COLS = 'id,user_id,type,description,amount,date,category,recurring,frequency,anchor_date,apr,min_payment,balance,lender,created_at,original_balance,original_min_payment,principal_applied,loan_id'.split(',');
 const TYPES = ['income','expense','bill','loan','note'];
-let db, reqlog, seq;
+let db, reqlog, seq, writeFault=null;
 const rpcBackend=require('./mock-rpc')({getDb:()=>db,setDb:v=>{db=v},log:r=>reqlog.push(r),nextId:()=> 'id-'+(++seq)});
 function seed() {
-  seq = 0; reqlog = []; rpcBackend.reset();
+  seq = 0; reqlog = []; rpcBackend.reset(); writeFault=null;
   const L = (id, d, bal, min, anchor) => ({ id, user_id: 'user-A', type: 'loan', description: d, amount: min, date: anchor, category: 'Other', recurring: true, frequency: 'monthly', anchor_date: anchor, apr: 12, min_payment: min, balance: bal, lender: 'Other', original_balance: bal, original_min_payment: min, principal_applied: null, loan_id: null, created_at: 'x' });
   db = {
     transactions: [L('loan-car', 'Test Car Loan', 5000, 200, '2026-10-10'), L('loan-small', 'Small Loan', 100, 200, '2026-10-20')],
@@ -19,16 +19,20 @@ function seed() {
 function dbop(s) {
   const entry = { op: s.op, table: s.table, payload: s.payload, filters: s.filters };
   reqlog.push(entry);
+  if(s.table==='transactions' && s.op!=='select' && writeFault==='reject') { writeFault=null; return{data:null,error:{code:'23514',message:'Injected save failure'}}; }
   const rows = db[s.table]; if (!rows) return { data: null, error: { message: 'relation does not exist' } };
-  const match = r => s.filters.every(([c, v]) => String(r[c]) === String(v));
+  const match = r => s.filters.every(([c,v,op]) => op==='in' ? v.includes(r[c]) : String(r[c])===String(v));
   const check = rec => { for (const k of Object.keys(rec)) if (!COLS.includes(k) && s.table === 'transactions') return 'Could not find the \'' + k + '\' column of \'transactions\' in the schema cache'; if (s.table === 'transactions' && rec.type !== undefined && !TYPES.includes(rec.type)) return 'violates check constraint "transactions_type_check"'; return null; };
   let out;
   if (s.op === 'insert') {
     const arr = Array.isArray(s.payload) ? s.payload : [s.payload]; const made = [];
+    if(arr.some(p=>rows.some(r=>r.id===p.id))) return {data:null,error:{code:'23505',message:'duplicate key'}};
+    for(const p of arr) { const e=check(p); if(e)return{data:null,error:{code:'23514',message:e}}; }
     for (const p of arr) { const e = check(p); if (e) { entry.error = e; return { data: null, error: { message: e } }; }
       if (p.user_id !== 'user-A') { entry.error = 'rls'; return { data: null, error: { message: 'new row violates row-level security policy' } }; }
-      const r = Object.fromEntries(COLS.map(c => [c, null])); Object.assign(r, p, { id: 'id-' + (++seq), created_at: 'now' }); rows.push(r); made.push(r); }
+      const r = Object.fromEntries(COLS.map(c => [c, null])); Object.assign(r, p, { id: p.id || 'id-' + (++seq), created_at: 'now' }); rows.push(r); made.push(r); }
     out = s.returning ? made.map(x => ({ ...x })) : null;
+    if(writeFault==='lost') { writeFault=null; throw Error('Injected lost response after insert'); }
   } else if (s.op === 'update') {
     const e = check(s.payload); if (e) { entry.error = e; return { data: null, error: { message: e } }; }
     const changed = rows.filter(r => r.user_id === 'user-A' && match(r)); changed.forEach(r => Object.assign(r, s.payload)); out = s.returning ? changed.map(r => ({...r})) : null;
@@ -563,6 +567,43 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(id=>deleteTxnWithUndo(id),deletePay);rpcBackend.setFault('lost-after-commit');await page.evaluate(()=>undoLastDelete());await load();await hideStage();
   await page.click('#fp-pending-notice button');await wait(200);
   ok('T20 interrupted undo recovery after reload never reduces debt twice',txns().some(t=>t.id===deletePay)&&near(loan('loan-car').balance,4820)&&txns().filter(t=>t.category==='loan_payment').length===2,JSON.stringify(txns()));
+  seed();await load();await hideStage();
+
+
+  // ---- T21 real DOM forms preserve input on rejected writes; UUID retries survive reload.
+  seed();await load();await hideStage();
+  await page.evaluate(()=>{showView('loans',null);openLoanModal();});
+  await page.fill('#lm-desc','Retry Loan');await page.fill('#lm-balance','1200');await page.fill('#lm-payment','100');
+  writeFault='reject';await page.click('#lm-save-btn');await wait(200);
+  ok('T21 failed add loan keeps form and inputs; no success toast',await page.isVisible('#loan-add-form') && await page.inputValue('#lm-desc')==='Retry Loan' && !await page.isDisabled('#lm-save-btn') && !txns().some(t=>t.description==='Retry Loan') && /failure/.test(await toast()),await toast());
+  await page.click('#lm-save-btn');await wait(200);
+  ok('T21 loan retry confirms once and closes form',txns().filter(t=>t.description==='Retry Loan').length===1 && !await page.isVisible('#loan-add-form'),JSON.stringify(txns()));
+  await page.evaluate(()=>openLoanEdit('loan-car'));await page.fill('#le-balance','0');writeFault='reject';await page.evaluate(()=>saveLoanEdit());await wait(200);
+  ok('T21 rejected zero-balance edit leaves original loan and dialog',near(loan('loan-car').balance,5000) && await page.isVisible('#loan-edit-overlay') && await page.inputValue('#le-balance')==='0',await toast());
+  await page.evaluate(()=>saveLoanEdit());await wait(200);
+  ok('T21 confirmed edit keeps zero balance after reload',near(loan('loan-car').balance,0) && !await page.isVisible('#loan-edit-overlay'),JSON.stringify(loan('loan-car')));
+  db.transactions.push({id:'expense-edit',user_id:'user-A',type:'expense',description:'Coffee',amount:10,date:'2026-10-09',category:'food',recurring:false});
+  await load();await hideStage();await page.evaluate(()=>openExpenseEdit('expense-edit'));await page.fill('#ee-desc','Lunch');await page.fill('#ee-amount','20');writeFault='reject';await page.evaluate(()=>saveExpenseEdit());await wait(200);
+  ok('T21 rejected expense edit keeps typed values and original transaction',await page.isVisible('#edit-expense-overlay') && await page.inputValue('#ee-desc')==='Lunch' && txns().find(t=>t.id==='expense-edit').description==='Coffee',await toast());
+  await page.evaluate(()=>saveExpenseEdit());await wait(200);
+  ok('T21 confirmed expense retry updates exactly one row',txns().filter(t=>t.id==='expense-edit').length===1 && txns().find(t=>t.id==='expense-edit').description==='Lunch' && !await page.isVisible('#edit-expense-overlay'),await toast());
+  await page.evaluate(()=>openReassignModal('expense-edit'));writeFault='reject';await page.evaluate(()=>reassignCategory('transport'));await wait(200);
+  ok('T21 rejected category edit keeps dialog and saved category',await page.isVisible('#reassign-overlay') && txns().find(t=>t.id==='expense-edit').category==='food',await toast());
+  await page.evaluate(()=>reassignCategory('transport'));await wait(200);
+  ok('T21 category retry confirms before closing',txns().find(t=>t.id==='expense-edit').category==='transport' && !await page.isVisible('#reassign-overlay'),await toast());
+  await page.evaluate(()=>{openExpenseEdit('expense-edit');deleteExpenseFromEdit();});rpcBackend.setFault('rollback-delete');await page.evaluate(()=>confirmDeleteExpense());await wait(200);
+  ok('T21 rejected expense deletion keeps confirmation and row',await page.isVisible('#edit-expense-overlay') && txns().some(t=>t.id==='expense-edit'),await toast());
+  await page.evaluate(()=>confirmDeleteExpense());await wait(200);
+  ok('T21 deletion retry closes only after receipt confirmation',!await page.isVisible('#edit-expense-overlay') && !txns().some(t=>t.id==='expense-edit'),await toast());
+  seed();await load();await hideStage();
+  await page.evaluate(()=>{_pendingImportRows=[{type:'expense',description:'Import A',amount:12,date:'2026-10-09',category:'food',include:true},{type:'expense',description:'Import B',amount:20,date:'2026-10-10',category:'other',include:true}];document.getElementById('import-preview').style.display='block';document.getElementById('import-confirm-btn').style.display='block';});
+  writeFault='reject';await page.evaluate(()=>confirmStatementImport());await wait(200);
+  ok('T21 import rejection keeps preview and batch with no added rows',await page.evaluate(()=>_pendingImportRows.length)===2 && await page.evaluate(()=>document.getElementById('import-preview').style.display)==='block' && !txns().some(t=>t.description==='Import A') && !await page.isDisabled('#import-confirm-btn'),await toast());
+  writeFault='lost';await page.evaluate(()=>confirmStatementImport());await wait(200);
+  const importIDs=txns().filter(t=>/^Import /.test(t.description)).map(t=>t.id).sort().join(',');
+  ok('T21 lost import confirmation leaves original batch available to check',txns().filter(t=>/^Import /.test(t.description)).length===2 && await page.evaluate(()=>_pendingImportRows.length)===2,await toast());
+  await load();await hideStage();await page.click('#fp-pending-notice button');await wait(200);
+  ok('T21 pending import recovery after reload uses original UUIDs without duplicates',txns().filter(t=>/^Import /.test(t.description)).length===2 && txns().filter(t=>/^Import /.test(t.description)).map(t=>t.id).sort().join(',')===importIDs && await page.evaluate(()=>transactions.filter(t=>/^Import /.test(t.description)).length)===2 && /Save confirmed/.test(await toast()),await toast());
   seed();await load();await hideStage();
 
   // ---- console / network

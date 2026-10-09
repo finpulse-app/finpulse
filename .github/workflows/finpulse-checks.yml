@@ -67,3 +67,13 @@ jobs:
       - run: psql --version
       - name: Test atomic operations on synthetic PostgreSQL database
         run: node phase1/database/test-atomic.js
+  live-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check public Auth settings and anonymous read isolation
+        run: node phase1/check-live-api.js finpulse-v2-150.html

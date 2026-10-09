@@ -145,5 +145,78 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   await test('loan deletion dialog remains open after database rejection',async()=>{
     const c=make(['confirmLoanDelete'],{_loanDeleteId:'loan',_loanDeleteReason:'mistake',deleteTxnWithUndo:async()=>false});c.document.getElementById('loan-delete-overlay').style.display='flex';await c.confirmLoanDelete();assert.equal(c._els['loan-delete-overlay'].style.display,'flex');assert.equal(c._els['ld-confirm-btn'].disabled,false);assert.equal(c._loanDeleteId,'loan');
   });
+
+  function writeBackend(mode='ok') {
+    let db=[],calls=0,uuid=0;
+    const sb={from(){let op='read',payload,filters=[];const q={insert(v){op='insert';payload=v;return q},update(v){op='update';payload=v;return q},select(){return q},eq(k,v){filters.push([k,v]);return q},in(k,v){filters.push([k,v,'in']);return q},single(){q.one=true;return q},then(resolve,reject){return Promise.resolve().then(()=>{
+      calls++;
+      if(mode==='throw')throw Error('offline');
+      if(mode==='error')return{error:{code:'23514',message:'rejected'}};
+      if(mode==='empty')return{data:q.one?null:[],error:null};
+      if(op==='insert'){
+        if(payload.some(p=>db.some(r=>r.id===p.id)))return{data:null,error:{code:'23505',message:'duplicate'}};
+        db.push(...payload.map(r=>({...r})));
+        if(mode==='lost'){mode='ok';throw Error('lost after commit');}
+        return{data:payload.map(r=>({...r})),error:null};
+      }
+      const found=db.filter(r=>filters.every(([k,v,op])=>op==='in'?v.includes(r[k]):r[k]===v));
+      if(op==='update')found.forEach(r=>Object.assign(r,payload));
+      return{data:q.one?found[0]||null:found.map(r=>({...r})),error:null};
+    }).then(resolve,reject)}};return q;}};
+    return{sb,get db(){return db},get calls(){return calls},id:()=> 'uuid-'+(++uuid),set mode(v){mode=v}};
+  }
+  const insertNames=['fpOperationStorageKey','fpPendingOperation','fpInsertTransactions'];
+  const expense={type:'expense',description:'Coffee',amount:10,date:'2026-10-09'};
+  for(const mode of ['error','throw','empty'])await test('new transaction '+mode+' preserves rows and reports failure',async()=>{
+    const b=writeBackend(mode),c=make(insertNames,{sb:b.sb,crypto:{randomUUID:b.id}});
+    assert.equal(await c.fpInsertTransactions([expense]),false);assert.equal(c.transactions.length,0);assert.equal(c._messages.length,1);assert.equal(c._fpMutationBusy,false);
+    if(mode==='error')assert.equal(Object.keys(c._cache).length,0);
+  });
+  await test('import lost after commit retries same UUIDs without duplicates',async()=>{
+    const b=writeBackend('lost'),c=make(insertNames,{sb:b.sb,crypto:{randomUUID:b.id}}),batch=[expense,{...expense,description:'Lunch'}];
+    assert.equal(await c.fpInsertTransactions(batch),false);assert.equal(b.db.length,2);const ids=b.db.map(r=>r.id).join(',');
+    assert.equal(await c.fpInsertTransactions(batch),true);assert.equal(b.db.length,2);assert.equal(c.transactions.length,2);assert.equal(b.db.map(r=>r.id).join(','),ids);assert.equal(Object.keys(c._cache).length,0);
+  });
+  await test('pending insert blocks a different batch until original is checked',async()=>{
+    const b=writeBackend('lost'),c=make(insertNames,{sb:b.sb,crypto:{randomUUID:b.id}});await c.fpInsertTransactions([expense]);const calls=b.calls;
+    assert.equal(await c.fpInsertTransactions([{...expense,amount:20}]),false);assert.equal(b.calls,calls);assert.equal(b.db.length,1);
+  });
+  await test('insert persistence failure sends no financial request',async()=>{
+    const b=writeBackend(),c=make(insertNames,{sb:b.sb,crypto:{randomUUID:b.id}});c.localStorage.setItem=()=>{throw Error('full')};assert.equal(await c.fpInsertTransactions([expense]),false);assert.equal(b.calls,0);
+  });
+  await test('new insert after confirmed save can legitimately repeat same expense',async()=>{
+    const b=writeBackend(),c=make(insertNames,{sb:b.sb,crypto:{randomUUID:b.id}});assert(await c.fpInsertTransactions([expense]));assert(await c.fpInsertTransactions([expense]));assert.equal(b.db.length,2);assert.notEqual(b.db[0].id,b.db[1].id);
+  });
+  await test('partial import confirmation cannot report success',async()=>{
+    const c=make(insertNames,{sb:{from(){return{insert(){return this},select:async()=>({data:[{id:'one',user_id:'A'}],error:null})}}},crypto:{randomUUID:(()=>{let n=0;return()=> 'id'+(++n)})()}});
+    assert.equal(await c.fpInsertTransactions([expense,expense]),false);assert.equal(c.transactions.length,0);assert.equal(Object.keys(c._cache).length,1);
+  });
+  for(const mode of ['error','throw','empty']) await test('edit '+mode+' preserves stored values',async()=>{
+    const b=writeBackend(mode),row={id:'loan',user_id:'A',balance:5000};b.db.push({...row});const c=make(['fpUpdateTransaction'],{sb:b.sb,transactions:[row]});assert.equal(await c.fpUpdateTransaction('loan',{balance:0}),false);assert.equal(c.transactions[0].balance,5000);assert.equal(c._fpMutationBusy,false);
+  });
+  await test('confirmed loan edit retains zero balance from returned row',async()=>{
+    const b=writeBackend(),row={id:'loan',user_id:'A',balance:5000};b.db.push({...row});const c=make(['fpUpdateTransaction'],{sb:b.sb,transactions:[row]});assert(await c.fpUpdateTransaction('loan',{balance:0}));assert.equal(c.transactions[0].balance,0);
+  });
+  for(const name of ['fpInsertTransactions','fpUpdateTransaction'])await test(name+' ignores a late response after account switch',async()=>{
+    let resolve,payload;const promise=new Promise(r=>resolve=r);const sb={from(){return{insert(p){payload=p;return this},update(p){payload=p;return this},eq(){return this},select(){return this},single(){return this},then(a,b){return promise.then(a,b)}}}};
+    const c=make(name==='fpInsertTransactions'?insertNames:[name],{sb,crypto:{randomUUID:(()=>{let n=0;return()=> 'id'+(++n)})()}});
+    const task=name==='fpInsertTransactions'?c[name]([expense]):c[name]('row',{amount:10});c.currentUser={id:'B'};c._fpMutationVersion++;c._fpMutationBusy=false;
+    resolve({data:name==='fpInsertTransactions'?payload:[{...payload,id:'row',user_id:'A'}][0],error:null});assert.equal(await task,false);assert.equal(c.transactions.length,0);assert.equal(c._messages.length,0);
+  });
+  await test('loan payment reassignment and amount edit cannot corrupt principal linkage',async()=>{
+    const b=writeBackend(),c=make(['fpUpdateTransaction'],{sb:b.sb,transactions:[{id:'payment',category:'loan_payment'}]});assert.equal(await c.fpUpdateTransaction('payment',{category:'food'}),false);assert.equal(b.calls,0);
+  });
+  await test('failed expense delete confirmation keeps dialog and ID',async()=>{
+    const c=make(['confirmDeleteExpense'],{_editExpenseTxnId:'expense',deleteTxnWithUndo:async()=>false});c.document.getElementById('edit-expense-overlay').style.display='flex';await c.confirmDeleteExpense();assert.equal(c._editExpenseTxnId,'expense');assert.equal(c._els['edit-expense-overlay'].style.display,'flex');
+  });
+  await test('failed new loan keeps modal open and re-enables save',async()=>{
+    let closed=false;const c=make(['saveLoanFromModal'],{saveTxn:async()=>false,closeLoanModal(){closed=true},alert(){},currentYear:2026,currentMonth:9});for(const [id,v] of [['lm-desc','Test Loan'],['lm-balance','5000'],['lm-payment','200'],['lm-anchor','2026-10-10']])c.document.getElementById(id).value=v;await c.saveLoanFromModal();assert.equal(closed,false);assert.equal(c._els['lm-save-btn'].disabled,false);assert.equal(c._messages.length,0);
+  });
+  await test('failed ripple purchase preserves pending purchase and warning',async()=>{
+    const pending={txnObj:expense};const c=make(['rippleStillBuy'],{_ripplePending:pending,saveTxn:async()=>false});c.document.getElementById('ripple-overlay').style.display='flex';await c.rippleStillBuy();assert.equal(c._ripplePending,pending);assert.equal(c._els['ripple-overlay'].style.display,'flex');assert.equal(c._messages.length,0);
+  });
+  await test('failed import keeps preview and rows available for retry',async()=>{
+    const rows=[{...expense,include:true}];const c=make(['confirmStatementImport'],{_pendingImportRows:rows,fpInsertTransactions:async()=>false,updateImportSummary(){}});c.document.getElementById('import-preview').style.display='block';await c.confirmStatementImport();assert.equal(c._pendingImportRows,rows);assert.equal(c._els['import-preview'].style.display,'block');assert.equal(c._els['import-confirm-btn'].disabled,false);assert.equal(c._messages.length,0);
+  });
   console.log('TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
 })();

@@ -1341,8 +1341,7 @@ async function saveExpenseEdit() {
     if (Math.abs(parseFloat(editingTxn.amount) - amount) > 0.004 || desc !== editingTxn.description) {
       showToast('Loan payment amounts cannot be edited. Delete it and record it again so your balance stays correct.', 'error');
     }
-    await sb.from('transactions').update({ date }).eq('id', _editExpenseTxnId).eq('user_id', currentUser.id);
-    editingTxn.date = date;
+    if (!await fpUpdateTransaction(_editExpenseTxnId, { date })) return;
     document.getElementById('edit-expense-overlay').style.display = 'none';
     _editExpenseTxnId = null;
     renderCalendar(); updateStats(); renderExpensesView();
@@ -1350,9 +1349,7 @@ async function saveExpenseEdit() {
   }
   const upd = { description: desc, amount, date };
   if (editingTxn && editingTxn.recurring && editingTxn.anchor_date) upd.anchor_date = date; // keep date and schedule start together
-  await sb.from('transactions').update(upd).eq('id', _editExpenseTxnId).eq('user_id', currentUser.id);
-  const idx = transactions.findIndex(function(t){ return t.id === _editExpenseTxnId; });
-  if (idx > -1) { transactions[idx].description = desc; transactions[idx].amount = amount; transactions[idx].date = date; if (upd.anchor_date) transactions[idx].anchor_date = date; }
+  if (!await fpUpdateTransaction(_editExpenseTxnId, upd)) return;
   document.getElementById('edit-expense-overlay').style.display = 'none';
   _editExpenseTxnId = null;
   showToast('Expense updated');
@@ -1380,7 +1377,7 @@ async function deleteExpenseFromEdit() {
 
 async function confirmDeleteExpense() {
   if (!_editExpenseTxnId) return;
-  await deleteTxnWithUndo(_editExpenseTxnId);
+  if (!await deleteTxnWithUndo(_editExpenseTxnId)) return;
   document.getElementById('edit-expense-overlay').style.display = 'none';
   window._eeOriginalContent = null;
   _editExpenseTxnId = null;
@@ -1418,10 +1415,8 @@ function openReassignModal(txnId) {
 
 async function reassignCategory(newCat) {
   if (!_reassignTxnId) return;
+  if (!await fpUpdateTransaction(_reassignTxnId, { category: newCat })) return;
   document.getElementById('reassign-overlay').style.display = 'none';
-  await sb.from('transactions').update({ category: newCat }).eq('id', _reassignTxnId).eq('user_id', currentUser.id);
-  const idx = transactions.findIndex(function(t){ return t.id === _reassignTxnId; });
-  if (idx > -1) transactions[idx].category = newCat;
   _reassignTxnId = null;
   showToast('Category updated');
   renderExpensesView();
@@ -1519,6 +1514,10 @@ async function fpResolvePendingOperation(key) {
   try { pending = fpPendingOperation(key); }
   catch(e) { showToast('Pending change could not be read.', 'error'); return; }
   if (!pending) return;
+  if (pending.kind === 'insert') {
+    if (await fpInsertTransactions(pending.payload)) showToast('Save confirmed');
+    return;
+  }
   const data = await fpAtomicMutation(pending.kind, pending.payload, key);
   if (!data) return;
   if (data.kind === 'delete') {
@@ -1836,7 +1835,91 @@ async function loadUserData() {
   }
 }
 
+// New rows keep their UUIDs until the server confirms the entire batch. An
+// ambiguous response can be retried after reload without creating duplicate rows.
+async function fpInsertTransactions(records) {
+  if (!currentUser || _fpMutationBusy) return false;
+  const userId = currentUser.id, version = ++_fpMutationVersion;
+  const payload = records.map(function(r) { return Object.assign({}, r, { user_id: userId }); });
+  const key = 'insert', storageKey = fpOperationStorageKey(key);
+  _fpMutationBusy = true;
+  try {
+    if (!payload.length || payload.length > 500) throw new Error('Import up to 500 selected transactions at a time.');
+    let pending = fpPendingOperation(key);
+    if (pending && (pending.kind !== 'insert' || JSON.stringify(pending.payload) !== JSON.stringify(payload))) {
+      throw new Error('Check the previous pending save before adding a different transaction.');
+    }
+    if (!pending) {
+      pending = { id: crypto.randomUUID(), kind: 'insert', payload: payload,
+        records: payload.map(function(r) { return Object.assign({}, r, { id: crypto.randomUUID() }); }) };
+      localStorage.setItem(storageKey, JSON.stringify(pending));
+    }
+    if (!Array.isArray(pending.records) || pending.records.length !== payload.length
+        || pending.records.some(function(r,i) { return r.user_id !== userId || !r.id
+          || JSON.stringify(Object.assign({},r,{id:undefined})) !== JSON.stringify(payload[i]); })) {
+      throw new Error('Pending save could not be verified.');
+    }
+    let response = await sb.from('transactions').insert(pending.records).select();
+    if (response.error && response.error.code === '23505') {
+      // A prior request may already have committed. Check every original UUID;
+      // never replace an existing row or turn a partial confirmation into success.
+      const ids=pending.records.map(function(r){return r.id;}), queries=[];
+      for(let i=0;i<ids.length;i+=100) queries.push(sb.from('transactions').select().eq('user_id',userId).in('id',ids.slice(i,i+100)));
+      const confirmed=await Promise.all(queries);
+      response={error:(confirmed.find(function(r){return r.error;}) || {}).error || null,
+        data:confirmed.flatMap(function(r){return Array.isArray(r.data)?r.data:[];})};
+    } else if (response.error && /^(22|23|42501)/.test(response.error.code || '')) {
+      localStorage.removeItem(storageKey);
+    }
+    if (response.error) throw new Error(response.error.message || 'Save failed. Please retry.');
+    const rows = response.data;
+    if (!Array.isArray(rows) || rows.length !== pending.records.length
+        || new Set(rows.map(function(r){return r.id;})).size !== pending.records.length
+        || pending.records.some(function(r){return !rows.some(function(x){return x.id===r.id && x.user_id===userId;});})) {
+      throw new Error('Save confirmation was incomplete. Please retry.');
+    }
+    if (!currentUser || currentUser.id !== userId || version !== _fpMutationVersion) return false;
+    rows.forEach(function(row) {
+      const idx = transactions.findIndex(function(t){return t.id===row.id;});
+      if (idx < 0) transactions.push(row); else transactions[idx] = row;
+    });
+    localStorage.removeItem(storageKey);
+    try { fpRenderTransactionState(); } catch(e) { console.warn('Saved transaction needs display refresh'); }
+    return true;
+  } catch(e) {
+    if (currentUser && currentUser.id===userId && version===_fpMutationVersion) showToast(e.message || 'Save failed. Please retry.', 'error');
+    return false;
+  } finally {
+    if (version===_fpMutationVersion) { _fpMutationBusy=false; fpUpdatePendingNotice(); }
+  }
+}
+
+async function fpUpdateTransaction(id, changes) {
+  if (!currentUser || _fpMutationBusy) return false;
+  const userId=currentUser.id, version=++_fpMutationVersion;
+  const existing=transactions.find(function(t){return String(t.id)===String(id);});
+  if (existing && existing.category==='loan_payment'
+      && Object.keys(changes).some(function(k){return k!=='date' && k!=='anchor_date';})) {
+    showToast('Loan payments can only change date. Delete and record the payment again to change its amount.', 'error');
+    return false;
+  }
+  _fpMutationBusy=true;
+  try {
+    const response=await sb.from('transactions').update(changes).eq('id',id).eq('user_id',userId).select().single();
+    if (response.error) throw new Error(response.error.message || 'Update failed. Please retry.');
+    if (!response.data || String(response.data.id)!==String(id) || response.data.user_id!==userId) throw new Error('Update could not be confirmed. Please retry.');
+    if (!currentUser || currentUser.id!==userId || version!==_fpMutationVersion) return false;
+    const idx=transactions.findIndex(function(t){return String(t.id)===String(id);});
+    if(idx>=0) transactions[idx]=response.data;
+    return true;
+  } catch(e) {
+    if(currentUser && currentUser.id===userId && version===_fpMutationVersion) showToast(e.message || 'Update failed. Please retry.', 'error');
+    return false;
+  } finally { if(version===_fpMutationVersion) _fpMutationBusy=false; }
+}
+
 async function saveTxn(txn) {
+  if (!currentUser) return false;
   const record = {
     user_id: currentUser.id,
     type: txn.type,
@@ -1856,17 +1939,7 @@ async function saveTxn(txn) {
     principal_applied: txn.principal_applied != null ? txn.principal_applied : null,
     loan_id: txn.loan_id != null ? String(txn.loan_id) : null
   };
-  const { data, error } = await sb.from('transactions').insert([record]).select();
-  if (error) { console.error('saveTxn error:', error.message); showToast('Save failed, please try again', 'error'); return; }
-  if (data) {
-    const enriched = { ...data[0], original_balance: data[0].original_balance || txn.balance || null };
-    transactions.push(enriched);
-    renderCalendar();
-    updateStats();
-    if (enriched.type === 'loan') renderLoans();
-    if (enriched.type === 'bill') renderBillsView();
-    renderExpensesView();
-  }
+  return await fpInsertTransactions([record]);
 }
 
 function removeTxnFromPanel(id) {
@@ -2012,9 +2085,9 @@ async function submitRolloverExplanation() {
   if (!fpAllocationEnabled()) {
     // v149 (audit H7): no AI coaching while the allocation switch is off. Keep the note and lock in the balance.
     const t0 = new Date();
-    await saveTxnSilent({ user_id: currentUser.id, type: 'note', description: 'Month start note: ' + explanation, amount: 0,
+    if (!await saveTxnSilent({ user_id: currentUser.id, type: 'note', description: 'Month start note: ' + explanation, amount: 0,
       date: t0.getFullYear() + '-' + String(t0.getMonth() + 1).padStart(2, '0') + '-01', category: 'variance', recurring: false,
-      frequency: null, anchor_date: null, apr: null, min_payment: null, balance: null, lender: null });
+      frequency: null, anchor_date: null, apr: null, min_payment: null, balance: null, lender: null })) return;
     await confirmRollover(rolloverActual);
     return;
   }
@@ -2057,7 +2130,7 @@ async function submitRolloverExplanation() {
     if (explanation) {
       const today = new Date();
       const dateStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2,'0') + '-01';
-      await saveTxnSilent({
+      if (!await saveTxnSilent({
         user_id: currentUser.id,
         type: 'note',
         description: 'Month start note: ' + explanation,
@@ -2071,7 +2144,7 @@ async function submitRolloverExplanation() {
         min_payment: null,
         balance: null,
         lender: null
-      });
+      })) { btn.disabled=false; btn.textContent='Retry saving note'; return; }
     }
 
     responseEl.innerHTML = '<div style="background:var(--accent-light);border:1px solid #c3ddd1;border-left:3px solid var(--accent);border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;color:#2d5a46;line-height:1.7;margin-top:12px;">'
@@ -2102,7 +2175,7 @@ async function confirmRollover(balance) {
 
 // Silent save, doesn't push to transactions array (used for system notes)
 async function saveTxnSilent(record) {
-  try { await sb.from('transactions').insert([record]); } catch(e) { /* ignore */ }
+  return await fpInsertTransactions([record]);
 }
 
 
@@ -4098,14 +4171,15 @@ async function bsAiSubmit() {
     anchor_date: bsRecurring ? dateStr : null
   };
 
-  inp.value = '';
+  // Keep the text until a confirmed save.
   if (btn) { btn.disabled = false; btn.textContent = 'Add'; }
 
   // Ripple warning is for one-time discretionary purchases, skip it for new recurring charges
   if (!bsRecurring && shouldShowRipple(amount, category)) {
     showRippleWarning(description, amount, category, txnObj);
   } else {
-    await saveTxn(txnObj);
+    if (!await saveTxn(txnObj)) return;
+    inp.value = '';
     showToast(description + (bsRecurring ? ' · $' + fmt(amount) + '/mo added' : ' · $' + fmt(amount) + ' added'));
     bsRecurring = false;
     renderBottomSheetBody();
@@ -4131,10 +4205,10 @@ async function bsConfirmSave() {
     frequency: null,
     anchor_date: null
   };
+  if (!await saveTxn(txnToSave)) return;
   bsPendingTxn = null;
   const inp = document.getElementById('bs-ai-input');
-  if (inp) inp.value = '';
-  await saveTxn(txnToSave); // saveTxn calls renderCalendar + updateStats internally
+  if (inp) inp.value = ''; // saveTxn calls renderCalendar + updateStats internally
   showToast(savedDesc + ' · $' + fmt(savedAmt) + ' added');
   renderBottomSheetBody(); // refresh sheet to show new txn in "On this day"
 }
@@ -4150,8 +4224,6 @@ async function bsCatSave() {
   const dateStr = currentYear + '-' + String(currentMonth+1).padStart(2,'0') + '-' + String(Math.min(day, daysInMonth)).padStart(2,'0');
   const savedCat = bsSelectedCat;
   const desc = cats[savedCat] || 'Expense';
-  bsSelectedCat = null;
-  if (amtEl) amtEl.value = '';
 
   const txnObj = {
     type: 'expense',
@@ -4167,7 +4239,9 @@ async function bsCatSave() {
   if (!bsRecurring && shouldShowRipple(amt, savedCat)) {
     showRippleWarning(desc, amt, savedCat, txnObj);
   } else {
-    await saveTxn(txnObj);
+    if (!await saveTxn(txnObj)) return;
+    bsSelectedCat = null;
+    if (amtEl) amtEl.value = '';
     showToast(desc + (bsRecurring ? ' · $' + fmt(amt) + '/mo added' : ' · $' + fmt(amt) + ' added'));
     bsRecurring = false;
     renderBottomSheetBody();
@@ -4205,7 +4279,7 @@ async function saveEntry() {
   const isRecurring = recurringOn[activeTab] || activeTab === 'bill';
   const freq = document.getElementById('p-freq') ? document.getElementById('p-freq').value : 'monthly';
   const txn = { type: activeTab, description: desc, amount, date, category: cat, recurring: isRecurring, frequency: isRecurring ? freq : null, anchor_date: isRecurring ? date : null };
-  await saveTxn(txn);
+  if (!await saveTxn(txn)) return;
   showToast(activeTab === 'income' ? 'Income saved' : activeTab === 'bill' ? 'Bill saved' : 'Expense saved');
   recurringOn = { income: false, expense: false };
 }
@@ -4268,7 +4342,7 @@ function openLoanEdit(loanId) {
   if (!loan) return;
   _loanEditId = loan.id;
   document.getElementById('le-desc').value = loan.description || '';
-  document.getElementById('le-balance').value = loan.balance || loan.amount || '';
+  document.getElementById('le-balance').value = loan.balance != null ? loan.balance : (loan.amount || '');
   document.getElementById('le-apr').value = loan.apr || '';
   document.getElementById('le-payment').value = loan.min_payment || loan.amount || '';
   document.getElementById('loan-edit-overlay').style.display = 'flex';
@@ -4289,9 +4363,7 @@ async function saveLoanEdit() {
   const apr = parseFloat(document.getElementById('le-apr').value) || 0;
   const payment = parseFloat(document.getElementById('le-payment').value);
   if (!desc || isNaN(balance) || balance < 0 || isNaN(payment) || payment <= 0) return;
-  await sb.from('transactions').update({ description: desc, balance: balance, apr: apr, min_payment: payment, amount: payment }).eq('id', _loanEditId).eq('user_id', currentUser.id);
-  const idx = transactions.findIndex(function(t) { return String(t.id) === String(_loanEditId); });
-  if (idx > -1) transactions[idx] = { ...transactions[idx], description: desc, balance: balance, apr: apr, min_payment: payment, amount: payment };
+  if (!await fpUpdateTransaction(_loanEditId, { description: desc, balance, apr, min_payment: payment, amount: payment })) return;
   document.getElementById('loan-edit-overlay').style.display = 'none';
   _loanEditId = null;
   showToast('Loan updated');
@@ -4367,7 +4439,9 @@ async function saveLoanFromModal() {
     lender: cat
   };
 
-  await saveTxn(txn);
+  const saved = await saveTxn(txn);
+  if (btn) { btn.disabled = false; btn.textContent = 'Add to My Debt Plan'; }
+  if (!saved) return;
   showToast('Loan added to your debt plan');
   closeLoanModal();
   renderLoans();
@@ -4657,47 +4731,18 @@ function closeWhatIf() {
 }
 
 async function applyWhatIfPayment(loanId) {
-  const sliderEl = document.getElementById('whatif-slider');
-  if (!sliderEl) return;
-  const newPayment = parseFloat(sliderEl.value) || 0;
-  const loan = transactions.find(function(t) { return t.id === loanId; });
-  if (!loan) return;
-
-  // Store the original minimum in memory BEFORE we overwrite min_payment
-  // so the slider always resets to the true contractual floor
-  const originalMin = parseFloat(loan.original_min_payment || loan.min_payment || loan.amount) || 0;
-  const currentCommitted = parseFloat(loan.min_payment || loan.amount) || 0;
-  const idx = transactions.findIndex(function(t) { return t.id === loanId; });
-
-  // Close modal immediately
+  const sliderEl=document.getElementById('whatif-slider');
+  const loan=transactions.find(function(t){return t.id===loanId;});
+  if(!sliderEl || !loan) return;
+  const newPayment=parseFloat(sliderEl.value);
+  if(!Number.isFinite(newPayment) || newPayment<=0) return;
+  const originalMin=parseFloat(loan.original_min_payment != null ? loan.original_min_payment : (loan.min_payment != null ? loan.min_payment : loan.amount)) || 0;
+  const currentCommitted=parseFloat(loan.min_payment != null ? loan.min_payment : loan.amount) || 0;
+  if(newPayment===currentCommitted) { closeWhatIf(); return; }
+  if(!await fpUpdateTransaction(loanId, {min_payment:newPayment,amount:newPayment,original_min_payment:originalMin})) return;
   closeWhatIf();
-
-  if (newPayment === currentCommitted) return; // Genuinely unchanged from what's already committed
-
-  // Preserve original_min_payment in memory so the true floor is never lost,
-  // even when the user sets their payment back down to exactly that floor
-  if (idx > -1 && !transactions[idx].original_min_payment) {
-    transactions[idx].original_min_payment = originalMin;
-  }
-
-  // Update the loan's recurring monthly payment in DB
-  // This changes what shows on the calendar and the loan card going forward
-  try {
-    const dbUpdates = { min_payment: newPayment, amount: newPayment };
-    if (idx > -1 && !transactions[idx].original_min_payment_saved) {
-      dbUpdates.original_min_payment = originalMin;
-    }
-    await sb.from('transactions').update(dbUpdates).eq('id', loanId).eq('user_id', currentUser.id);
-    if (idx > -1) {
-      transactions[idx].min_payment = newPayment;
-      transactions[idx].amount = newPayment;
-      transactions[idx].original_min_payment = originalMin;
-      transactions[idx].original_min_payment_saved = true;
-    }
-  } catch(e) { console.error('Apply payment error:', e); }
-
   renderLoans(); renderCalendar(); updateStats();
-  showToast('Monthly payment set to $' + fmt(newPayment));
+  showToast('Monthly payment set to $'+fmt(newPayment));
 }
 
 let _rpLoanId = null;
@@ -5649,11 +5694,9 @@ async function saveIncomeSource() {
   if (!desc || isNaN(amount) || amount <= 0 || !payday) { return; }
 
   if (_editingIncomeSourceId) {
-    await sb.from('transactions').update({ description: desc, amount: amount, frequency: frequency, anchor_date: payday, date: payday }).eq('id', _editingIncomeSourceId).eq('user_id', currentUser.id);
-    const idx = transactions.findIndex(function(t) { return String(t.id) === String(_editingIncomeSourceId); });
-    if (idx > -1) transactions[idx] = { ...transactions[idx], description: desc, amount: amount, frequency: frequency, anchor_date: payday, date: payday };
+    if (!await fpUpdateTransaction(_editingIncomeSourceId, { description: desc, amount, frequency, anchor_date: payday, date: payday })) return;
   } else {
-    await saveTxn({ type:'income', description: desc, amount: amount, date: payday, recurring: true, frequency: frequency, anchor_date: payday });
+    if (!await saveTxn({ type:'income', description: desc, amount: amount, date: payday, recurring: true, frequency: frequency, anchor_date: payday })) return;
   }
   _editingIncomeSourceId = null;
   document.getElementById('add-income-overlay').style.display = 'none';
@@ -6016,17 +6059,10 @@ async function confirmStatementImport() {
     };
   });
 
-  const { data, error } = await sb.from('transactions').insert(records).select();
+  const saved = await fpInsertTransactions(records);
+  if (!currentUser || records[0].user_id !== currentUser.id) return;
   confirmBtn.disabled = false;
-
-  if (error) {
-    console.error('Statement import error:', error.message);
-    updateImportSummary();
-    showToast('Import failed: ' + error.message, 'error');
-    return;
-  }
-
-  if (data) transactions = transactions.concat(data);
+  if (!saved) { updateImportSummary(); return; }
   confirmBtn.style.display = 'none';
   document.getElementById('import-cancel-btn').style.display = 'none';
   document.getElementById('import-preview').style.display = 'none';
@@ -6143,18 +6179,19 @@ async function updateTxn(id) {
   if (txn && txn.type === 'loan') {
     // For loans: amount field = min_payment. Balance is separate.
     const balEl = document.getElementById('edit-bal-' + id);
-    const newBal = balEl ? parseFloat(balEl.value) : parseFloat(txn.balance || txn.amount);
+    const newBal = balEl ? parseFloat(balEl.value) : parseFloat(txn.balance != null ? txn.balance : txn.amount);
     updates.min_payment = amt;
     updates.amount = amt;
-    updates.balance = isNaN(newBal) ? parseFloat(txn.balance || txn.amount) : newBal;
+    updates.balance = isNaN(newBal) ? parseFloat(txn.balance != null ? txn.balance : txn.amount) : newBal;
   } else {
     updates.amount = amt;
   }
 
-  const { error } = await sb.from('transactions').update(updates).eq('id', id).eq('user_id', currentUser.id);
-  if (!error) {
-    const idx = transactions.findIndex(t => t.id === id);
-    if (idx > -1) { transactions[idx] = { ...transactions[idx], ...updates }; }
+  if (txn && txn.category === 'loan_payment') {
+    if (desc !== txn.description || Math.abs(amt-Number(txn.amount))>0.004) { showToast('Loan payment amounts cannot be edited.', 'error'); return; }
+    Object.keys(updates).forEach(function(k){if(k!=='date')delete updates[k];});
+  }
+  if (await fpUpdateTransaction(id, updates)) {
     const editDiv = document.getElementById('txn-edit-' + id);
     if (editDiv) editDiv.style.display = 'none';
     renderCalendar(); updateStats(); renderLoans(); renderPanelBody(); renderExpensesView();
@@ -6263,7 +6300,7 @@ async function saveItem(item, catId, key) {
     frequency: isRecurring ? (freq === 'yearly' ? 'monthly' : freq) : null,
     anchor_date: isRecurring ? dateVal : null
   };
-  await saveTxn(txn);
+  if (!await saveTxn(txn)) return;
   const form = document.getElementById('iform-' + key);
   const row = document.getElementById('irow-' + key);
   if (form) form.style.display = 'none';
@@ -6771,10 +6808,10 @@ function showRippleWarning(description, amount, category, txnObj) {
 
 async function rippleStillBuy() {
   if (!_ripplePending) return;
-  document.getElementById('ripple-overlay').style.display = 'none';
   const p = _ripplePending;
+  if (!await saveTxn(p.txnObj)) return;
+  document.getElementById('ripple-overlay').style.display = 'none';
   _ripplePending = null;
-  await saveTxn(p.txnObj);
   showToast(p.description + ' · $' + fmt(p.amount) + ' recorded');
   renderBottomSheetBody();
 }
