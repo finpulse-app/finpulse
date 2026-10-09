@@ -40,3 +40,30 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run browser regression checks against fake backend
         run: node phase1/browser/browser-test-v149.js finpulse-v2-150.html
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: finpulse-ci-only
+          POSTGRES_DB: finpulse_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      FINPULSE_DISPOSABLE_DB: 'true'
+      FINPULSE_TEST_DATABASE_URL: postgresql://postgres:finpulse-ci-only@localhost:5432/finpulse_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: psql --version
+      - name: Test atomic operations on synthetic PostgreSQL database
+        run: node phase1/database/test-atomic.js
