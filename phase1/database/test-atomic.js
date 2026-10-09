@@ -22,6 +22,13 @@ async function test(name,fn){try{reset();await fn();pass++;console.log('PASS '+n
  sql(fs.readFileSync('phase1/database/fixture.sql','utf8'));
  sql(fs.readFileSync('database/atomic-loan-operations.sql','utf8'));
  sql(fs.readFileSync('database/bill-paid-marks.sql','utf8'));
+ sql(fs.readFileSync('database/owner-policy-performance.sql','utf8'));
+ await test('optimized settings policy preserves owner isolation and rejects forged owner',()=>{
+   sql(`set role authenticated;set request.jwt.claim.sub=${lit(A)};insert into public.user_settings(user_id,starting_balance) values(${lit(A)},100);`);
+   assert.equal(sql(`set role authenticated;set request.jwt.claim.sub=${lit(B)};select count(*) from public.user_settings;`),'0');
+   fail(()=>sql(`set role authenticated;set request.jwt.claim.sub=${lit(B)};insert into public.user_settings(user_id,starting_balance) values(${lit(A)},999);`),/row-level security/);
+   assert.equal(sql(`set role authenticated;set request.jwt.claim.sub=${lit(A)};select starting_balance from public.user_settings;`),'100');
+ });
  await test('regular plus extra payment commits exact principal and linked rows',()=>{const id=loan();const r=call(randomUUID(),'record',record(id,30));assert.equal(balance(id),4820);assert.equal(r.total_paid,230);assert.equal(r.principal,180);assert.equal(count(),3);assert(r.transactions.filter(x=>x.type==='expense').every(x=>x.loan_id===id));});
  await test('extra-only and payoff never record more than remaining principal',()=>{const id=loan(100);const r=call(randomUUID(),'record',record(id,500,false));assert.equal(balance(id),0);assert.equal(r.total_paid,100);assert.equal(count(),2);fail(()=>call(randomUUID(),'record',record(id)),/already paid off/);assert.equal(count(),2);});
  await test('regular payoff caps amount including interest',()=>{const id=loan(100);const r=call(randomUUID(),'record',record(id));assert.equal(r.total_paid,101);assert.equal(balance(id),0);assert.equal(r.principal,100);});

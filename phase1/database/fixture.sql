@@ -16,6 +16,10 @@ create table public.transactions(
  original_balance numeric, original_min_payment numeric, principal_applied numeric, loan_id text
 );
 alter table public.transactions enable row level security;
-create policy owner on public.transactions for all using(auth.uid()=user_id) with check(auth.uid()=user_id);
+create policy "Users can manage their own transactions" on public.transactions for all using(auth.uid()=user_id) with check(auth.uid()=user_id);
+create table public.user_settings(id uuid primary key default gen_random_uuid(),user_id uuid not null references auth.users(id),starting_balance numeric);
+alter table public.user_settings enable row level security;
+create policy "Users can manage their own settings" on public.user_settings for all using(auth.uid()=user_id) with check(auth.uid()=user_id);
+grant select,insert,update,delete on public.user_settings to authenticated;
 grant select,insert,update,delete on public.transactions to authenticated;
 insert into auth.users values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');

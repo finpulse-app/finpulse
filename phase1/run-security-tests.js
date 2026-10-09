@@ -13,7 +13,7 @@ function make(names, extra={}) {
   const element = id => els[id] || (els[id]={value:'',style:{},textContent:'',innerHTML:'',classList:{remove(){},toggle(){}}});
   const c = vm.createContext(Object.assign({console,Date,Math,JSON,parseFloat,isNaN,setTimeout(){},
     currentUser:{id:'A'},userSettings:{startingBalance:100,payAmount:0},monthBalances:{},transactions:[],
-    _dataLoadVersion:0,_activeUserId:'A', savedPurchases:[],_importReadVersion:0,
+    _dataLoadVersion:0,_activeUserId:'A', savedPurchases:[],_importReadVersion:0,_fpSettingsVersion:0,_fpSettingsBusy:false,_fpSignOutBusy:false,fpReadTransactions:async()=>({data:[],error:null}),
     _fpBillMarkRows:[],_fpBillMarksReady:true,_fpBillMarkBusy:false,_fpBillMarkVersion:0,fpRefreshBillMarks:async()=>true,renderPriorityReport(){},
     window:{},document:{getElementById:element,querySelector(){return element('modal')},querySelectorAll(){return []}},
     localStorage:{getItem:k=>cache[k]||null,setItem:(k,v)=>{cache[k]=v},removeItem:k=>{delete cache[k]}},
@@ -22,7 +22,7 @@ function make(names, extra={}) {
     fpPendingOperation:()=>null,fpRenderTransactionState(){},fpUpdatePendingNotice(){},panelOpen:false,
     showToast:(...m)=>messages.push(m),renderCalendar(){},renderLoans(){},renderBillsView(){},updateStats(){},dUpdate(){},updateTopbarButtons(){},openSetup(){},loadSavedPurchases(){},shouldShowStageModal(){return false},checkMonthRollover:async()=>{},
     _els:els,_cache:cache,_messages:messages},extra));
-  names.forEach(n=>vm.runInContext(grab(n),c)); return c;
+  ['fpLoanBalanceAmount','fpIsPaycheckRecord'].concat(names).forEach(n=>vm.runInContext(grab(n),c)); return c;
 }
 function backend({writeError=null,readError=null,rows=true,throwWrite=false}={}) {
   let written=null;
@@ -87,6 +87,9 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
     let reads=0,delayed,readyResolve;const ready=new Promise(r=>readyResolve=r);const c=make(['loadUserData'],{setTimeout(fn){delayed=fn;readyResolve()},sb:{from:()=>({select(){return this},eq(){return this},single:async()=>{reads++;return{error:{code:'PGRST303'}}},order:async()=>({data:[],error:null})})}});
     const loading=c.loadUserData();await ready;c.currentUser={id:'B'};c.userSettings={startingBalance:7};delayed();await loading;assert.equal(reads,1);assert.equal(c.userSettings.startingBalance,7);assert.equal(c._messages.length,0);
   });
+  await test('money formatting retains cents and zero',()=>{const c=make(['fmt']);assert.equal(c.fmt(1234.56),'1,234.56');assert.equal(c.fmt(0),'0')});
+  await test('paid-off loan balance never falls back to payment amount',()=>{const c=make([]);assert.equal(c.fpLoanBalanceAmount({balance:0,amount:200}),0);assert.equal(c.fpLoanBalanceAmount({balance:null,amount:200}),200)});
+  await test('paycheck matching rejects a large refund or gift',()=>{const c=make([]);for(const description of ['Refund','Gift','Rental income'])assert.equal(c.fpIsPaycheckRecord({description}),false);assert(c.fpIsPaycheckRecord({description:'Pay deposit'}));assert(c.fpIsPaycheckRecord({description:'ACME',category:'paycheck'}));});
   await test('CSV preserves quoted commas, escaped quotes, multiline fields and BOM',()=>{
     const c=make(['parseCsvText']);const r=c.parseCsvText('\uFEFFDate,Description,Amount\r\n2026-10-09,"Coffee, ""daily""\nshop",-3.25\r\n');assert.equal(r.length,2);assert.equal(r[0][0],'Date');assert.equal(r[1][1],'Coffee, "daily"\nshop');
     assert.throws(()=>c.parseCsvText('Date,Description\n2026-10-09,"unfinished'));
@@ -107,7 +110,7 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   });
   await test('Insights escapes stored description and category without changing data',()=>{
     const payload='<img src=x onerror="window.marker=1">';
-    const c=make(['renderInsights','fmt','fpEscHtml'],{transactions:[{type:'expense',amount:10,description:payload,category:payload},{type:'income',amount:20,description:payload}]});
+    const rows=[{type:'expense',amount:10,description:payload,category:payload},{type:'income',amount:20,description:payload}];const c=make(['renderInsights','fmt','fpEscHtml'],{currentYear:2026,currentMonth:9,fpAmountDue:t=>t.amount,buildDayMap:()=>({1:{expenses:[rows[0]],income:[rows[1]],bills:[],loans:[]}}),transactions:rows});
     c.renderInsights();for(const id of ['insights-expenses','insights-income']){assert(!c._els[id].innerHTML.includes(payload));assert(c._els[id].innerHTML.includes('&lt;img'));}assert.equal(c.transactions[0].description,payload);
   });
   await test('monthly spending split includes calendar loan events and reconciles every outflow',()=>{
@@ -338,6 +341,24 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
     let timer,removed=false;const c=make(['openExpenseEdit'],{transactions:[{id:'expense',description:'Coffee',amount:10,date:'2026-10-09'}],setTimeout:fn=>{timer=fn;}});
     const getter=c.document.getElementById;c.document.getElementById=id=>removed && id==='ee-desc'?null:getter(id);
     c.openExpenseEdit('expense');removed=true;assert.doesNotThrow(()=>timer());
+  });
+  await test('account reload reads all 1001 transactions using stable pages',async()=>{
+    const rows=Array.from({length:1001},(_,i)=>({id:String(i).padStart(5,'0'),date:'2026-10-09'}));let calls=0;
+    const c=make(['fpReadTransactions'],{sb:{from(){const q={select(){return q},eq(){return q},order(){return q},range:async(a,b)=>{calls++;return{data:rows.slice(a,b+1),error:null}}};return q;}}});
+    const r=await c.fpReadTransactions('A',0);assert.equal(r.data.length,1001);assert.equal(calls,3);
+  });
+  await test('transaction pagination rejects partial data after page failure',async()=>{
+    let calls=0;const c=make(['fpReadTransactions'],{sb:{from(){const q={select(){return q},eq(){return q},order(){return q},range:async()=>++calls===1?{data:Array(500).fill({id:'x'}),error:null}:{data:null,error:{message:'offline'}}};return q;}}});assert.equal((await c.fpReadTransactions('A',0)).error.message,'offline');
+  });
+  await test('settings response from earlier account visit cannot overwrite a later visit',async()=>{
+    let done;const c=make(['saveUserSettings'],{sb:{from(){const q={select(){return q},eq(){return q},single:()=>new Promise(r=>{done=r})};return q;}}});const save=c.saveUserSettings({startingBalance:999});
+    assert.equal(await c.saveUserSettings({startingBalance:5}),false);c._fpSettingsVersion++;c.currentUser={id:'A'};done({data:{id:'s'}});assert.equal(await save,false);assert.equal(c.userSettings.startingBalance,100);
+  });
+  await test('thrown sign-out failure keeps current account and permits retry',async()=>{
+    const c=make(['signOut'],{sb:{auth:{signOut:async()=>{throw Error('offline')}}}});await c.signOut();assert.equal(c.currentUser.id,'A');assert.equal(c._fpSignOutBusy,false);assert.equal(c._messages.length,1);
+  });
+  for(const name of ['saveEditBalance','saveStartingBalance','saveSetup']) await test(name+' rejects blank balance without writing',async()=>{
+    let written=false;const c=make([name],{fpApplyDatedBalance:async()=>{written=true}});await c[name]();assert.equal(written,false);assert.equal(c._messages.length,1);
   });
   console.log('TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
 })();

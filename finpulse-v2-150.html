@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FinPulse. Track every dollar. See every ripple.</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
   --bg:#f5f4f0;--surface:#fff;--surface2:#f8f7f4;--surface3:#eeece7;
   --border:#e4e2db;--border2:#d4d1c8;--accent:#1a6b4a;--accent-light:#edf5f0;
   --accent-mid:#2d9e6e;--danger:#c0392b;--danger-light:#fdf2f1;
-  --warning:#b7791f;--warning-light:#fef9f0;--text:#1a1916;--text2:#6b6960;--text3:#a8a49a;
+  --warning:#946015;--warning-light:#fef9f0;--text:#1a1916;--text2:#5f6058;--text3:#6d6e65;
   --radius:12px;--radius-sm:8px;
   --shadow:0 1px 3px rgba(0,0,0,0.06),0 1px 2px rgba(0,0,0,0.04);
   --shadow-md:0 4px 12px rgba(0,0,0,0.08),0 2px 4px rgba(0,0,0,0.04);
@@ -408,6 +408,9 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
   .day-event{font-size:8px;padding:1px;}
   .auth-card{padding:24px;}
 }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline:3px solid var(--accent);outline-offset:3px; }
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:0.01ms!important;transition-duration:0.01ms!important;scroll-behavior:auto!important; } }
+@media (max-width:600px) { .form-input { font-size:16px; } }
 </style>
 </head>
 <body>
@@ -435,7 +438,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
         <input class="auth-input" id="signin-password" type="password" placeholder="Password">
         <button class="auth-btn" id="signin-btn" onclick="signIn()">Sign In</button>
       </div>
-      <div class="auth-switch">No account? <a onclick="toggleAuth('signup')">Start free trial →</a></div>
+      <div class="auth-switch">No account? <a onclick="toggleAuth('signup')">Create an account →</a></div>
     </div>
     <div id="signup-form" style="display:none;">
       <div class="auth-title">Start free, 30 days</div>
@@ -488,8 +491,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
         <button class="signout-btn" onclick="signOut()">Sign out</button>
       </div>
       <div class="trial-widget">
-        <div class="trial-title">Free Trial. Day 1</div>
-        <div class="trial-sub">30 days free. Then $3/mo.</div>
+        <div class="trial-title">Review preview</div>
+        <div class="trial-sub">Billing is not enabled.</div>
         <div class="trial-bar"><div class="trial-fill"></div></div>
       </div>
     </div>
@@ -535,7 +538,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
         </div>
         <div class="topbar-actions" style="flex-direction:column;align-items:flex-end;gap:6px;">
           <button class="btn btn-outline" id="edit-income-btn" onclick="openEditIncome()">Edit Income</button>
-          <button class="btn btn-outline" onclick="openConnectAccounts()" style="font-size:12px;padding:8px 14px;">Connect Accounts</button>
+          <button class="btn btn-outline" onclick="openConnectAccounts()" style="font-size:12px;padding:8px 14px;">Import statements</button>
           <button class="btn btn-solid" id="setup-btn" onclick="openSetup()" style="display:none;">&#9881; Setup</button>
         </div>
       </div>
@@ -813,7 +816,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 
     <!-- INSIGHTS VIEW -->
     <div id="view-insights" style="display:none;">
-      <div class="topbar"><div><h2>Insights</h2><p>What your money is telling you.</p></div></div>
+      <div class="topbar"><div><h2>Insights</h2><p>Selected-month calendar projections.</p></div><div style="display:flex;align-items:center;gap:10px;"><button class="btn btn-outline" aria-label="Previous insights month" onclick="fpChangeInsightMonth(-1)">‹</button><span id="insights-month-label"></span><button class="btn btn-outline" aria-label="Next insights month" onclick="fpChangeInsightMonth(1)">›</button></div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
         <div class="card"><div class="card-header"><span class="card-title">Top Expenses</span></div><div class="card-body" id="insights-expenses"><div style="color:var(--text3);font-size:13px;">Add expenses to see insights.</div></div></div>
         <div class="card"><div class="card-header"><span class="card-title">Income Sources</span></div><div class="card-body" id="insights-income"><div style="color:var(--text3);font-size:13px;">Add income to see insights.</div></div></div>
@@ -831,7 +834,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
         <div class="card-body" style="padding:24px;">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px;">
             <div>
-              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--accent);margin-bottom:6px;">Your Financial Finish Line</div>
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--accent);margin-bottom:6px;">Your financial overview</div>
               <div style="font-family:'DM Serif Display',serif;font-size:36px;color:var(--text);line-height:1.1;" id="finish-date">Calculating...</div>
               <div style="font-size:13px;color:var(--text2);margin-top:6px;" id="finish-sub">Add your income and expenses to see your timeline.</div>
             </div>
@@ -855,7 +858,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
       <div class="card">
         <div class="card-header">
           <span class="card-title">Milestones</span>
-          <span class="card-meta">Every dollar moves these dates</span>
+          <span class="card-meta">Goals to review</span>
         </div>
         <div class="card-body" id="milestones-list">
           <div style="color:var(--text3);font-size:13px;text-align:center;padding:10px;">Add your income and expenses to see your milestones.</div>
@@ -871,7 +874,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
         
       </div>
       <div class="card" style="max-width:600px;">
-        <div class="card-header"><span class="card-title">Opportunity Cost Calculator</span><span class="card-meta">S&amp;P 500 &middot; 10% avg/yr</span></div>
+        <div class="card-header"><span class="card-title">Future value scenario</span><span class="card-meta">Hypothetical annual growth</span></div>
         <div class="card-body">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
             <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;">
@@ -895,9 +898,10 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
             <input type="range" min="1" max="50" step="1" value="5" id="d-yr-slider" oninput="dUpdate()">
             <span class="slider-val" id="d-yr-out">5 years</span>
           </div>
+          <div class="form-group"><label class="form-label" for="d-rate-input">Assumed annual growth (%)</label><input class="form-input" id="d-rate-input" type="number" min="-100" max="100" step="0.1" value="10" oninput="dUpdate()"><p style="font-size:12px;line-height:1.5;color:var(--text2);margin-top:6px;">A calculation scenario, not a forecast or guaranteed return. Annual compounding; no fees, taxes, inflation or added contributions.</p></div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:12px;" id="d-milestones"></div>
           <div style="display:flex;gap:10px;font-size:11px;color:var(--text3);margin-bottom:7px;">
-            <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:2px;background:var(--accent);display:inline-block;border-radius:2px;"></span>S&amp;P 500</span>
+            <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:2px;background:var(--accent);display:inline-block;border-radius:2px;"></span>Hypothetical growth</span>
             <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:0;border-top:2px dashed var(--danger);display:inline-block;"></span>Your purchase</span>
           </div>
           <div style="position:relative;width:100%;height:190px;margin-bottom:12px;"><canvas id="d-chart" role="img" aria-label="Investment growth chart"></canvas></div>
@@ -908,7 +912,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 
     <!-- CARD FINDER VIEW -->
     <div id="view-cards" style="display:none;">
-      <div class="topbar"><div><h2>Card Finder</h2><p>Matched to how you actually spend.</p></div></div>
+      <div class="topbar"><div><h2>Card research</h2><p>Issuer information. No personalized match or approval estimate.</p></div></div>
       <div class="card" style="max-width:540px;">
         <div class="card-header"><span class="card-title">What matters most to you?</span></div>
         <div class="card-body">
@@ -918,7 +922,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
             <div class="goal-tile" onclick="pickGoal(this,'dining')"><div class="goal-em" style="color:var(--accent);display:flex;justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v6a2 2 0 0 0 4 0V3M9 11v10M17 3c-2 0-3.5 2-3.5 5s1.5 5 3.5 5M17 3v18"/></svg></div><div class="goal-lbl">Dining Rewards</div></div>
             <div class="goal-tile" onclick="pickGoal(this,'debt')"><div class="goal-em" style="color:var(--accent);display:flex;justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l7 7 4-4 5 5"/><path d="M15 14h5v-5"/></svg></div><div class="goal-lbl">0% APR / Pay Off Debt</div></div>
           </div>
-          <div id="card-results" style="display:none;"><div class="rec-label">Recommended for you</div><div id="card-recs"></div></div>
+          <div id="card-results" style="display:none;"><div class="rec-label">Explore issuer information</div><div id="card-recs"></div></div>
         </div>
       </div>
     </div>
@@ -946,14 +950,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
         </div>
       </div>
       <div class="card" style="max-width:480px;margin-top:14px;">
-        <div class="card-header"><span class="card-title">Subscription</span></div>
-        <div class="card-body">
-          <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--border);margin-bottom:12px;">
-            <div><div style="font-size:14px;font-weight:600;">FinPulse Monthly</div><div style="font-size:12px;color:var(--text3);margin-top:2px;">Free trial active</div></div>
-            <div style="font-family:'DM Serif Display',serif;font-size:20px;color:var(--accent);">$3<span style="font-size:12px;font-family:'Inter',sans-serif;color:var(--text2);"> / mo</span></div>
-          </div>
-          <button class="save-btn">Upgrade, Lock in $3/month</button>
-        </div>
+        <div class="card-header"><span class="card-title">Account access</span></div><div class="card-body"><p style="font-size:13px;color:var(--text2);line-height:1.6;">Billing is not enabled in this preview. No subscription purchase is available here.</p></div>
       </div>
     </div>
 
@@ -1033,8 +1030,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 <!-- CONNECT ACCOUNTS MODAL -->
 <div id="connect-accounts-overlay" style="position:fixed;inset:0;background:rgba(26,25,22,0.55);backdrop-filter:blur(4px);z-index:400;display:none;align-items:center;justify-content:center;padding:20px;">
   <div style="background:var(--surface);border-radius:20px;padding:26px;width:440px;max-width:95vw;max-height:88vh;overflow-y:auto;box-shadow:var(--shadow-md);">
-    <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:600;margin-bottom:4px;">Connect Accounts</div>
-    <div style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:18px;">Direct bank connections are coming soon. For now, upload your statement CSVs (up to 20 files) and we'll read them in.</div>
+    <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:600;margin-bottom:4px;">Import statements</div>
+    <div style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:18px;">Upload CSV exports from your bank or card (up to 20 files). Review transactions before saving. This does not connect to your bank.</div>
     <div class="form-group">
       <label class="form-label">This batch is from a</label>
       <select class="form-select" id="import-account-type" onchange="cancelStatementImport()">
@@ -1308,7 +1305,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
     </div>
     <!-- Future value card -->
     <div class="ripple-fv-card">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);margin-bottom:10px;">If you invested it instead (S&P 500 · 10%/yr)</div>
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);margin-bottom:10px;">Hypothetical 10% annual growth, not a forecast</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div style="text-align:center;background:var(--surface);border-radius:10px;padding:12px;">
           <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:4px;">IN 5 YEARS</div>
@@ -1333,12 +1330,14 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 <script>
 const SUPABASE_URL = 'https://qllshfubwzdoiyavypan.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsbHNoZnVid3pkb2l5YXZ5cGFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0NDk2NjMsImV4cCI6MjA5NDAyNTY2M30.NoA_c4ULuptDzLF46f49KV0Pg5V-BuqyEslmi047_mc';
-const { createClient } = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = typeof supabase !== 'undefined' ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 let currentUser = null;
 let _activeUserId = null;
 let _dataLoadVersion = 0;
+let _fpSettingsVersion = 0;
+let _fpSettingsBusy = false;
+let _fpSignOutBusy = false;
 let currentYear = new Date().getFullYear();
 let currentMonth = new Date().getMonth();
 let transactions = [];
@@ -1669,6 +1668,8 @@ function fpResetAccountState() {
   _fpBillMarkBusy = false;
   _importReadVersion++;
   _dataLoadVersion++;
+  _fpSettingsVersion++;
+  _fpSettingsBusy = false;
   _fpMutationVersion++;
   _fpMutationBusy = false;
   _lastDeletedOperation = null;
@@ -1800,15 +1801,17 @@ async function signUp() {
 }
 
 async function signOut() {
-  const { error } = await sb.auth.signOut();
-  if (error) { showToast('Sign out failed, please try again', 'error'); return; }
-  currentUser = null;
-  _activeUserId = null;
-  fpResetAccountState();
-  showAuth();
+  if (_fpSignOutBusy || !sb) return;
+  _fpSignOutBusy = true;
+  try {
+    const { error } = await sb.auth.signOut();
+    if (error) throw error;
+    currentUser = null; _activeUserId = null; fpResetAccountState(); showAuth();
+  } catch(e) { showToast('Could not sign out. Please retry.', 'error'); }
+  finally { _fpSignOutBusy = false; }
 }
 
-sb.auth.onAuthStateChange((event, session) => {
+if (sb) sb.auth.onAuthStateChange((event, session) => {
   if (session && session.user) {
     currentUser = session.user;
     if (_activeUserId !== session.user.id) setTimeout(function() {
@@ -1822,6 +1825,28 @@ sb.auth.onAuthStateChange((event, session) => {
   }
 });
 
+if (!sb) {
+  showAuth();
+  document.getElementById('signin-error').textContent='The account connection could not load. Check your connection and reload this page.';
+  document.getElementById('signin-error').style.display='block';
+  document.getElementById('signin-btn').disabled=true;
+  document.getElementById('signup-btn').disabled=true;
+}
+
+// Fetch every page rather than silently truncating larger accounts at the API limit.
+async function fpReadTransactions(userId, loadVersion) {
+  const rows=[];
+  for (let offset=0;;offset+=500) {
+    const result=await sb.from('transactions').select('*').eq('user_id',userId).order('id',{ascending:true}).range(offset,offset+499);
+    if (!currentUser || currentUser.id!==userId || _dataLoadVersion!==loadVersion) return {data:[],error:null};
+    if (result.error) return result;
+    const page=result.data||[]; rows.push(...page);
+    if (page.length<500) break;
+  }
+  rows.sort((a,b)=>String(a.date).localeCompare(String(b.date)) || String(a.id).localeCompare(String(b.id)));
+  return {data:rows,error:null};
+}
+
 // ── DATA LAYER ─────────────────────────────────────────────────
 async function loadUserData() {
   if (!currentUser) return;
@@ -1832,7 +1857,7 @@ async function loadUserData() {
   try {
     const readAccount = function() { return Promise.all([
       sb.from('user_settings').select('*').eq('user_id', userId).single(),
-      sb.from('transactions').select('*').eq('user_id', userId).order('date', { ascending: true })
+      fpReadTransactions(userId, loadVersion)
     ]); };
     let [settingsResult, transactionResult] = await readAccount();
     if (!stillCurrent()) return;
@@ -1881,19 +1906,19 @@ async function loadUserData() {
       // original_balance: use DB value if present, otherwise estimate from payment history
       // Look for payment transactions for this loan to estimate original balance
       let origBal = t.original_balance;
-      if (!origBal) {
+      if (origBal == null || origBal === '') {
         // Sum up all recorded payments for this loan to estimate original
         const loanPayments = (txns || []).filter(function(p) {
           return (p.type === 'expense') &&
             (p.description === t.description + ' payment' || p.description === t.description + ' extra payment') &&
             p.category === 'loan_payment';
         });
-        const totalPaid = loanPayments.reduce(function(s, p) { return s + parseFloat(p.amount); }, 0);
-        const currentBal = parseFloat(t.balance || t.amount) || 0;
+        const totalPaid = loanPayments.reduce(function(s, p) { return s + (parseFloat(p.principal_applied) || 0); }, 0);
+        const currentBal = fpLoanBalanceAmount(t);
         // Rough estimate: original = current + total paid (ignoring interest for simplicity)
         origBal = totalPaid > 0 ? currentBal + totalPaid : currentBal;
       }
-      return { ...t, original_balance: origBal };
+      return { ...t, original_balance: origBal, _originalBalanceEstimated: t.original_balance == null || t.original_balance === '' };
     }
     return t;
   });
@@ -2038,8 +2063,11 @@ async function deleteTxn(id) {
 }
 
 async function saveUserSettings(s, balances) {
-  if (!currentUser) return false;
+  if (!currentUser || _fpSettingsBusy) return false;
+  _fpSettingsBusy = true;
+  const version=_fpSettingsVersion;
   const userId = currentUser.id;
+  const stillCurrent=()=>currentUser && currentUser.id===userId && version===_fpSettingsVersion;
   const nextBalances = Object.assign({}, balances || monthBalances);
   const record = {
     user_id: userId, starting_balance: s.startingBalance, payday: s.payday,
@@ -2049,22 +2077,22 @@ async function saveUserSettings(s, balances) {
   try {
     const existing = await sb.from('user_settings').select('id').eq('user_id', userId).single();
     if (existing.error && existing.error.code !== 'PGRST116') throw existing.error;
-    if (!currentUser || currentUser.id !== userId) return false;
+    if (!stillCurrent()) return false;
     const result = existing.data
       ? await sb.from('user_settings').update(record).eq('user_id', userId).select('id').single()
       : await sb.from('user_settings').insert([record]).select('id').single();
     if (result.error) throw result.error;
     if (!result.data) throw new Error('No saved settings row returned');
-    if (!currentUser || currentUser.id !== userId) return false;
+    if (!stillCurrent()) return false;
     userSettings = Object.assign({}, s);
     monthBalances = nextBalances;
     try { localStorage.setItem('fp_month_balances_' + userId, JSON.stringify(monthBalances)); } catch(e) {}
     renderCalendar(); updateStats();
     return true;
   } catch(e) {
-    if (currentUser && currentUser.id === userId) showToast('Settings were not saved. Please try again.', 'error');
+    if (stillCurrent()) showToast('Settings were not saved. Please try again.', 'error');
     return false;
-  }
+  } finally { if (version===_fpSettingsVersion) _fpSettingsBusy=false; }
 }
 
 // ── MONTH ROLLOVER ──────────────────────────────────────────────
@@ -2533,7 +2561,7 @@ function fpDayEvents(year, month, opts) {
   for (let d = 1; d <= daysInMonth; d++) dayMap[d] = { income: [], expenses: [], bills: [], loans: [], balance: 0 };
 
   const payAmt = parseFloat(userSettings.payAmount) || 0;
-  const recordedIncome = transactions.filter(function(t) { return t.type === 'income' && !t.recurring && (parseFloat(t.amount) || 0) >= payAmt * 0.5 && fpParseIso(String(t.date).slice(0, 10)); });
+  const recordedIncome = transactions.filter(function(t) { return t.type === 'income' && !t.recurring && fpIsPaycheckRecord(t) && (parseFloat(t.amount) || 0) >= payAmt * 0.5 && fpParseIso(String(t.date).slice(0, 10)); });
   getPayDatesForMonth(year, month).forEach(pd => {
     const day = pd.getDate();
     const covered = recordedIncome.some(function(r) { return Math.abs(fpDaysBetween(fpParseIso(String(r.date).slice(0, 10)), pd)) <= 3; });
@@ -2646,7 +2674,9 @@ function renderCalendar() {
   updateRippleAlert(dayMap);
 }
 
-function fmt(n) { return Math.abs(parseFloat(n)).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+function fmt(n) { return Math.abs(parseFloat(n)).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+function fpLoanBalanceAmount(loan) { return Math.max(0,parseFloat(loan.balance == null || loan.balance === '' ? loan.amount : loan.balance) || 0); }
+function fpIsPaycheckRecord(txn) { return txn.category === 'paycheck' || /\b(?:paycheck|payroll|salary|wages|pay deposit)\b/i.test(txn.description || ''); }
 
 // ── ICON SYSTEM ──────────────────────────────────────────────────
 // Clean monochrome line icons (currentColor) replacing category emoji for a more professional look.
@@ -3144,6 +3174,7 @@ function fpDatedMonthStart(year, month) {
 // Save an entered balance with its date and the paycheck answer (the one write path for setup, the edit dialog and Settings).
 // payAnswer: 'yes' | 'no' | '' (not sure). Returns { asOf, monthStart } or null when the date is rejected (nothing is saved).
 async function fpApplyDatedBalance(amount, dateStr, baseSettings, payAnswer) {
+  if (!Number.isFinite(amount)) { showToast('Enter a valid bank balance.','error'); return null; }
   const todayIso = fpIso(new Date());
   const asOf = fpNormalizeAsOf(dateStr, todayIso);
   if (!asOf) return null;
@@ -3204,7 +3235,7 @@ function fpDatedTimeline(A, anchor, days, paidMarks) {
         const amt = parseFloat(i.amount) || 0, isPay = String(i.id || '').indexOf('pay_') === 0, oneTime = !isPay && !i.recurring;
         const entry = { date: iso, amount: amt, description: i.description || 'Income', primary: isPay };
         const add = function(projected) { bal += amt; counted.push({ description: entry.description, amount: amt, id: i.id, primary: isPay, projected: projected }); };
-        const isAsked = pc && (isPay ? iso === pc.date : (oneTime && Math.abs(fpDaysBetween(fpParseIso(iso), fpParseIso(pc.date))) <= 3 && amt >= pc.amount * 0.5));
+        const isAsked = pc && (isPay ? iso === pc.date : (oneTime && fpIsPaycheckRecord(i) && Math.abs(fpDaysBetween(fpParseIso(iso), fpParseIso(pc.date))) <= 3 && amt >= pc.amount * 0.5));
         if (isAsked) {
           if (pc.included === true) return;                          // already in the entered balance
           if (pc.included === null) { uncertain.push(entry); return; }
@@ -4480,7 +4511,7 @@ function openLoanDeleteConfirm(loanId) {
   if (!loan) return;
   _loanDeleteId = loan.id;
   _loanDeleteReason = null;
-  document.getElementById('ld-desc').innerHTML = 'You\'re removing <strong>' + fpEscHtml(loan.description) + '</strong> ($' + fmt(loan.balance || loan.amount) + ' balance) from your plan and calendar.';
+  document.getElementById('ld-desc').innerHTML = 'You\'re removing <strong>' + fpEscHtml(loan.description) + '</strong> ($' + fmt(fpLoanBalanceAmount(loan)) + ' balance) from your plan and calendar.';
   const reasons = ['Paid it off', 'Consolidated / refinanced it', 'Entered it by mistake', 'Other'];
   const wrap = document.getElementById('ld-reasons');
   wrap.innerHTML = reasons.map(function(r, i) {
@@ -5212,12 +5243,13 @@ function renderLoans() {
     const desc = (l.description || l.lender || '').toLowerCase();
     return desc.includes('student') || desc.includes('school') || desc.includes('sallie') || desc.includes('navient') || desc.includes('fedloan') || (l.category||'').toLowerCase().includes('student');
   }
-  const consumerLoans = loans.filter(function(l) { return !isStudLoan(l); }).sort(function(a,b) { return parseFloat(a.balance||a.amount) - parseFloat(b.balance||b.amount); });
+  const consumerLoans = loans.filter(function(l) { return !isStudLoan(l); }).sort(function(a,b) { return fpLoanBalanceAmount(a) - fpLoanBalanceAmount(b); });
   const studentLoans = loans.filter(function(l) { return isStudLoan(l); });
   const sorted = consumerLoans.concat(studentLoans);
 
   container.innerHTML = sorted.map(function(l, idx) {
-    const bal = parseFloat(l.balance || l.amount) || 0;
+    const bal = fpLoanBalanceAmount(l) || 0;
+    if (bal === 0) return '<div class="loan-card"><div class="loan-title">' + fpEscHtml(l.description) + '</div><div style="font-size:24px;color:var(--accent);margin:12px 0;">$0 balance · Paid off</div><button class="btn btn-outline" onclick="openLoanEdit(\''+l.id+'\')">Edit loan</button><button class="btn btn-outline" onclick="openLoanDeleteConfirm(\''+l.id+'\')">Remove loan</button></div>';
     const apr = parseFloat(l.apr) || 0;
     const minPay = parseFloat(l.min_payment || l.amount) || 0;
     const monthlyRate = apr / 100 / 12;
@@ -5284,7 +5316,7 @@ function renderLoans() {
       + '<div style="height:8px;background:var(--surface3);border-radius:99px;overflow:hidden;">'
       + '<div style="height:100%;width:' + debtRemainingPct + '%;background:var(--danger);border-radius:99px;opacity:0.7;"></div>'
       + '</div>'
-      + '<div style="font-size:11px;color:var(--text3);margin-top:4px;">' + (paidPct > 0 ? paidPct + '% paid off, $' + fmt(origBal - bal) + ' cleared so far' : 'Start making payments to see progress here') + '</div></div>'
+      + '<div style="font-size:11px;color:var(--text3);margin-top:4px;">' + (l._originalBalanceEstimated ? 'Original balance not recorded; payoff progress is unavailable.' : paidPct > 0 ? paidPct + '% paid off, $' + fmt(origBal - bal) + ' cleared so far' : 'Start making payments to see progress here') + '</div></div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">'
       + '<div style="background:var(--danger-light);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--danger);margin-bottom:4px;">Time to pay off</div><div style="font-family:\'DM Serif Display\',serif;font-size:16px;color:var(--danger);">' + payoffTime(minResult.months) + '</div></div>'
       + '<div style="background:var(--danger-light);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--danger);margin-bottom:4px;">You\'ll actually pay in total</div>'
@@ -5402,295 +5434,38 @@ async function toggleBillPaid(billId) {
 
 // ── THE PLAN ────────────────────────────────────────────────────
 function renderPlan() {
-  const dayMap = buildDayMap(currentYear, currentMonth);
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  const endBal = dayMap[daysInMonth] ? dayMap[daysInMonth].balance : 0;
-  const startBal = userSettings.startingBalance || 0;
-  const monthlyIncome = userSettings.payAmount * (userSettings.payFrequency === 'weekly' ? 4.33 : userSettings.payFrequency === 'biweekly' ? 2.165 : userSettings.payFrequency === 'twicemonthly' ? 2 : 1);
-  const loans = transactions.filter(function(t) { return t.type === 'loan'; });
-  const bills = transactions.filter(function(t) { return t.type === 'bill' || t.type === 'expense'; });
-  const monthlyExpenses = bills.reduce(function(s,t) { return s + (t.recurring ? parseFloat(t.amount) : 0); }, 0)
-    + loans.reduce(function(s,t) { return s + parseFloat(t.min_payment || t.amount); }, 0);
-  const monthlyCashFlow = endBal - startBal;
-  const stageInfo = fpStageInfo();
-  const stage = stageInfo.stage;
-  // v149 (audit H7): progress, "available" and savings amounts below come from the calendar's month-end estimate. With the allocation
-  // switch off they are not shown; goals stay, without progress or dates.
-  const allocOK = fpAllocationEnabled();
-
-  const stageBadge = document.getElementById('finish-stage-badge');
-  const stageData = {
-    1: {label:'Stage 1 · Stop the bleeding', color:'#fff', bg:'var(--danger)'},
-    2: {label:'Stage 2 · Build your floor',   color:'#fff', bg:'var(--warning)'},
-    3: {label:'Stage 3 · Grow',               color:'#fff', bg:'var(--accent)'},
-  };
-  if (stageBadge) {
-    stageBadge.textContent = stage == null ? 'Stage not set' : stageData[stage].label;
-    stageBadge.style.background = stage == null ? 'var(--surface3)' : stageData[stage].bg;
-    stageBadge.style.color = stage == null ? 'var(--text2)' : stageData[stage].color;
-  }
-
-  const totalDebt = loans.reduce(function(s,t) { return s + parseFloat(t.balance || t.amount); }, 0);
-  const emergencyTarget = monthlyExpenses * 6 || monthlyIncome * 3;
-  // Stage 2 buffer = 1 full month of their actual tracked expenses (minimum $500)
-  const bufferTarget = Math.max(500, Math.round(monthlyExpenses));
-  const savingsTarget = monthlyIncome * 0.2;
-  const currentBuffer = Math.max(0, endBal);
-
-  function monthsFromNow(months) {
-    const d = new Date();
-    d.setMonth(d.getMonth() + Math.round(months));
-    return d.toLocaleDateString('en-US', {month:'long', year:'numeric'});
-  }
-
-  function isStudentLoan(loan) {
-    const desc = (loan.description || loan.lender || '').toLowerCase();
-    const cat = (loan.category || '').toLowerCase();
-    return desc.includes('student') || desc.includes('school') || desc.includes('sallie') || desc.includes('navient') || desc.includes('fedloan') || cat.includes('student');
-  }
-
-  function debtPayoffMonths() {
-    const consumerLoans = loans.filter(function(l) { return !isStudentLoan(l); });
-    if (consumerLoans.length === 0) return 0;
-    let totalMonths = 0;
-    let snowballExtra = 0;
-    const sorted = consumerLoans.slice().sort(function(a,b) { return parseFloat(a.balance||a.amount) - parseFloat(b.balance||b.amount); });
-    sorted.forEach(function(loan) {
-      const bal = parseFloat(loan.balance || loan.amount);
-      const apr = parseFloat(loan.apr) || 0;
-      const minPay = parseFloat(loan.min_payment || loan.amount);
-      const rate = apr / 100 / 12;
-      const pay = minPay + snowballExtra;
-      if (pay <= 0 || (rate > 0 && pay <= bal * rate)) { totalMonths += 360; return; }
-      let b = bal, m = 0;
-      while (b > 0 && m < 360) { b = b * (1 + rate) - pay; m++; }
-      snowballExtra += minPay;
-      totalMonths = Math.max(totalMonths, m);
-    });
-    return totalMonths;
-  }
-
-  const debtMonths = debtPayoffMonths();
-  const cashFlowPositiveMonths = monthlyCashFlow > 0 ? 0 : monthlyCashFlow < 0 ? Math.ceil(Math.abs(endBal) / Math.max(1, Math.abs(monthlyCashFlow))) : 1;
-  const bufferMonths = currentBuffer >= bufferTarget ? 0 : monthlyCashFlow > 0 ? Math.ceil((bufferTarget - currentBuffer) / monthlyCashFlow) : 99;
-  const emergencyMonths = Math.max(debtMonths, bufferMonths) + (emergencyTarget > 0 && monthlyCashFlow > 0 ? Math.ceil(emergencyTarget / (monthlyCashFlow * 0.5)) : 24);
-  const finishMonths = Math.max(cashFlowPositiveMonths, debtMonths, emergencyMonths);
-
-  const finishDateEl = document.getElementById('finish-date');
-  const finishSubEl = document.getElementById('finish-sub');
-  const finishPctEl = document.getElementById('finish-pct');
-  const finishBarEl = document.getElementById('finish-bar');
-
-  if (monthlyIncome === 0) {
-    if (finishDateEl) finishDateEl.textContent = 'Set up income first';
-    if (finishSubEl) finishSubEl.textContent = 'Tap Edit Income to get started.';
-    const listEl = document.getElementById('milestones-list');
-    if (listEl) listEl.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:10px;">Add your income to see your milestones.</div>';
-    return;
-  }
-
-  if (stage == null) {
-    if (finishDateEl) finishDateEl.textContent = 'Not estimated yet';
-    if (finishSubEl) finishSubEl.textContent = fpStageNullText(stageInfo.reason);
-    if (finishPctEl) finishPctEl.textContent = '';
-    if (finishBarEl) finishBarEl.style.width = '0%';
-    const listEl0 = document.getElementById('milestones-list');
-    if (listEl0) listEl0.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:10px;">' + fpEscHtml(fpStageNullText(stageInfo.reason)) + '</div>';
-    return;
-  }
-
-  // Stage 1: cash flow negative, no finish line projection, be honest
-  if (stage === 1) {
-    if (finishDateEl) finishDateEl.textContent = 'Step 1 first';
-    if (finishSubEl) finishSubEl.textContent = 'Your cash flow is negative, projecting a finish line right now would be fiction. Fix the bleeding first, then we\'ll show you the full timeline.';
-    if (finishPctEl) finishPctEl.textContent = '—';
-    if (finishBarEl) finishBarEl.style.width = '3%';
-    if (stageBadge) { stageBadge.textContent = stageData[1].label; stageBadge.style.background = stageData[1].bg; stageBadge.style.color = stageData[1].color; }
-    // Show only Stage 1 milestone
-    const listEl = document.getElementById('milestones-list');
-    if (listEl) listEl.innerHTML = '<div style="display:flex;gap:14px;">'
-      + '<div><div style="width:28px;height:28px;border-radius:50%;background:var(--danger);border:2px solid var(--danger);display:flex;align-items:center;justify-content:center;"><span style="width:8px;height:8px;border-radius:50%;background:#fff;display:block;"></span></div></div>'
-      + '<div style="flex:1;"><div style="font-size:13px;font-weight:700;color:var(--danger);margin-bottom:4px;">Get to cash flow positive</div>'
-      + '<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:4px;">More coming in than going out every month. That\'s the only goal right now.</div>'
-      + '<div style="font-size:11.5px;color:var(--text3);font-style:italic;">You\'re $' + fmt(Math.abs(monthlyCashFlow)) + '/month short. Look at your recurring expenses first, what can be cut or paused?</div>'
-      + '</div></div>'
-      + '<div style="margin-top:24px;background:var(--surface2);border-radius:var(--radius-sm);padding:14px 16px;">'
-      + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:8px;">Locked until Stage 1 is done</div>'
-      + '<div style="font-size:12px;color:var(--text3);">Buffer · Debt payoff · Emergency fund · 20% savings rate</div>'
-      + '</div>';
-    return;
-  }
-
-  // Stage 2: positive cash flow but no buffer, show buffer milestone only, lock the rest
-  if (stage === 2) {
-    const bufPct = allocOK ? Math.min(99, Math.round((currentBuffer / bufferTarget) * 100)) : 0;
-    const bufLine = allocOK ? '$' + fmt(currentBuffer) + ' of $' + fmt(bufferTarget) + ' saved (' + bufPct + '%)' : 'Progress toward it is not tracked yet.';
-    if (finishDateEl) finishDateEl.textContent = allocOK ? monthsFromNow(bufferMonths > 0 ? bufferMonths : 1) : 'Not estimated yet';
-    if (finishSubEl) finishSubEl.textContent = allocOK ? 'Next milestone: $' + fmt(bufferTarget) + ' buffer. ' + (bufferMonths > 0 ? 'At your current rate: ' + bufferMonths + ' month' + (bufferMonths === 1 ? '' : 's') + ' away.' : 'You\'re there!') : 'Next milestone: a $' + fmt(bufferTarget) + ' buffer. FinPulse does not estimate progress or timing toward it yet.';
-    if (finishPctEl) finishPctEl.textContent = allocOK ? bufPct + '%' : '';
-    if (finishBarEl) finishBarEl.style.width = bufPct + '%';
-    if (stageBadge) { stageBadge.textContent = stageData[2].label; stageBadge.style.background = stageData[2].bg; stageBadge.style.color = stageData[2].color; }
-    const listEl = document.getElementById('milestones-list');
-    if (listEl) listEl.innerHTML = '<div style="display:flex;gap:14px;margin-bottom:4px;">'
-      + '<div style="display:flex;flex-direction:column;align-items:center;">'
-      + '<div style="width:28px;height:28px;border-radius:50%;background:var(--accent);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;"><span style="color:#fff;font-size:12px;">&#10003;</span></div>'
-      + '<div style="width:2px;flex:1;background:var(--border);margin:3px 0;min-height:20px;"></div>'
-      + '</div>'
-      + '<div style="flex:1;padding-bottom:20px;"><div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:4px;">Cash flow positive <span style="font-size:11px;font-weight:600;color:var(--accent);margin-left:8px;">Achieved</span></div>'
-      + '<div style="font-size:12px;color:var(--text2);">More coming in than going out. Stage 1 complete.</div>'
-      + '</div></div>'
-      + '<div style="display:flex;gap:14px;margin-bottom:4px;">'
-      + '<div style="display:flex;flex-direction:column;align-items:center;">'
-      + '<div style="width:28px;height:28px;border-radius:50%;background:var(--warning);border:2px solid var(--warning);display:flex;align-items:center;justify-content:center;"><span style="width:8px;height:8px;border-radius:50%;background:#fff;display:block;"></span></div>'
-      + '<div style="width:2px;flex:1;background:var(--border);margin:3px 0;min-height:20px;"></div>'
-      + '</div>'
-      + '<div style="flex:1;padding-bottom:20px;">'
-      + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><div style="font-size:13px;font-weight:700;color:var(--warning);">$' + fmt(bufferTarget) + ' buffer</div><div style="font-size:11px;font-weight:600;color:var(--text3);">' + (bufferMonths > 0 ? monthsFromNow(bufferMonths) : 'Almost there') + '</div></div>'
-      + '<div style="font-size:12px;color:var(--text2);margin-bottom:6px;">1 month of your expenses as your safety net. Once this is built, nothing small can knock you off track.</div>'
-      + '<div style="height:6px;background:var(--border);border-radius:99px;overflow:hidden;"><div style="height:100%;width:' + bufPct + '%;background:var(--warning);border-radius:99px;"></div></div>'
-      + '<div style="font-size:11px;color:var(--text3);margin-top:4px;">' + bufLine + '</div>'
-      + '</div></div>'
-      + '<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:14px 16px;">'
-      + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:8px;">Unlocks after buffer is built</div>'
-      + '<div style="font-size:12px;color:var(--text3);">Debt snowball · 6-month emergency fund · 20% savings rate · Financial Finish Line</div>'
-      + '</div>';
-    return;
-  }
-
-  // Stage 3: buffer built, full plan unlocked
-  const pct = finishMonths <= 0 ? 100 : Math.min(99, Math.max(2, Math.round((1 - finishMonths / Math.max(finishMonths + 6, 36)) * 100)));
-  if (stageBadge) { stageBadge.textContent = stageData[3].label; stageBadge.style.background = stageData[3].bg; stageBadge.style.color = stageData[3].color; }
-  if (!allocOK) {
-    if (finishDateEl) finishDateEl.textContent = 'Not estimated yet';
-    if (finishSubEl) finishSubEl.textContent = 'FinPulse does not estimate a finish date until it can confirm your balance, spending and savings.';
-    if (finishPctEl) finishPctEl.textContent = '';
-    if (finishBarEl) finishBarEl.style.width = '0%';
-  } else
-  if (finishDateEl) finishDateEl.textContent = finishMonths <= 0 ? 'You\'re there.' : monthsFromNow(finishMonths);
-  if (allocOK && finishSubEl) finishSubEl.textContent = finishMonths <= 0 ? 'You\'ve hit financial freedom. Time to grow.' : 'Estimated ' + finishMonths + ' month' + (finishMonths === 1 ? '' : 's') + ' from today, every extra dollar moves this closer.';
-  if (allocOK && finishPctEl) finishPctEl.textContent = pct + '%';
-  if (allocOK && finishBarEl) finishBarEl.style.width = pct + '%';
-
-  const milestones = [
-    {
-      title: 'Cash flow positive',
-      desc: 'More coming in than going out every month.',
-      detail: monthlyCashFlow > 0 ? 'You\'re already here.' : 'You\'re $' + fmt(Math.abs(monthlyCashFlow)) + '/month short. Cut recurring expenses or increase income.',
-      done: monthlyCashFlow > 0,
-      date: monthlyCashFlow > 0 ? 'Achieved' : monthsFromNow(cashFlowPositiveMonths),
-      color: 'var(--danger)',
-    },
-    {
-      title: '$' + fmt(bufferTarget) + ' expense buffer',
-      desc: '1 month of your tracked expenses as your floor. One unexpected cost won\'t derail everything.',
-      detail: currentBuffer >= bufferTarget ? 'Done. You have $' + fmt(currentBuffer) + ' available.' : '$' + fmt(bufferTarget - currentBuffer) + ' to go. At your current rate: ' + monthsFromNow(bufferMonths) + '.',
-      done: currentBuffer >= bufferTarget,
-      date: currentBuffer >= bufferTarget ? 'Achieved' : monthsFromNow(bufferMonths),
-      color: 'var(--warning)',
-    },
-    {
-      title: 'Consumer debt-free',
-      desc: 'All credit cards, car loans, and personal debt cleared. Student loans excluded.',
-      detail: (function() {
-        const consumerLoans = loans.filter(function(l) { return !isStudentLoan(l); });
-        if (loans.length === 0) return 'No debt tracked. Add your loans to see this milestone.';
-        if (consumerLoans.length === 0) return 'You only have student loans, keep paying minimums and focus on your buffer.';
-        const consumerDebt = consumerLoans.reduce(function(s,l) { return s + parseFloat(l.balance||l.amount); }, 0);
-        return 'Consumer debt: $' + fmt(consumerDebt) + '. Snowball payoff: ' + monthsFromNow(debtMonths) + '.';
-      })(),
-      done: loans.filter(function(l) { return !isStudentLoan(l); }).length === 0 && loans.length > 0,
-      date: (function() {
-        const cl = loans.filter(function(l) { return !isStudentLoan(l); });
-        if (loans.length === 0) return 'No debt tracked';
-        if (cl.length === 0) return 'Already clear';
-        return monthsFromNow(debtMonths);
-      })(),
-      color: 'var(--accent)',
-    },
-    {
-      title: '6 months emergency fund',
-      desc: '$' + fmt(Math.round(emergencyTarget)) + ' saved, 6 months of your expenses.',
-      detail: 'Once debt is cleared, redirect those payments into savings.',
-      done: false,
-      date: monthsFromNow(emergencyMonths),
-      color: 'var(--accent)',
-    },
-    {
-      title: '20% savings rate',
-      desc: 'Saving $' + fmt(Math.round(savingsTarget)) + '/month, the wealth-building threshold.',
-      detail: 'At this point you\'re not just stable, you\'re building. Every month you save 20% of income, you\'re ahead of 85% of Americans.',
-      done: false,
-      date: monthsFromNow(finishMonths - 2),
-      color: 'var(--accent)',
-    },
-    {
-      title: 'Financial Finish Line',
-      desc: 'Debt-free · 6-month emergency fund · 20% savings rate · 3 months positive cash flow.',
-      detail: 'This is the milestone most people never reach, not because it\'s impossible, but because they never had a plan. You do.',
-      done: false,
-      date: monthsFromNow(finishMonths),
-      color: 'var(--accent)',
-      final: true,
-    },
+  const dm=buildDayMap(currentYear,currentMonth), stageInfo=fpStageInfo(), stage=stageInfo.stage;
+  let income=0,outflows=0;
+  Object.keys(dm).forEach(function(day){const e=dm[day];e.income.forEach(function(t){income+=Number(t.amount)||0});e.expenses.concat(e.bills,e.loans).forEach(function(t){outflows+=fpAmountDue(t)});});
+  const debt=transactions.filter(function(t){return t.type==='loan'}).reduce(function(sum,t){return sum+fpLoanBalanceAmount(t)},0);
+  const month=new Date(currentYear,currentMonth,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  const badge=document.getElementById('finish-stage-badge');
+  if(badge){badge.textContent=stage==null?'Stage not set':'Stage '+stage;badge.style.background='var(--surface2)';badge.style.color='var(--text2)';}
+  document.getElementById('finish-date').textContent='Not estimated yet';
+  document.getElementById('finish-sub').textContent=stage==null?fpStageNullText(stageInfo.reason):'Savings balances and future payoff dates are not verified. These goals do not allocate money from your bank account.';
+  document.getElementById('finish-pct').textContent='';document.getElementById('finish-bar').style.width='0%';
+  const goals=[
+    ['Review your monthly cash flow',month+': $'+fmt(income)+' scheduled income and $'+fmt(outflows)+' calendar outflows. Net '+(income-outflows<0?'−':'+')+'$'+fmt(income-outflows)+'. These are projections, not confirmed savings.'],
+    ['Choose an expense buffer','Set a target from your essential expenses. FinPulse does not track a separate savings balance or mark this goal achieved from a calendar balance.'],
+    ['Review tracked debt','Remaining balances in your loan records: $'+fmt(debt)+'. Paid-off loans contribute $0. Rates and payment estimates should match your lender statement.'],
+    ['Build emergency savings','Choose a target appropriate to your expenses and circumstances. Progress and a completion date are not tracked yet.'],
+    ['Set a savings goal','Choose a monthly amount after reviewing your actual balance and obligations. No extra-payment or available-cash amount is recommended here.']
   ];
-
-  if (!allocOK) {
-    milestones.forEach(function(m) {
-      if (/expense buffer$/.test(m.title)) { m.detail = 'Goal: 1 month of your tracked expenses. Progress toward it is not tracked yet.'; m.done = false; m.date = 'Not estimated'; }
-      else if (m.title === '6 months emergency fund') { m.desc = 'Goal: 6 months of your expenses, about $' + fmt(Math.round(emergencyTarget)) + '.'; m.date = 'Not estimated'; }
-      else if (m.title === '20% savings rate') { m.desc = 'Goal: save 20% of your income each month.'; m.date = 'Not estimated'; }
-      else if (m.final) { m.date = 'Not estimated'; }
-    });
-  }
-  const listEl = document.getElementById('milestones-list');
-  if (!listEl) return;
-
-  listEl.innerHTML = milestones.map(function(m, i) {
-    const isLast = i === milestones.length - 1;
-    return '<div style="display:flex;gap:14px;' + (isLast ? '' : 'margin-bottom:4px;') + '">'
-      + '<div style="display:flex;flex-direction:column;align-items:center;">'
-      + '<div style="width:28px;height:28px;border-radius:50%;background:' + (m.done ? m.color : 'var(--surface2)') + ';border:2px solid ' + (m.done ? m.color : 'var(--border)') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
-      + (m.done ? '<span style="color:#fff;font-size:12px;">&#10003;</span>' : '<span style="width:8px;height:8px;border-radius:50%;background:' + (m.final ? m.color : 'var(--border)') + ';display:block;"></span>')
-      + '</div>'
-      + (isLast ? '' : '<div style="width:2px;flex:1;background:var(--border);margin:3px 0;min-height:20px;"></div>')
-      + '</div>'
-      + '<div style="flex:1;padding-bottom:' + (isLast ? '0' : '20') + 'px;">'
-      + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:4px;">'
-      + '<div style="font-size:13px;font-weight:' + (m.final ? '700' : '600') + ';color:' + (m.done ? m.color : m.final ? m.color : 'var(--text)') + ';">' + m.title + '</div>'
-      + '<div style="font-size:11px;font-weight:600;color:' + (m.done ? 'var(--accent)' : 'var(--text3)') + ';white-space:nowrap;flex-shrink:0;">' + m.date + '</div>'
-      + '</div>'
-      + '<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:4px;">' + m.desc + '</div>'
-      + '<div style="font-size:11.5px;color:var(--text3);line-height:1.5;font-style:italic;">' + m.detail + '</div>'
-      + '</div></div>';
-  }).join('');
+  document.getElementById('milestones-list').innerHTML=goals.map(function(g){return '<div style="padding:14px 0;border-bottom:1px solid var(--border);"><div style="font-size:14px;font-weight:600;margin-bottom:6px;">'+fpEscHtml(g[0])+'</div><div style="font-size:12.5px;color:var(--text2);line-height:1.6;">'+fpEscHtml(g[1])+'</div></div>';}).join('');
 }
 
 function renderInsights() {
-  const expenses = transactions.filter(t => t.type === 'expense' || t.type === 'bill');
-  const income = transactions.filter(t => t.type === 'income');
-  const expEl = document.getElementById('insights-expenses');
-  const incEl = document.getElementById('insights-income');
-  const tip = document.getElementById('insights-tip');
-  expEl.textContent = 'Add expenses to see insights.';
-  incEl.textContent = 'Add income to see insights.';
-  if (tip) tip.textContent = 'Once you add your income and expenses, FinPulse will give you personalized insights about your money.';
-  if (expenses.length) {
-    const sorted = expenses.slice().sort((a,b) => parseFloat(b.amount) - parseFloat(a.amount)).slice(0,4);
-    expEl.innerHTML = sorted.map(e => '<div class="ins-row"><div><div class="ins-name">' + fpEscHtml(e.description) + '</div><div class="ins-sub">' + fpEscHtml(e.category || e.type) + '</div></div><div class="ins-amt neg">-$' + fmt(e.amount) + '</div></div>').join('');
-  }
-  if (income.length) {
-    const sorted = income.slice().sort((a,b) => parseFloat(b.amount) - parseFloat(a.amount)).slice(0,4);
-    incEl.innerHTML = sorted.map(e => '<div class="ins-row"><div><div class="ins-name">' + fpEscHtml(e.description) + '</div><div class="ins-sub">' + (e.recurring ? 'Recurring' : 'One-time') + '</div></div><div class="ins-amt pos">+$' + fmt(e.amount) + '</div></div>').join('');
-  }
-  const totalIncome = income.reduce((s,t) => s+parseFloat(t.amount), 0);
-  const totalExpenses = expenses.reduce((s,t) => s+parseFloat(t.amount), 0);
-  if (totalIncome > 0 && tip) {
-    const pct = Math.round((totalExpenses / totalIncome) * 100);
-    if (pct > 80) tip.textContent = 'Your bills and expenses are ' + pct + '% of your income. That\'s really tight. Even cutting one recurring expense could free up meaningful breathing room.';
-    else if (pct > 60) tip.textContent = 'You\'re spending ' + pct + '% of your income on bills and expenses. Most financial experts suggest keeping this under 60%. A few small adjustments could make a real difference.';
-    else tip.textContent = 'You\'re spending ' + pct + '% of your income on bills and expenses. That\'s healthy. Keep building that breathing room.';
-  }
+  const dm=buildDayMap(currentYear,currentMonth), expenses=[],income=[];
+  Object.keys(dm).forEach(function(day){const e=dm[day];expenses.push.apply(expenses,e.expenses.concat(e.bills,e.loans).map(function(t){return Object.assign({},t,{amount:fpAmountDue(t)})}));income.push.apply(income,e.income);});
+  const label=document.getElementById('insights-month-label');if(label)label.textContent=new Date(currentYear,currentMonth,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  function grouped(rows){const groups={};rows.forEach(function(t){const key=JSON.stringify([t.description||'Income',t.category||t.type||'income']);if(!groups[key])groups[key]={description:t.description||'Income',category:t.category||t.type||'income',amount:0,count:0};groups[key].amount+=Number(t.amount)||0;groups[key].count++;});return Object.values(groups).sort(function(a,b){return b.amount-a.amount}).slice(0,4);}
+  function render(id,rows,sign){const el=document.getElementById(id);el.textContent=rows.length?'':'No calendar entries in this month.';if(rows.length)el.innerHTML=grouped(rows).map(function(t){return '<div class="ins-row"><div><div class="ins-name">'+fpEscHtml(t.description)+'</div><div class="ins-sub">'+fpEscHtml(t.category)+' · '+t.count+' scheduled occurrence'+(t.count===1?'':'s')+'</div></div><div class="ins-amt '+(sign==='+'?'pos':'neg')+'">'+sign+'$'+fmt(t.amount)+'</div></div>';}).join('');}
+  render('insights-expenses',expenses,'-');render('insights-income',income,'+');
+  const totalIncome=income.reduce(function(sum,t){return sum+(Number(t.amount)||0)},0),totalOut=expenses.reduce(function(sum,t){return sum+t.amount},0);
+  document.getElementById('insights-tip').textContent='This calendar month: +$'+fmt(totalIncome)+' income and -$'+fmt(totalOut)+' outflows, including scheduled loan payments. This is a projection and does not confirm your bank balance or money available to spend.';
 }
+function fpChangeInsightMonth(delta) { if(delta<0)prevMonth();else nextMonth();renderInsights(); }
+
 
 // ── SETUP ──────────────────────────────────────────────────────
 function handleStartBalClick() {
@@ -5762,8 +5537,8 @@ function openEditBalance() {
 
 async function saveEditBalance() {
   const input = document.getElementById('edit-balance-input').value;
-  const bal = input === '' ? 0 : parseFloat(input);
-  if (isNaN(bal)) return;
+  const bal = Number(input);
+  if (!input.trim() || !Number.isFinite(bal)) { showToast('Enter a bank balance, including 0 if it is zero.','error'); return; }
   const dateVal = document.getElementById('edit-balance-date').value;
   if (!fpNormalizeAsOf(dateVal, fpIso(new Date()))) { showToast(fpBadBalanceDateMessage(), 'error'); return; }
   if (!await fpApplyDatedBalance(bal, dateVal, null, fpPayAnswer('edit-balance'))) return;
@@ -5921,10 +5696,14 @@ function openSetup() { fpPrefillBalanceDate('setup-balance-date'); fpRefreshPayQ
 function closeSetup() { document.getElementById('setup-overlay').style.display = 'none'; }
 
 async function saveSetup() {
-  const bal = parseFloat(document.getElementById('setup-balance').value) || 0;
+  const balanceInput=document.getElementById('setup-balance').value;
+  const bal = Number(balanceInput);
+  if (!balanceInput.trim() || !Number.isFinite(bal)) { showToast('Enter a bank balance, including 0 if it is zero.','error'); return; }
   const payday = document.getElementById('setup-payday').value;
   const freq = document.getElementById('setup-frequency').value;
-  const payAmt = parseFloat(document.getElementById('setup-payamount').value) || 0;
+  const payInput=document.getElementById('setup-payamount').value;
+  const payAmt=payInput.trim()?Number(payInput):0;
+  if (!Number.isFinite(payAmt) || payAmt<0) { showToast('Enter a valid non-negative paycheck amount.','error');return; }
   const setupDate = document.getElementById('setup-balance-date').value;
   if (!fpNormalizeAsOf(setupDate, fpIso(new Date()))) { showToast(fpBadBalanceDateMessage(), 'error'); return; }
   if (!await fpApplyDatedBalance(bal, setupDate, { startingBalance: bal, payday, payFrequency: freq, payAmount: payAmt }, fpPayAnswer('setup-balance'))) return;
@@ -5936,11 +5715,13 @@ async function saveSetup() {
 }
 
 async function saveStartingBalance() {
-  const bal = parseFloat(document.getElementById('settings-balance').value) || 0;
+  const balanceInput=document.getElementById('settings-balance').value;
+  const bal = Number(balanceInput);
+  if (!balanceInput.trim() || !Number.isFinite(bal)) { showToast('Enter a bank balance, including 0 if it is zero.','error'); return; }
   const settingsDate = document.getElementById('settings-balance-date').value;
   if (!fpNormalizeAsOf(settingsDate, fpIso(new Date()))) { showToast(fpBadBalanceDateMessage(), 'error'); return; }
   if (!await fpApplyDatedBalance(bal, settingsDate, null, fpPayAnswer('settings-balance'))) return;
-  alert('Balance saved!');
+  showToast('Balance saved');
 }
 
 function openConnectAccounts() {
@@ -6301,26 +6082,21 @@ async function confirmStatementImport() {
   document.getElementById('import-csv-input').value = '';
   const count = records.length;
   _pendingImportRows = [];
-  showToast(count + ' transaction' + (count===1?'':'s') + ' imported' + (skippedDups > 0 ? ', ' + skippedDups + ' possible duplicate' + (skippedDups===1?'':'s') + ' skipped' : ''));
+  showToast(count + ' transaction' + (count===1?'':'s') + ' imported' + (skippedDups > 0 ? ', ' + skippedDups + ' unselected row' + (skippedDups===1?'':'s') + ' skipped' : ''));
   renderCalendar(); updateStats(); renderExpensesView();
 }
 
 // ── CARD FINDER ────────────────────────────────────────────────
-const cardRecs = {
-  cashback:[{n:'Amex Blue Cash Preferred',p:'6% back on groceries, 3% on gas',b:'$250 welcome bonus',url:'https://www.americanexpress.com/us/credit-cards/card/blue-cash-preferred/'},{n:'Chase Freedom Unlimited',p:'1.5% back on all purchases',b:'$200 welcome bonus',url:'https://creditcards.chase.com/cash-back-credit-cards/freedom/unlimited'}],
-  travel:[{n:'Chase Sapphire Preferred',p:'3× on dining, 2× on travel',b:'60,000 points, $750 value',url:'https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred'},{n:'Amex Gold',p:'4× on dining & groceries',b:'60,000 Membership Rewards points',url:'https://www.americanexpress.com/us/credit-cards/card/gold-card/'}],
-  dining:[{n:'Amex Gold',p:'4× points at restaurants worldwide',b:'$250 dining credit per year',url:'https://www.americanexpress.com/us/credit-cards/card/gold-card/'},{n:'Capital One SavorOne',p:'3% on dining & entertainment',b:'$200 cash bonus',url:'https://capitalone.com/credit-cards/savorone/'}],
-  debt:[{n:'Citi Diamond Preferred',p:'0% APR for 21 months on transfers',b:'No annual fee',url:'https://www.citi.com/credit-cards/citi-diamond-preferred-credit-card'},{n:'Wells Fargo Reflect',p:'0% APR for up to 21 months',b:'Cell phone protection included',url:'https://creditcards.wellsfargo.com/reflect-visa-credit-card/'}],
-};
+const cardRecs = Object.fromEntries(['cashback','travel','dining','debt'].map(function(goal){return [goal,[{n:'Chase credit cards',p:'Compare current issuer terms, fees and eligibility.',url:'https://creditcards.chase.com/'},{n:'American Express credit cards',p:'Explore current issuer information.',url:'https://www.americanexpress.com/us/credit-cards/'},{n:'Citi credit cards',p:'Explore current issuer information.',url:'https://www.citi.com/credit-cards/'}]];}));
 function pickGoal(el, goal) {
   document.querySelectorAll('.goal-tile').forEach(b => b.classList.remove('on'));
   el.classList.add('on');
   document.getElementById('card-results').style.display = 'block';
-  document.getElementById('card-recs').innerHTML = cardRecs[goal].map(r => '<div class="rec-card"><div class="rec-name">' + r.n + '</div><div class="rec-perk">' + r.p + '</div><div class="rec-bonus">Welcome offer: ' + r.b + '</div><a class="rec-apply" href="' + r.url + '" target="_blank">Apply Now &rarr;</a></div>').join('');
+  document.getElementById('card-recs').innerHTML = cardRecs[goal].map(r => '<div class="rec-card"><div class="rec-name">' + fpEscHtml(r.n) + '</div><div class="rec-perk">' + fpEscHtml(r.p) + '</div><a class="rec-apply" href="' + r.url + '" target="_blank" rel="noopener noreferrer">Visit issuer &rarr;</a></div>').join('');
 }
 
 // ── DREAMS CALCULATOR ──────────────────────────────────────────
-const RATE = 0.10;
+let RATE = 0.10;
 let dAmount = 5000;
 let dChart;
 function dCompound(p, y) { return Math.round(p * Math.pow(1 + RATE, y)); }
@@ -6342,6 +6118,12 @@ function dFormatInput() {
   if (!isNaN(parsed) && parsed > 0) { dAmount = parsed; document.getElementById('d-amt-input').value = dFmt(dAmount); document.getElementById('d-amt-slider').value = Math.min(dAmount, 100000); dUpdate(); }
 }
 function dUpdate() {
+  const rateInput=document.getElementById('d-rate-input');
+  if (rateInput) {
+    const rate=Number(rateInput.value);
+    if (!rateInput.value.trim() || !Number.isFinite(rate) || rate < -100 || rate > 100) { document.getElementById('d-future').textContent='—';document.getElementById('d-coach').textContent='Enter an assumed annual rate between -100% and 100%.';return; }
+    RATE=rate/100;
+  }
   const yrEl = document.getElementById('d-yr-slider');
   if (!yrEl) return;
   const years = parseInt(yrEl.value);
@@ -6352,9 +6134,7 @@ function dUpdate() {
   setEl('d-future', dFmt(future));
   setEl('d-sub', 'in ' + years + ' year' + (years===1?'':'s'));
   const gain = future - dAmount;
-  const coachLines = dAmount >= 50000 ? 'Life-changing money. Invested today it becomes ' + dFmt(future) + ' in ' + years + ' years, a ' + dFmt(gain) + ' gain while you sleep.'
-    : dAmount >= 5000 ? 'In ' + years + ' years, that ' + dFmt(dAmount) + ' becomes ' + dFmt(future) + '. A ' + dFmt(gain) + ' gain without doing a thing. That\'s the quiet power of patience.'
-    : dFmt(dAmount) + ' might not feel like much, but in ' + years + ' years it\'s ' + dFmt(future) + '. Every dollar has a future version of itself.';
+  const coachLines = 'At the assumed ' + Math.round(RATE*1000)/10 + '% annual rate, '+dFmt(dAmount)+' would become '+dFmt(future)+' after '+years+' years. Actual returns can differ or be negative.';
   setEl('d-coach', coachLines);
   const milestones = [5,10,20,50];
   const mEl = document.getElementById('d-milestones');
@@ -6376,7 +6156,7 @@ function dUpdate() {
     dChart = new Chart(canvas, {
       type:'line',
       data:{labels,datasets:[
-        {label:'S&P 500',data:gd,borderColor:'#1a6b4a',backgroundColor:'rgba(26,107,74,0.07)',fill:true,tension:0.4,pointRadius:2,borderWidth:2},
+        {label:'Hypothetical growth',data:gd,borderColor:'#1a6b4a',backgroundColor:'rgba(26,107,74,0.07)',fill:true,tension:0.4,pointRadius:2,borderWidth:2},
         {label:'Purchase',data:fd,borderColor:'#c0392b',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1.5,borderDash:[5,4]}
       ]},
       options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:20}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+': '+dFmt(ctx.parsed.y);}}}},scales:{x:{grid:{display:false},ticks:{font:{size:10},maxTicksLimit:8}},y:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{size:10},callback:function(v){return v>=1000000?'$'+(v/1000000).toFixed(1)+'M':v>=1000?'$'+Math.round(v/1000)+'k':'$'+v;}}}}}

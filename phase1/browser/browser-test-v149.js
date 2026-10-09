@@ -56,7 +56,7 @@ function dbop(s) {
   } else {
     out = rows.filter(r => r.user_id === 'user-A' && match(r)).map(x => ({ ...x }));
     if (s.order) out.sort((a, b) => (a[s.order[0]] > b[s.order[0]] ? 1 : -1) * (s.order[1] === 'desc' ? -1 : 1));
-    if (s.range) out=out.slice(s.range[0],s.range[1]+1);
+    if (s.range) out=out.slice(s.range[0],s.range[1]+1); else if (!s.single) out=out.slice(0,1000);
     if (s.single) { if (!out.length) return { data: null, error: { message: 'no rows' } }; out = out[0]; }
   }
   if (s.op !== 'select' && s.single) { if (!out || !out.length) return {data:null,error:{code:'PGRST116',message:'no returned row'}}; out=out[0]; } return { data: out, error: null };
@@ -759,6 +759,32 @@ const loan = id => txns().find(t => t.id === id);
   ok('T28 missing write confirmation never shows paid success',await billTotal()==='$25 still due'&&/Could not confirm/.test(await toast()),await toast());
   await page.click('button:has-text("Refresh paid status")');await page.waitForTimeout(300);
   ok('T28 refresh recovers committed paid mark after lost confirmation',await billTotal()==='All cleared ✓',await billTotal());
+
+  // ---- T29 Large-account reload and financial presentation
+  seed();db.transactions=Array.from({length:1001},(_,i)=>({id:'row-'+String(i).padStart(5,'0'),user_id:'user-A',type:'expense',description:'Expense '+i,amount:0.01,date:'2026-10-09',category:'Other',recurring:false}));
+  await load();
+  ok('T29 reload retains all 1001 transactions beyond API default limit',await page.evaluate(()=>transactions.length===1001),'rows missing after reload');
+  await page.evaluate(()=>showView('insights',null));
+  ok('T29 Insights sums every selected-month expense with cents',/10\.01/.test(await page.textContent('#insights-tip')),await page.textContent('#insights-tip'));
+  await page.evaluate(()=>fpChangeInsightMonth(1));
+  ok('T29 Insights month control excludes October expenses from November',/November/.test(await page.textContent('#view-insights')) && /-\$0 outflows/.test(await page.textContent('#insights-tip')),await page.textContent('#insights-tip'));
+  await page.evaluate(()=>{currentMonth=9;showView('plan',null)});
+  ok('T29 Plan does not invent a payoff date or savings allocation',await page.textContent('#finish-date')==='Not estimated yet' && /projections/.test(await page.textContent('#view-plan')),await page.textContent('#view-plan'));
+  seed();db.transactions[0].balance=0;await load();await page.evaluate(()=>showView('loans',null));
+  ok('T29 explicit zero-balance loan remains paid off after reload',await page.evaluate(()=>fpLoanBalanceAmount(transactions.find(t=>t.id==='loan-car'))===0)&&/Paid off/.test(await page.textContent('#view-loans')),await page.textContent('#view-loans'));
+  const settingsBefore=JSON.stringify(db.user_settings);
+  await page.evaluate(()=>{openEditBalance();document.getElementById('edit-balance-input').value='';});await page.evaluate(()=>saveEditBalance());
+  ok('T29 blank bank balance preserves saved settings and open editor',JSON.stringify(db.user_settings)===settingsBefore && await page.isVisible('#edit-balance-overlay'),'blank wrote settings');
+  await page.evaluate(()=>{document.getElementById('edit-balance-input').value='0';document.getElementById('edit-balance-date').value='2026-10-08';return saveEditBalance();});
+  ok('T29 explicit zero bank balance saves successfully',db.user_settings[0].starting_balance===0 && !await page.isVisible('#edit-balance-overlay'),JSON.stringify(db.user_settings));
+  await page.evaluate(()=>showView('dreams',null));
+  await page.fill('#d-rate-input','0');
+  ok('T29 zero-growth scenario preserves principal',await page.evaluate(()=>dCompound(100,10)===100),'incorrect zero return');
+  await page.fill('#d-rate-input','-10');
+  ok('T29 negative-growth scenario shows loss without guaranteed-return copy',await page.evaluate(()=>dCompound(100,10)<100)&&/negative/.test(await page.textContent('#d-coach')),await page.textContent('#d-coach'));
+  await page.fill('#d-rate-input','');
+  ok('T29 blank growth rate asks for an assumption',await page.textContent('#d-future')==='—'&&/Enter an assumed/.test(await page.textContent('#d-coach')),await page.textContent('#d-coach'));
+  await page.fill('#d-rate-input','10');
 
   // ---- console / network
   const dbErrors = reqlog.filter(r => r.error);

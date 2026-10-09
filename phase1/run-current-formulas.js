@@ -1,4 +1,5 @@
-// Run the supplied suite unchanged. Missing historical comparison files are
+// Run the supplied suite with its Plan assertion adapted to the read-only overview.
+// Missing historical comparison files are
 // reported as unavailable; any other failure fails this command.
 const {spawnSync} = require('child_process');
 const path = require('path');
