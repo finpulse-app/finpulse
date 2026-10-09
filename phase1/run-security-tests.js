@@ -14,7 +14,7 @@ function make(names, extra={}) {
   const c = vm.createContext(Object.assign({console,Date,Math,JSON,parseFloat,isNaN,setTimeout(){},
     currentUser:{id:'A'},userSettings:{startingBalance:100,payAmount:0},monthBalances:{},transactions:[],
     _dataLoadVersion:0,_activeUserId:'A', savedPurchases:[],_importReadVersion:0,_fpSettingsVersion:0,_fpSettingsBusy:false,_fpSignOutBusy:false,fpReadTransactions:async()=>({data:[],error:null}),
-    fpLoadGoals:async()=>true,_fpGoals:[],_fpGoalsReady:true,_fpGoalBusy:false,_fpGoalDraftId:null,fpRenderAgenda(){},_fpExpenseQuery:'',
+    fpLoadGoals:async()=>true,_fpGoals:[],_fpGoalsReady:true,_fpGoalBusy:false,_fpGoalDraftId:null,_fpGoalVersion:0,fpRenderAgenda(){},_fpExpenseQuery:'',
     _fpBillMarkRows:[],_fpBillMarksReady:true,_fpBillMarkBusy:false,_fpBillMarkVersion:0,fpRefreshBillMarks:async()=>true,renderPriorityReport(){},
     window:{},document:{getElementById:element,querySelector(){return element('modal')},querySelectorAll(){return []}},
     localStorage:{getItem:k=>cache[k]||null,setItem:(k,v)=>{cache[k]=v},removeItem:k=>{delete cache[k]}},
@@ -372,6 +372,9 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   });
   await test('CSV export escapes quotes, newlines and formula-like text while preserving numeric amounts',()=>{
     const c=make(['fpTransactionCsv']);const csv=c.fpTransactionCsv([{date:'2026-10-09',type:'expense',description:'=SUM(1,2)',amount:-12.5,category:'A "quote"\nline'}]);assert(csv.includes('"\'=SUM(1,2)"'));assert(csv.includes(',-12.5,'));assert(csv.includes('"A ""quote""\nline"'));
+  });
+  await test('late goal refresh cannot replace newer saved progress',async()=>{
+    let done;const c=make(['fpLoadGoals'],{renderPlan(){},sb:{from(){const q={select(){return q},eq(){return q},order(){return q},range:()=>new Promise(r=>{done=r})};return q;}}});const load=c.fpLoadGoals(false);c._fpGoalVersion++;c._fpGoals=[{id:'saved',saved_amount:100}];done({data:[{id:'saved',saved_amount:0}],error:null});assert.equal(await load,false);assert.equal(c._fpGoals[0].saved_amount,100);
   });
   console.log('TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
 })();

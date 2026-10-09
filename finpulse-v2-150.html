@@ -1338,7 +1338,7 @@ let _dataLoadVersion = 0;
 let _fpSettingsVersion = 0;
 let _fpSettingsBusy = false;
 let _fpSignOutBusy = false;
-let _fpGoals=[], _fpGoalsReady=false, _fpGoalBusy=false, _fpGoalDraftId=null;
+let _fpGoals=[], _fpGoalsReady=false, _fpGoalBusy=false, _fpGoalDraftId=null, _fpGoalVersion=0;
 let _fpCalendarMode='month';
 let _fpExpenseQuery='';
 let currentYear = new Date().getFullYear();
@@ -1673,7 +1673,7 @@ function fpResetAccountState() {
   _dataLoadVersion++;
   _fpSettingsVersion++;
   _fpSettingsBusy = false;
-  _fpGoals=[];_fpGoalsReady=false;_fpGoalBusy=false;_fpGoalDraftId=null;
+  _fpGoals=[];_fpGoalsReady=false;_fpGoalBusy=false;_fpGoalDraftId=null;_fpGoalVersion++;
   _fpCalendarMode="month";_fpExpenseQuery="";
   const search=document.getElementById("expense-search");if(search)search.value="";
   const goalEditor=document.getElementById("goal-editor");if(goalEditor)goalEditor.style.display="none";
@@ -5477,17 +5477,17 @@ function fpGoalProgress(goal) {
 
 async function fpLoadGoals(render=true) {
   if (!currentUser) return false;
-  const uid=currentUser.id,version=_dataLoadVersion,rows=[];
+  const uid=currentUser.id,version=_dataLoadVersion,goalVersion=++_fpGoalVersion,rows=[];
   try {
     for(let offset=0;;offset+=500) {
       const r=await sb.from('financial_goals').select('*').eq('user_id',uid).order('id',{ascending:true}).range(offset,offset+499);
-      if(!currentUser||currentUser.id!==uid||version!==_dataLoadVersion)return false;
+      if(!currentUser||currentUser.id!==uid||version!==_dataLoadVersion||goalVersion!==_fpGoalVersion)return false;
       if(r.error)throw r.error;
       rows.push(...(r.data||[]));if(!r.data||r.data.length<500)break;
     }
     _fpGoals=rows;_fpGoalsReady=true;if(render)renderPlan();return true;
   } catch(e) {
-    if(currentUser&&currentUser.id===uid&&version===_dataLoadVersion){_fpGoalsReady=false;if(render)renderPlan();}
+    if(currentUser&&currentUser.id===uid&&version===_dataLoadVersion&&goalVersion===_fpGoalVersion){_fpGoalsReady=false;if(render)renderPlan();}
     return false;
   }
 }
@@ -5512,6 +5512,7 @@ function fpCloseGoal() { if(_fpGoalBusy)return;document.getElementById('goal-edi
 async function fpWriteGoal(record) {
   if(!currentUser||_fpGoalBusy||!_fpGoalsReady)return false;
   const uid=currentUser.id,version=_dataLoadVersion;
+  _fpGoalVersion++;
   _fpGoalBusy=true;
   const button=document.getElementById('goal-save-btn');button.disabled=true;button.textContent='Saving…';
   try {
