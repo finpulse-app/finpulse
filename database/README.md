@@ -2,7 +2,7 @@
 
 `atomic-loan-operations.sql` is reviewed deployment SQL. It was applied to
 FinPulse Supabase as the atomic_transaction_operations migration. The updated
-HTML remains a draft and still requires staged Auth/Data API verification. The client deliberately fails clearly if
+HTML remains a draft; twenty authenticated API checks passed with disposable accounts. The client deliberately fails clearly if
 the RPC is missing; it never falls back to separate balance/payment writes.
 
 The public `fp_mutate_transaction` wrapper runs as the caller. Its private
@@ -32,4 +32,9 @@ Tests run against a disposable PostgreSQL 17 service on GitHub. The fixture and
 script requires an explicit disposable flag and a localhost URL. It tests real SQL
 rollback, permissions, ownership, idempotency, loan links and concurrent requests.
 Browser tests use a separate fake RPC backend to drive input, reload and retry UI.
-These tests do not replace a staging Supabase auth/Data API integration check.
+Live authenticated API checks and cleanup are documented in phase1/V150_FIX_REPORT.md.
+
+Account bill paid/unpaid status uses bill-paid-marks.sql, with owner RLS and
+explicit false tombstones that prevent stale device caches from resurrecting marks.
+The owner-policy-performance.sql migration preserves owner comparisons while
+evaluating auth.uid() once per statement. Both migrations are applied and tested.

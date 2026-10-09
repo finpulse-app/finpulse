@@ -1,88 +1,38 @@
-# FinPulse v150 review candidate
+# FinPulse v150 release review
 
-Draft PR: https://github.com/finpulse-app/finpulse/pull/1
-Initial verified code revision: `ba652e70b2faa6668f77f7fcd73be0586e723dea`.
-All seven jobs passed in [GitHub Actions run 37989499589](https://github.com/finpulse-app/finpulse/actions/runs/37989499589).
+The work remains in [draft PR #1](https://github.com/finpulse-app/finpulse/pull/1). The public website and production `index.html` have not been replaced. The private [review preview](http://127.0.0.1:62240/finpulse-v150.html) connects to the real account, so changes a user saves there update that account.
 
-## Implemented
+## Completed changes
 
-The candidate preserves the supplied redacted v149 as a control and fixes unsafe
-stored-text rendering, failed settings saves, account state leaking across account
-changes, signup before email confirmation, and impossible imported dates. Failed
-settings saves preserve the old state/cache and keep dialogs open. Account and
-load guards discard stale responses. Skipped-purchase caches are account/year scoped.
+- Account state resets between users. Saves check database errors and returned confirmations; late responses cannot replace another account's state. Settings saves also guard against overlapping requests and an earlier visit to the same account. Sign-out network failures leave the account available for retry. A missing account library shows a connection error instead of an endless loading screen.
+- Loan payment, deletion and undo commit atomically with their principal changes. Owner-scoped operation receipts make retries idempotent. Interrupted transaction batches retain UUIDs and can be checked without duplicating records. Reload now fetches all transaction pages, including accounts above the API's 1,000-row default.
+- Bill status belongs to the account and can be refreshed across devices. Explicit unmarks override stale device marks. Older device marks have an explicit sync action. A status mark does not execute a bank payment, change a transaction, or refund a calendar outflow. Failed confirmations remain visible and recoverable.
+- Imports support quoted commas, escaped quotes, multiline cells, debit/credit columns and explicit card sign conventions. Invalid dates and malformed amounts are rejected. Users can exclude any preview row; canceled or older asynchronous reads cannot repopulate the preview. Imports require confirmation before saving.
+- Calendar, Expenses and Insights use selected-month occurrences, including scheduled loans. Summaries preserve cents. Unrelated gifts/refunds no longer suppress a scheduled paycheck simply because their amount is large. An explicit zero loan balance remains paid off. Blank bank balances cannot silently overwrite a saved balance with zero.
+- Plan no longer invents savings progress or a financial finish date. The future-value calculator accepts a hypothetical annual rate, including zero and negative rates, and explains its assumptions. Card research links to issuer information without invented offers or personalized approval claims. Preview billing and statement-import labels reflect what is implemented.
+- Narrow navigation, stacked cards, readable text, keyboard focus, reduced-motion support and form labels improve usability. The final visual review caught and corrected an implicit second grid column that collapsed the Insights expense card at 312 pixels.
 
-Loan recording, transaction deletion and undo now call one database operation.
-Regular and optional extra payment rows commit with their principal reduction.
-Deletion/undo commit with the matching balance reversal. The database calculates
-from stored owner rows, locks changes, and protects receipts in a private schema.
-Undo restores the original row UUID so payment links survive restoring a loan.
-Explicit zero balances remain zero. Legacy regular payments retain the prior
-interest estimate only when a unique owned loan matches; ambiguous matches fail.
+## Database changes
 
-A pending operation UUID is stored before sending the request. A lost confirmation
-can be retried without applying a second payment. Reload offers Check change to
-recover pending recording, deletion or undo. Success animations/toasts await a
-commit; failed forms stay open, confirmation controls recover, and undo state is
-retained. Responses and animations from a different account/dialog are discarded.
+Three additive migrations are applied to project `qllshfubwzdoiyavypan`: atomic transaction operations, account-owned bill paid marks, and optimized owner-policy checks. Owner checks remain in both read and write policies. The final performance advisor has no notices. The private operations table intentionally has no client RLS policy, denying direct client access.
 
-## Verification
+The security advisor still reports [disabled leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection). The connected tools cannot change Auth configuration. This needs a dashboard review before a public launch. Email confirmation is currently automatic; email delivery and password-reset delivery have not been verified.
 
-- 40 client regression tests passed in New York, UTC, Los Angeles and Auckland.
-- 26 real PostgreSQL 17 tests passed against the live schema's column constraints
-  and synthetic accounts. They cover commit/rollback, injected failures, retries,
-  concurrent requests, cross-account denial, anonymous access, receipt permissions,
-  zero balances, payment links, legacy matching and stale undo.
-- 134 Chromium browser assertions passed in New York and Auckland. This includes
-  real clicks and recovery after reload for a committed operation whose response
-  was lost. Browser tests use a fake backend; database tests run independently.
-- The unchanged formula suite has 226 passes in each of four time zones, 18
-  unavailable v147 comparisons and 12 skips. Missing comparisons are never counted
-  as passes. Inline JavaScript and changed test scripts pass syntax checks.
+## Verification and limits
 
-## Supabase change and verification
+The final status and exact counts are attached to PR #1 and its GitHub Actions run. Checks cover four formula/client time zones, two Chromium time zones, disposable PostgreSQL 17 and public API isolation. Historical v147 comparisons unavailable from the supplied files are explicitly excluded from passes.
 
-The additive `atomic_transaction_operations` migration was applied to FinPulse
-project `qllshfubwzdoiyavypan`. It adds the private receipts table, private operation
-function, public invoker wrapper, and an index for owner-scoped transaction reads.
-No existing financial records were changed. The public `index.html`, Auth settings
-and website deployment remain unchanged; the updated client remains a draft.
+Twenty additional authenticated API checks passed using two disposable accounts, covering account isolation, real loan operations, bill paid/unpaid persistence and foreign-account denial. Both accounts signed out globally and were removed. Cleanup queries confirmed no remaining test users, sessions, transactions, settings, operation receipts or bill marks. No existing financial records were changed for tests. Browser mutation tests used synthetic backend data; real-account browser review was read-only.
 
-Live metadata checks confirmed the deployed function bodies match the tested SQL,
-empty search paths, anonymous execute denial, RLS on receipts, and no client
-SELECT/INSERT/UPDATE access to receipts. An unauthenticated function call was
-rejected and created no receipt. The initial verification did not mutate signed-in financial rows. The live integration follow-up below used only disposable test accounts.
+Statement fixtures cover supported CSV formats; they cannot establish compatibility with every bank's export. Paycheck matching remains a heuristic based on paycheck identity, date and amount, rather than a bank reconciliation service. Weekend and holiday dates follow the entered schedule and are not shifted automatically. Automatic extra-payment allocation remains deferred. Bill changes appear on reload, Bills navigation or explicit refresh; realtime synchronization is not claimed.
 
-Security advisor: the new [no-policy information notice](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy)
-is intentional: private receipts deny all direct client access, and the private
-function accesses them under its owner with explicit account checks. The existing
-[disabled leaked-password protection warning](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)
-remains. Performance notices concern existing [per-row auth checks in public RLS](https://supabase.com/docs/guides/database/database-linter?lint=0003_auth_rls_initplan)
-and the [new index not yet used](https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index).
+No local developer tools or test packages were installed. Remote test dependencies ran on GitHub's runners.
 
-## Remaining release checks
+## Concrete release steps
 
-The live Auth/Data API follow-up below verifies sign-in and two-account API behavior. Full browser flows against the live service and email delivery/confirmation (currently disabled) still need release verification. Real statement imports and device checks remain. Bill settlement marks
-are device-local, twice-monthly business-day shifts are deferred, and extra-payment
-allocation remains disabled. No local developer tools or browser package installs
-were required; test dependencies run on GitHub's machines.
+1. Confirm the destination host/domain and email-verification policy. Configure and verify confirmation/reset delivery if verified-email accounts are required. Review leaked-password protection in the Supabase dashboard. Keep billing and direct bank connections disabled until implemented and tested.
+2. Review the final candidate, CI evidence and this document. Obtain approval for the exact public release; the existing instruction to repair the candidate does not itself select a deployment destination.
+3. Replace the deployed entry point with the tested candidate, retain the previous entry point for rollback, and verify that the deployed file matches the approved candidate. The current draft PR deliberately retains the existing `index.html`.
+4. Verify session restoration, month navigation and read-only account loading on the published URL. Roll back the frontend entry point if these checks fail. Retain the additive database migrations; frontend rollback does not require deleting user status or operation receipts.
 
-## Transaction form and import follow-up
-
-All remaining transaction write paths now check returned errors, thrown failures and missing confirmations. Expense/category/loan/income editors commit local state only from an owner-scoped returned row. Failure retains the form and inputs; zero loan balances stay zero. Loan payment category and amount edits are blocked to preserve principal linkage.
-
-New entries and statement imports store stable client-generated UUIDs in account-scoped browser storage before sending. A duplicate-key response on retry triggers owner-scoped reads of the original IDs; every row must be present before success is shown. Read requests are grouped in 100-ID chunks. One pending insert batch blocks a different batch until confirmed. Clearing browser storage before an ambiguous save is checked removes this retry protection. System notes use the same confirmed write path.
-
-The expanded client suite passes 61 tests locally; browser fault checks and live anonymous API checks run in GitHub Actions; see the pull request for the final verified revision and check results. The live API check uses only the existing public anon key, reads Auth settings and confirms anonymous reads return no account records. It creates no users, sends no emails and changes no financial records. Authenticated sign-in and two-account Data API behavior were subsequently verified as described below.
-
-## Live authenticated integration verification
-
-Fourteen real Auth/Data API checks passed on October 9, 2026. Two disposable accounts used generated credentials held only in process memory. Current Auth settings enable automatic confirmation, so signup returned sessions without sending emails. Both accounts could sign in with passwords and verify their users. Owner-scoped reads, updates, insert ownership checks and settings isolation passed; foreign-account loan mutation and ownership transfer were rejected. A stable UUID insert retry returned the original row after a duplicate-key error. Live regular/extra payment, operation replay, deletion and undo matched exact principal and row IDs.
-
-Both accounts signed out globally (HTTP 204). They and their synthetic data were then removed through exact ID/email predicates. Follow-up SQL confirmed zero remaining test users, sessions, transactions, settings or receipts. Existing accounts and financial records were not changed. No credentials or tokens are committed. Email delivery was not tested and Auth configuration was not changed.
-
-The first follow-up CI run passed client/formula and live anonymous API checks but could not start PostgreSQL because Docker Hub rate-limited its image pull. The workflow now uses [Docker's verified PostgreSQL image on ECR Public](https://gallery.ecr.aws/docker/library/postgres). A browser test trying to fill the read-only calculated loan payment field was corrected to enter APR and use the actual calculator. See the pull request check results for the final browser/database run.
-
-Large imports also recover when the Data API truncates the insert response at its row limit: all original UUIDs are read in 100-ID groups before the batch is confirmed. A 1,001-row test verifies this without duplicate inserts or partial success.
-
-Browser failure checks also exposed an expense-dialog focus callback firing after the delete prompt had replaced its input. The callback now checks that the field and original edit are still present before selecting it; this race is covered in the client suite.
+This closes the repair and preview-review work for the confirmed defects. It does not claim every possible defect or future feature is resolved, or that public release has already been approved.

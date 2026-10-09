@@ -1,43 +1,32 @@
-# FinPulse development
+# FinPulse v150 review candidate
 
-`finpulse-v2-150.html` is the review candidate based on the supplied v149 review
-ZIP. It fixes settings-save failures, unsafe text rendering, account isolation,
-signup confirmation, invalid import dates, and atomic loan recording/deletion/undo.
-The original redacted v149 is retained for regression controls. The candidate uses
-only the existing public Supabase anon key. Production `index.html` is unchanged.
-
-The atomic database operation has been added to FinPulse Supabase through the
-`atomic_transaction_operations` migration. The updated HTML remains in a draft PR,
-not deployed. See `database/README.md` for ownership and retry behavior.
+Development is in draft PR #1. Production index.html is deliberately unchanged.
+See phase1/V150_FIX_REPORT.md for the repaired behavior, database migrations,
+verification limits and release steps. No public deployment is implied by this branch.
 
 ## Checks
 
-Node.js 22 or newer runs the standard-library client and formula checks without
-npm dependencies:
+Run node phase1/run-security-tests.js finpulse-v2-150.html and
+node phase1/run-current-formulas.js finpulse-v2-150.html.
+GitHub runs these in New York, UTC, Los Angeles and Auckland, Chromium checks in
+New York and Auckland, disposable PostgreSQL 17 tests and anonymous API checks.
+The unavailable historical v147 comparisons and skips are not passes.
+Test dependencies run on GitHub runners; no local installation is needed.
+Never run the database fixture or test-atomic.js against a live project.
 
-```sh
-TZ=America/New_York node phase1/run-security-tests.js finpulse-v2-150.html
-TZ=America/New_York node phase1/run-current-formulas.js finpulse-v2-150.html
-```
+## Live integration
 
-GitHub repeats these in four time zones, runs Chromium browser checks in New York
-and Auckland, and runs real SQL tests on a disposable PostgreSQL 17 service.
-Dependencies are installed only on GitHub runners. Never run the database fixture
-or test script on a real Supabase project.
+Twenty authenticated API checks passed with two disposable accounts. Both signed
+out globally and were removed with their synthetic records; cleanup was verified.
+Real-account browser review was read-only. The preview connects to real account data.
+Bill paid/unpaid marks now persist to owner-scoped account rows and refresh across
+devices. They record status; they do not move money or change calendar expenses.
+Transaction reload and import confirmation handle accounts above 1,000 rows.
 
-On code revision ba652e7, all seven jobs passed: 40 client tests in each time zone,
-26 database tests, 134 browser assertions in each browser time zone, and 226 formula
-passes per time zone. Eighteen historical comparisons are unavailable because v147
-is missing, and 12 checks are skipped; missing comparisons are not passes.
+## Release limits
 
-Browser checks use a fake backend. Real Supabase Auth/Data API integration,
-authenticated account integration and device/import checks still need
-verification before deployment. Bill marks remain device-local; business-day shifts
-are deferred; extra-payment allocation remains disabled. Auth password screening
-and public RLS performance notices are documented in `phase1/V150_FIX_REPORT.md`.
-
-New transaction and import writes now persist their UUIDs before sending, confirm every returned row, and recover pending batches after reload. Expense, category, income and loan editors retain input on failure. These changes require no additional database migration.
-
-Fourteen live Auth/Data API checks passed with two disposable accounts, including real password sign-in, ownership isolation, UUID retries and payment/deletion/undo operations. Both accounts signed out and were removed with their test records; cleanup was verified. Email confirmation is currently disabled in the project and was not changed. Full browser integration with live Auth remains a release check.
-
-Large imports also recover when the Data API truncates the insert response at its row limit: all original UUIDs are read in 100-ID groups before the batch is confirmed. A 1,001-row test verifies this without duplicate inserts or partial success.
+Verify the destination host and email confirmation/reset delivery before publishing.
+Leaked-password protection needs a Supabase dashboard review. Billing and direct
+bank connections are not enabled. Weekend/holiday paycheck shifts and automatic
+extra-payment allocation remain deferred. Statement-format fixtures do not establish
+compatibility with every bank export. See the final PR checks for the verified revision.
