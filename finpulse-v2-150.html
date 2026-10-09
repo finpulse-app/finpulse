@@ -716,7 +716,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
       <div class="topbar"><div><h2>Bills</h2><p>All your recurring payments.</p></div><button class="btn btn-solid" onclick="showView('calendar',null);openDayPanel(null,'bill')">+ Add Bill</button></div>
       <div class="card" style="max-width:580px;">
         <div class="card-header"><span class="card-title">Recent overdue &amp; this month</span><span class="card-meta" id="bills-total"></span></div>
-        <p style="padding:12px 16px 0;font-size:12px;line-height:1.5;color:var(--text2);">Includes scheduled payments from the past 45 days through month end. Paid marks are remembered on this device only. They do not make a payment, remove calendar outflows, or change your bank balance.</p>
+        <p style="padding:12px 16px 0;font-size:12px;line-height:1.5;color:var(--text2);">Includes scheduled payments from the past 45 days through month end. Paid marks do not make a payment, remove calendar outflows, or change your bank balance.</p>
+        <div style="padding:8px 16px;font-size:12px;line-height:1.5;"><div id="bill-sync-status" role="status"></div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;"><button class="btn btn-outline" onclick="fpRefreshBillMarks()">Refresh paid status</button><button class="btn btn-outline" onclick="fpSyncLocalBillMarks()">Sync older device marks</button></div></div>
         <div class="card-body"><div class="bill-list" id="bill-list-view"></div></div>
       </div>
     </div>
@@ -1662,6 +1663,10 @@ async function undoLastDelete() {
 
 // Clear every account-scoped value before displaying or loading a different account.
 function fpResetAccountState() {
+  _fpBillMarkVersion++;
+  _fpBillMarkRows = [];
+  _fpBillMarksReady = false;
+  _fpBillMarkBusy = false;
   _importReadVersion++;
   _dataLoadVersion++;
   _fpMutationVersion++;
@@ -1893,6 +1898,8 @@ async function loadUserData() {
     return t;
   });
 
+  await fpRefreshBillMarks(false);
+  if (!stillCurrent()) return;
   // Check if we need to roll over last month's ending balance
   if (settings) await checkMonthRollover();
   if (!stillCurrent()) return;
@@ -3505,7 +3512,7 @@ function fpPrioritySnapshot(asOf, opts) {
   if (editedRecurring) warnings.push({ code: 'edited_recurring', text: editedRecurring + ' recurring expense' + (editedRecurring === 1 ? ' was' : 's were') + ' edited, so its repeat date follows the edited date.' });
   if (n30 === 0) warnings.push({ code: 'no_recent_spending', text: 'No everyday spending is recorded in the last ' + cfg.LOOKBACK + ' days, so projections may look better than reality.' });
   else if (!spendReliable) warnings.push({ code: 'spending_history', text: 'Your recorded everyday spending is too thin or too old to estimate from (it needs at least ' + cfg.MIN_SPEND_DAYS + ' different days in the last ' + cfg.LOOKBACK + ' days, the newest within ' + cfg.MAX_SPEND_GAP + ' days).' });
-  if (obligations.some(function(o) { return o.kind === 'bill'; })) warnings.push({ code: 'paid_marks_local', text: 'Bills you mark as paid are remembered on this device only.' });
+  if (obligations.some(function(o) { return o.kind === 'bill'; })) warnings.push({ code: 'paid_marks_local', text: 'Paid marks record status, not a bank payment. Older device marks need syncing; refresh Bills to see account status.' });
   cannotCalculate.push({ code: 'bank_balance', text: 'Your live bank balance. Only the balance you entered, with its date, is available.' });
   cannotCalculate.push({ code: 'future_spending', text: 'Future everyday spending that is not yet on the calendar.' });
   cannotCalculate.push({ code: 'essential_status', text: 'Which obligations are essential. FinPulse does not store that.' });
@@ -3587,7 +3594,7 @@ function fpPriorityActions(snap) {
         text: 'Your <strong>' + E(o.description) + ' payment of $' + fmt(o.amount) + '</strong>' + (o.paidSoFar > 0 ? ' (the rest after $' + fmt(o.paidSoFar) + ' already paid)' : '') + ' was due on ' + fpDateLabel(o.dueDate) + ', it\'s <strong>' + late + ' overdue</strong>. Make this payment now, or record it under Loans if you already paid.' });
     } else {
       actions.push({ id: 'overdue-bill-' + fpPriorityId(o.id), code: 'overdue_bill', level: 'p1',
-        text: '<strong>' + E(o.description) + ' ($' + fmt(o.amount) + ')</strong>' + (o.paidSoFar > 0 ? ' (the rest after $' + fmt(o.paidSoFar) + ' already paid)' : '') + ' was due on ' + fpDateLabel(o.dueDate) + ', it\'s <strong>' + late + ' overdue</strong>. Pay it now if you haven\'t. If you already did, mark it paid in Bills (remembered on this device only).' });
+        text: '<strong>' + E(o.description) + ' ($' + fmt(o.amount) + ')</strong>' + (o.paidSoFar > 0 ? ' (the rest after $' + fmt(o.paidSoFar) + ' already paid)' : '') + ' was due on ' + fpDateLabel(o.dueDate) + ', it\'s <strong>' + late + ' overdue</strong>. Pay it now if you haven\'t. If you already did, mark it paid in Bills (saved to your account).' });
     }
   });
 
@@ -3595,7 +3602,7 @@ function fpPriorityActions(snap) {
   (snap.unverified || []).forEach(function(o) {
     actions.push({ id: 'unverified-' + fpPriorityId(o.id) + '-' + o.dueDate, code: o.kind === 'loan' ? 'unverified_loan' : 'unverified_bill', level: 'p2',
       text: 'You added <strong>' + E(o.description) + '</strong> after its ' + fpDateLabel(o.dueDate) + ' due date, so FinPulse cannot tell whether that <strong>$' + fmt(o.amount) + '</strong> payment was made. '
-        + (o.kind === 'loan' ? 'If it was, record it under Loans.' : 'If it was, mark it paid in Bills (remembered on this device only).') + ' Until then it is counted as still owed.' });
+        + (o.kind === 'loan' ? 'If it was, record it under Loans.' : 'If it was, mark it paid in Bills (saved to your account).') + ' Until then it is counted as still owed.' });
   });
   (snap.possiblePayments || []).forEach(function(p) {
     actions.push({ id: 'maybe-paid-' + fpPriorityId(p.billId) + '-' + p.due, code: 'possible_payment', level: 'p2',
@@ -3727,7 +3734,8 @@ function fpPriorityActions(snap) {
 // Paid marks made on this device: { billId: [{ due, at }] } (localStorage). v149 (audit H3): each mark settles exactly the due date it
 // names. Older marks were a bare date ('YYYY-MM-DD'); they settle the due date in the same month (fpSettle). This session's
 // legacy monthly flags count as a date-only mark made today.
-function fpReadPaidMarks() {
+let _fpBillMarkRows = [], _fpBillMarksReady = false, _fpBillMarkBusy = false, _fpBillMarkVersion = 0;
+function fpReadLocalPaidMarks() {
   const uid = currentUser ? currentUser.id : 'u';
   const marks = {};
   let stored = {};
@@ -3742,6 +3750,75 @@ function fpReadPaidMarks() {
     Object.keys(ss).forEach(function(id) { if (ss[id] && !Object.prototype.hasOwnProperty.call(stored, id)) marks[id] = [{ due: null, at: fpIso(t) }]; });
   } catch(e) {}
   return marks;
+}
+function fpMergePaidMarks(local, rows) {
+  const marks = {};
+  Object.keys(local || {}).forEach(function(id) { marks[id] = fpMarksFor(local,id); });
+  (rows || []).forEach(function(row) {
+    let list = marks[row.bill_id] || [];
+    list = list.filter(function(m) { return m.due ? m.due !== row.due_date : m.at.slice(0,7) !== row.due_date.slice(0,7); });
+    if (row.paid) list.push({due:row.due_date,at:row.marked_at});
+    if (list.length) marks[row.bill_id] = list; else delete marks[row.bill_id];
+  });
+  return marks;
+}
+function fpReadPaidMarks() { return fpMergePaidMarks(fpReadLocalPaidMarks(), typeof _fpBillMarkRows === 'undefined' ? [] : _fpBillMarkRows); }
+
+async function fpRefreshBillMarks(render) {
+  if (!currentUser || _fpBillMarkBusy) return false;
+  const uid = currentUser.id, version = ++_fpBillMarkVersion;
+  try {
+    const rows = [];
+    for (let offset = 0; ; offset += 500) {
+      const result = await sb.from('bill_paid_marks').select('*').eq('user_id',uid).order('bill_id',{ascending:true}).order('due_date',{ascending:true}).range(offset,offset+499);
+      if (!currentUser || currentUser.id !== uid || version !== _fpBillMarkVersion) return false;
+      if (result.error || !Array.isArray(result.data)) throw result.error || new Error('Missing bill status');
+      rows.push.apply(rows,result.data);
+      if (result.data.length < 500) break;
+    }
+    _fpBillMarkRows = rows; _fpBillMarksReady = true;
+    if (render !== false) { renderBillsView(); renderPriorityReport(); updateBillBadge(); }
+    return true;
+  } catch(e) {
+    if (currentUser && currentUser.id === uid && version === _fpBillMarkVersion) {
+      _fpBillMarksReady = false;
+      if (render !== false) { renderBillsView(); showToast('Could not refresh paid status. Retry before changing a mark.','error'); }
+    }
+    return false;
+  }
+}
+
+async function fpSaveBillMarks(rows, ignoreDuplicates) {
+  if (!currentUser || _fpBillMarkBusy) return false;
+  const uid = currentUser.id, version = ++_fpBillMarkVersion;
+  const payload = rows.map(function(r) { return Object.assign({},r,{user_id:uid}); });
+  _fpBillMarkBusy = true;
+  try {
+    const result = await sb.from('bill_paid_marks').upsert(payload,{onConflict:'user_id,bill_id,due_date',ignoreDuplicates:!!ignoreDuplicates}).select('*');
+    if (!currentUser || currentUser.id !== uid || version !== _fpBillMarkVersion) return false;
+    if (result.error || !Array.isArray(result.data)) throw result.error || new Error('Missing confirmation');
+    if (!ignoreDuplicates && payload.some(function(row) { return !result.data.some(function(saved) { return saved.user_id===uid && saved.bill_id===row.bill_id && saved.due_date===row.due_date && saved.paid===row.paid && saved.marked_at===row.marked_at; }); })) throw new Error('Paid status was not confirmed');
+    result.data.forEach(function(row) { _fpBillMarkRows = _fpBillMarkRows.filter(function(old) { return old.bill_id!==row.bill_id || old.due_date!==row.due_date; }); _fpBillMarkRows.push(row); });
+    // Cache is optional once the server confirms. A blocked/full cache must not hide a successful account save.
+    try { localStorage.setItem('fp_bill_paid_marks_'+uid,JSON.stringify(fpReadPaidMarks())); } catch(e) {}
+    return true;
+  } catch(e) {
+    if (currentUser && currentUser.id === uid && version === _fpBillMarkVersion) showToast('Could not confirm paid status. Refresh to check before retrying.','error');
+    return false;
+  } finally { if (currentUser && currentUser.id===uid && version===_fpBillMarkVersion) _fpBillMarkBusy=false; }
+}
+
+async function fpSyncLocalBillMarks() {
+  if (!currentUser || !_fpBillMarksReady || _fpBillMarkBusy) return;
+  const uid=currentUser.id, local=fpReadLocalPaidMarks(), rows=[];
+  Object.keys(local).forEach(function(id) {
+    const bill=transactions.find(function(t){return t.id===id && (t.type==='bill'||(t.type==='expense'&&t.recurring&&t.category!=='loan_payment'));});
+    if (!bill) return;
+    local[id].forEach(function(m) { if (m.due) rows.push({bill_id:id,due_date:m.due,marked_at:m.at,paid:true}); });
+  });
+  if (!rows.length) { showToast('No dated device marks to sync. Review older marks using the paid controls.'); return; }
+  if (!await fpSaveBillMarks(rows,true) || !currentUser || currentUser.id!==uid) return;
+  if (await fpRefreshBillMarks()) showToast('Dated device marks synced. Existing account status was preserved.');
 }
 // Bill ids whose due dates in this calendar month are all settled (by a mark or a confident payment record), used by the Bills tab
 function fpBillPaidSetThisMonth() {
@@ -4042,7 +4119,7 @@ function showView(v, btn) {
     closeBottomSheet();
   }
   if (v === 'settings') { fpPrefillBalanceDate('settings-balance-date'); fpRefreshPayQuestion('settings-balance'); }
-  if (v === 'bills') renderBillsView();
+  if (v === 'bills') { renderBillsView(); fpRefreshBillMarks(); }
   if (v === 'loans') renderLoans();
   if (v === 'dreams') dUpdate();
   if (v === 'insights') renderInsights();
@@ -5237,6 +5314,8 @@ function fpBillStatusRows(asOf, throughIso) {
 }
 
 function renderBillsView() {
+  const status=document.getElementById('bill-sync-status');
+  if (status) status.textContent=_fpBillMarksReady?'Paid status saved to your account. Refresh on another device to see changes.':'Paid status could not be loaded. Refresh before changing marks.';
   const today = new Date();
   const todayDay = today.getDate();
   const sorted = fpBillStatusRows(today).sort(function(a, b) {
@@ -5270,7 +5349,7 @@ function renderBillsView() {
       else if (daysUntil <= 3) urgency = ' &middot; <span style="color:var(--warning);font-weight:600;">due in ' + daysUntil + 'd</span>';
     }
     return '<div class="bill-row' + (isPaid ? ' paid' : '') + '">'
-      + '<button class="bill-chk' + (isPaid ? ' on' : '') + '" aria-label="' + (isPaid ? 'Unmark ' : 'Mark oldest open payment for ') + fpEscHtml(b.description) + '" onclick="toggleBillPaid(\'' + b.id + '\')">' + (isPaid ? '&#10003;' : '') + '</button>'
+      + '<button class="bill-chk' + (isPaid ? ' on' : '') + '"' + (!_fpBillMarksReady || _fpBillMarkBusy ? ' disabled' : '') + ' aria-label="' + (isPaid ? 'Unmark ' : 'Mark oldest open payment for ') + fpEscHtml(b.description) + '" onclick="toggleBillPaid(\'' + b.id + '\')">' + (isPaid ? '&#10003;' : '') + '</button>'
       + '<div class="bill-info"><div class="bill-name">' + fpEscHtml(b.description) + '</div><div class="bill-due">Due ' + dueLabel + urgency + '</div></div>'
       + '<div class="bill-amt">' + (isPaid ? 'Cleared' : '-$' + fmt(row.openTotal)) + '</div>'
       + '</div>';
@@ -5291,54 +5370,34 @@ function renderBillsView() {
   el.innerHTML = html;
 }
 
-function toggleBillPaid(billId) {
+async function toggleBillPaid(billId) {
+  if (!currentUser || _fpBillMarkBusy) return false;
+  if (!_fpBillMarksReady) { showToast('Refresh paid status before changing a mark.','error'); return false; }
   const bill = transactions.find(function(x) { return String(x.id) === String(billId); });
-  if (!bill) return;
-  const today = new Date(), todayIso = fpIso(today);
-  const uid = currentUser ? currentUser.id : 'u';
-  const paidKey = 'fp_bills_paid_' + uid + '_' + today.getFullYear() + '_' + (today.getMonth() + 1);
-  const marksKey = 'fp_bill_paid_marks_' + uid;
-  let sessionSet = {}, raw = {};
-  try { sessionSet = JSON.parse(sessionStorage.getItem(paidKey) || '{}'); } catch(e) {}
-  try { raw = JSON.parse(localStorage.getItem(marksKey) || '{}'); if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid saved marks'); }
-  catch(e) { showToast('Could not read paid marks. Nothing was changed.', 'error'); return false; }
-  let list = fpMarksFor(raw, billId);
-  const first = todayIso.slice(0, 8) + '01', last = fpIso(new Date(today.getFullYear(), today.getMonth() + 1, 0, 12));
-  const monthDues = fpOccurrences(bill, first, last);
-  const marks = fpReadPaidMarks();
-  const from = fpIso(fpAddDays(today, -fpPriorityConfig().OVERDUE_LOOKBACK));
-  const to = monthDues.length ? monthDues[monthDues.length - 1] : todayIso;
-  const windowDates = fpOccurrences(bill, from, to < todayIso ? todayIso : to);
-  const open = windowDates.filter(function(d) { return !fpBillPaidFor(bill, d, todayIso, transactions, marks); });
-  const paidNow = windowDates.length > 0 && open.length === 0;
-  let message;
-  const legacyPaid = sessionSet[billId] && !Object.prototype.hasOwnProperty.call(raw, billId);
-  delete sessionSet[billId];   // v149 stores the due date with the mark; the old per-month session flag is no longer written
-  if (paidNow) {
-    const undoDates = monthDues.length ? monthDues : windowDates;
-    if (!list.some(function(m) { return !m.due || undoDates.indexOf(m.due) !== -1; }) && !legacyPaid) {
-      showToast('This payment is recorded as an expense. Edit the payment record to change its status.');
-      return false;
-    }
-    list = list.filter(function(m) { return m.due && undoDates.indexOf(m.due) === -1; });
-    message = 'Unmarked on this device';
+  if (!bill) return false;
+  const uid=currentUser.id, today=new Date(), todayIso=fpIso(today);
+  const monthFirst=todayIso.slice(0,8)+'01', last=fpIso(new Date(today.getFullYear(),today.getMonth()+1,0,12));
+  const monthDues=fpOccurrences(bill,monthFirst,last);
+  const from=fpIso(fpAddDays(today,-fpPriorityConfig().OVERDUE_LOOKBACK));
+  const dates=fpOccurrences(bill,from,last), marks=fpReadPaidMarks();
+  const open=dates.filter(function(d){return !fpBillPaidFor(bill,d,todayIso,transactions,marks)});
+  let rows, message;
+  if (dates.length && !open.length) {
+    const undoDates=monthDues.length?monthDues:dates;
+    const marked=fpMarksFor(marks,billId).filter(function(m){return !m.due || undoDates.indexOf(m.due)!==-1});
+    if (!marked.length) { showToast('This payment is recorded as an expense. Edit the payment record to change its status.'); return false; }
+    rows=undoDates.map(function(d){return{bill_id:billId,due_date:d,paid:false,marked_at:todayIso}});
+    message='Unmarked in your account';
   } else {
-    // v149 (audit H3): settle the OLDEST open due date only (an overdue one first, then this month's), and say what is still due
-    if (!open.length) { showToast('No payment for this bill is open right now'); return; }
-    list.push({ due: open[0], at: todayIso });
-    message = 'Marked the ' + fpDateLabel(open[0]) + ' payment as paid on this device' + (open.length > 1 ? '. ' + fpDateLabel(open[1]) + ' is still due.' : '');
+    if (!open.length) { showToast('No payment for this bill is open right now'); return false; }
+    rows=[{bill_id:billId,due_date:open[0],paid:true,marked_at:todayIso}];
+    message='Marked the '+fpDateLabel(open[0])+' payment as paid in your account'+(open.length>1?'. '+fpDateLabel(open[1])+' is still due.':'');
   }
-  if (list.length) raw[billId] = list; else raw[billId] = null; // suppress any leftover legacy session flag after unmarking
-  try { localStorage.setItem(marksKey, JSON.stringify(raw)); }
-  catch(e) { showToast('Could not save paid status. Nothing was changed.', 'error'); return false; }
-  try { sessionStorage.setItem(paidKey, JSON.stringify(sessionSet)); } catch(e) {}
-  showToast(message);
-  renderBillsView();
-  try { renderPriorityReport(); } catch(e) {}
-  updateBillBadge();
+  if (!await fpSaveBillMarks(rows) || !currentUser || currentUser.id!==uid) return false;
+  try { const key='fp_bills_paid_'+uid+'_'+today.getFullYear()+'_'+(today.getMonth()+1), flags=JSON.parse(sessionStorage.getItem(key)||'{}');delete flags[billId];sessionStorage.setItem(key,JSON.stringify(flags)); } catch(e) {}
+  showToast(message); renderBillsView(); renderPriorityReport(); updateBillBadge();
   return true;
 }
-
 
 
 // ── THE PLAN ────────────────────────────────────────────────────
@@ -5944,7 +6003,7 @@ function fpImportAmount(raw) {
   if (!value) return null;
   let negative = false;
   if (/^\(.*\)$/.test(value)) { negative = true; value = value.slice(1,-1).trim(); }
-  value = value.replace(/^\$/, '').trim();
+  value = value.replace(/^([+-]?)\$/, '$1').trim();
   if (!/^[+-]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(value)) return null;
   const amount = Number(value.replace(/,/g, ''));
   if (!Number.isFinite(amount) || (negative && amount < 0)) return null;

@@ -14,6 +14,7 @@ function make(names, extra={}) {
   const c = vm.createContext(Object.assign({console,Date,Math,JSON,parseFloat,isNaN,setTimeout(){},
     currentUser:{id:'A'},userSettings:{startingBalance:100,payAmount:0},monthBalances:{},transactions:[],
     _dataLoadVersion:0,_activeUserId:'A', savedPurchases:[],_importReadVersion:0,
+    _fpBillMarkRows:[],_fpBillMarksReady:true,_fpBillMarkBusy:false,_fpBillMarkVersion:0,fpRefreshBillMarks:async()=>true,renderPriorityReport(){},
     window:{},document:{getElementById:element,querySelector(){return element('modal')},querySelectorAll(){return []}},
     localStorage:{getItem:k=>cache[k]||null,setItem:(k,v)=>{cache[k]=v},removeItem:k=>{delete cache[k]}},
     crypto:{randomUUID:()=> '11111111-1111-4111-8111-111111111111'},
@@ -114,19 +115,26 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
     const c=make(['fpMonthlySpendingBreakdown'],{buildDayMap(y,m){assert.equal(y,2026);assert.equal(m,9);return dm}});
     const r=c.fpMonthlySpendingBreakdown(2026,9);assert.equal(r.fixedTotal,150);assert.equal(r.varTotal,3.75);assert.equal(r.total,153.75);
   });
-  for(const failure of ['write','corrupt']) await test('bill paid '+failure+' failure cannot show success or alter marks',()=>{
-    const c=make(['toggleBillPaid'],{transactions:[{id:'bill',type:'bill'}],sessionStorage:{getItem:()=>null,setItem(){}},fpIso:()=> '2026-10-08',fpAddDays:()=>new Date(2026,8,1),fpPriorityConfig:()=>({OVERDUE_LOOKBACK:45}),fpOccurrences:()=>['2026-10-03'],fpReadPaidMarks:()=>({}),fpBillPaidFor:()=>false,fpMarksFor:()=>[],fpDateLabel:s=>s,renderBillsView(){throw Error('failed save rendered')},updateBillBadge(){throw Error('failed save updated badge')}});
-    const value=failure==='corrupt'?'bad JSON':'{}';c._cache.fp_bill_paid_marks_A=value;
-    if(failure==='write')c.localStorage.setItem=()=>{throw Error('Storage full')};
-    assert.equal(c.toggleBillPaid('bill'),false);assert.equal(c._cache.fp_bill_paid_marks_A,value);assert.equal(c._messages.length,1);assert(c._messages[0][0].startsWith('Could not'));
+  for(const failure of ['returned','missing']) await test('bill paid '+failure+' confirmation cannot report success',async()=>{
+    const c=make(['fpSaveBillMarks'],{sb:{from:()=>({upsert(){return this},select:async()=>failure==='returned'?{error:{message:'offline'}}:{data:[]}})}});
+    assert.equal(await c.fpSaveBillMarks([{bill_id:'bill',due_date:'2026-10-03',paid:true,marked_at:'2026-10-08'}]),false);assert.equal(c._fpBillMarkRows.length,0);assert.equal(c._fpBillMarkBusy,false);assert(c._messages[0][0].startsWith('Could not'));
   });
   await test('explicit unpaid mark suppresses stale legacy session paid flag',()=>{
-    const c=make(['fpReadPaidMarks','fpMarksFor'],{fpIso:()=> '2026-10-08',sessionStorage:{getItem:()=>JSON.stringify({bill:true,legacy:true})}});
+    const c=make(['fpReadPaidMarks','fpReadLocalPaidMarks','fpMergePaidMarks','fpMarksFor'],{fpIso:()=> '2026-10-08',sessionStorage:{getItem:()=>JSON.stringify({bill:true,legacy:true})}});
     c._cache.fp_bill_paid_marks_A=JSON.stringify({bill:null});const marks=c.fpReadPaidMarks();assert(!marks.bill);assert.equal(marks.legacy.length,1);
   });
-  await test('bill unmark cannot claim to undo a recorded expense',()=>{
+  await test('bill unmark cannot claim to undo a recorded expense',async()=>{
     const c=make(['toggleBillPaid'],{transactions:[{id:'bill',type:'bill'}],sessionStorage:{getItem:()=>null,setItem(){throw Error('unexpected write')}},fpIso:()=> '2026-10-08',fpAddDays:()=>new Date(2026,8,1),fpPriorityConfig:()=>({OVERDUE_LOOKBACK:45}),fpOccurrences:()=>['2026-10-03'],fpReadPaidMarks:()=>({}),fpBillPaidFor:()=>true,fpMarksFor:()=>[]});
-    c._cache.fp_bill_paid_marks_A='{}';assert.equal(c.toggleBillPaid('bill'),false);assert.equal(c._cache.fp_bill_paid_marks_A,'{}');assert(c._messages[0][0].includes('recorded as an expense'));
+    c._cache.fp_bill_paid_marks_A='{}';assert.equal(await c.toggleBillPaid('bill'),false);assert.equal(c._cache.fp_bill_paid_marks_A,'{}');assert(c._messages[0][0].includes('recorded as an expense'));
+  });
+  await test('remote unmark overrides stale local and legacy marks',()=>{
+    const c=make(['fpMergePaidMarks','fpMarksFor']);const r=c.fpMergePaidMarks({bill:[{due:'2026-10-03',at:'2026-10-08'},{due:'2026-11-03',at:'2026-10-08'}]},[{bill_id:'bill',due_date:'2026-10-03',paid:false,marked_at:'2026-10-09'}]);assert.equal(r.bill.length,1);assert.equal(r.bill[0].due,'2026-11-03');assert.equal(c.fpMergePaidMarks({bill:[{due:null,at:'2026-10-08'}]},[{bill_id:'bill',due_date:'2026-10-03',paid:false}]).bill,undefined);
+  });
+  await test('confirmed account mark survives blocked local cache',async()=>{
+    const row={user_id:'A',bill_id:'bill',due_date:'2026-10-03',paid:true,marked_at:'2026-10-08'};const c=make(['fpSaveBillMarks'],{localStorage:{setItem(){throw Error('full')}},fpReadPaidMarks:()=>({}),sb:{from:()=>({upsert(){return this},select:async()=>({data:[row]})})}});assert.equal(await c.fpSaveBillMarks([row]),true);assert.equal(c._fpBillMarkRows.length,1);assert.equal(c._messages.length,0);
+  });
+  await test('account switch discards a late paid-mark write confirmation',async()=>{
+    let done;const row={user_id:'A',bill_id:'bill',due_date:'2026-10-03',paid:true,marked_at:'2026-10-08'};const c=make(['fpSaveBillMarks'],{sb:{from:()=>({upsert(){return this},select:()=>new Promise(r=>done=r)})}});const saving=c.fpSaveBillMarks([row]);c.currentUser={id:'B'};c._fpBillMarkRows=[];done({data:[row]});assert.equal(await saving,false);assert.equal(c._fpBillMarkRows.length,0);assert.equal(c._messages.length,0);
   });
   await test('bill totals count open occurrences and remaining partial amounts',()=>{
     const c=make(['fpBillStatusRows','fpIso','fpPad2','fpAddDays'],{transactions:[{id:'weekly',type:'bill'},{id:'yearly',type:'bill'}],fpPriorityConfig:()=>({OVERDUE_LOOKBACK:45}),fpReadPaidMarks:()=>({}),fpAmountDue:b=>b.id==='weekly'?10:100,fpOccurrences:(b,from,to)=>b.id==='weekly'?['2026-10-02','2026-10-09','2026-10-16','2026-10-23','2026-10-30']:[],fpPaidTotal:(b,d)=>({settled:d==='2026-10-02',total:d==='2026-10-09'?5:0})});

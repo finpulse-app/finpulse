@@ -12,6 +12,7 @@ function seed() {
   seq = 0; reqlog = []; rpcBackend.reset(); writeFault=null;
   const L = (id, d, bal, min, anchor) => ({ id, user_id: 'user-A', type: 'loan', description: d, amount: min, date: anchor, category: 'Other', recurring: true, frequency: 'monthly', anchor_date: anchor, apr: 12, min_payment: min, balance: bal, lender: 'Other', original_balance: bal, original_min_payment: min, principal_applied: null, loan_id: null, created_at: 'x' });
   db = {
+    bill_paid_marks: [],
     transactions: [L('loan-car', 'Test Car Loan', 5000, 200, '2026-10-10'), L('loan-small', 'Small Loan', 100, 200, '2026-10-20')],
     user_settings: [{ id: 's1', user_id: 'user-A', starting_balance: 500, payday: '2026-10-02', pay_frequency: 'biweekly', pay_amount: 1000, month_balances_json: null }]
   };
@@ -28,7 +29,17 @@ function dbop(s) {
   const match = r => s.filters.every(([c,v,op]) => op==='in' ? v.includes(r[c]) : String(r[c])===String(v));
   const check = rec => { for (const k of Object.keys(rec)) if (!COLS.includes(k) && s.table === 'transactions') return 'Could not find the \'' + k + '\' column of \'transactions\' in the schema cache'; if (s.table === 'transactions' && rec.type !== undefined && !TYPES.includes(rec.type)) return 'violates check constraint "transactions_type_check"'; return null; };
   let out;
-  if (s.op === 'insert') {
+  if (s.op === 'upsert' && s.table === 'bill_paid_marks') {
+    const made=[];
+    for(const p of s.payload) {
+      if(p.user_id!=='user-A')return{data:null,error:{message:'rls'}};
+      const old=rows.find(r=>r.user_id===p.user_id&&r.bill_id===p.bill_id&&r.due_date===p.due_date);
+      if(old&&s.ignoreDuplicates)continue;
+      if(old)Object.assign(old,p);else rows.push({...p});made.push({...p});
+    }
+    if(writeFault==='bill-reject'){writeFault=null;return{data:null,error:{message:'Injected bill failure'}};}
+    return{data:made,error:null};
+  } else if (s.op === 'insert') {
     const arr = Array.isArray(s.payload) ? s.payload : [s.payload]; const made = [];
     if(arr.some(p=>rows.some(r=>r.id===p.id))) return {data:null,error:{code:'23505',message:'duplicate key'}};
     for(const p of arr) { const e=check(p); if(e)return{data:null,error:{code:'23514',message:e}}; }
@@ -45,6 +56,7 @@ function dbop(s) {
   } else {
     out = rows.filter(r => r.user_id === 'user-A' && match(r)).map(x => ({ ...x }));
     if (s.order) out.sort((a, b) => (a[s.order[0]] > b[s.order[0]] ? 1 : -1) * (s.order[1] === 'desc' ? -1 : 1));
+    if (s.range) out=out.slice(s.range[0],s.range[1]+1);
     if (s.single) { if (!out.length) return { data: null, error: { message: 'no rows' } }; out = out[0]; }
   }
   if (s.op !== 'select' && s.single) { if (!out || !out.length) return {data:null,error:{code:'PGRST116',message:'no returned row'}}; out=out[0]; } return { data: out, error: null };
@@ -354,11 +366,11 @@ const loan = id => txns().find(t => t.id === id);
   const cb = await page.evaluate(i => { const r = document.querySelectorAll('#bill-list-view .bill-chk')[i].getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, chkIdx);
   await page.mouse.click(cb.x, cb.y); await wait(500);
   const mk1 = await page.evaluate(() => ({ marks: JSON.parse(localStorage.getItem('fp_bill_paid_marks_' + currentUser.id) || '{}'), toast: (document.getElementById('toast-msg') || {}).textContent || '', overdue: /overdue/.test(document.getElementById('priority-report').innerText) }));
-  ok('T14e marking a bill paid (real click) saves a mark naming the due date it settles (v149) and says so', JSON.stringify(mk1.marks.evil1) === JSON.stringify([{ due: '2026-10-03', at: '2026-10-08' }]) && /on this device/.test(mk1.toast), JSON.stringify(mk1));
+  ok('T14e marking a bill paid saves account status naming the due date', JSON.stringify(mk1.marks.evil1) === JSON.stringify([{ due: '2026-10-03', at: '2026-10-08' }]) && /in your account/.test(mk1.toast), JSON.stringify(mk1));
   ok('T14e the priority list stops calling the paid bill overdue', mk1.overdue === false, 'still overdue');
   await load();
   const mk2 = await page.evaluate(() => { transactions.push({ id: 'evil1', user_id: 'user-A', type: 'bill', description: 'Gas', amount: 90, date: '2026-10-03', category: null, recurring: true, frequency: 'monthly', anchor_date: '2026-10-03', created_at: '2026-09-01T00:00:00Z' }); const out = { set: fpBillPaidSetThisMonth(), marks: fpReadPaidMarks() }; transactions = transactions.filter(t => t.id !== 'evil1'); return out; });
-  ok('T14e the paid mark survives closing the session/reloading (localStorage), no claim of cross-device sync', mk2.marks.evil1 && mk2.marks.evil1[0].due === '2026-10-03' && mk2.set.evil1 === true, JSON.stringify(mk2));
+  ok('T14e account paid mark survives reload', mk2.marks.evil1 && mk2.marks.evil1[0].due === '2026-10-03' && mk2.set.evil1 === true, JSON.stringify(mk2));
   await page.evaluate(() => { transactions.push({ id: 'evil1', user_id: 'user-A', type: 'bill', description: 'Gas', amount: 90, date: '2026-10-03', category: null, recurring: true, frequency: 'monthly', anchor_date: '2026-10-03', created_at: '2026-09-01T00:00:00Z' }); showView('bills', null); renderBillsView(); toggleBillPaid('evil1'); }); await wait(400);
   const mk3 = await page.evaluate(() => ({ marks: JSON.parse(localStorage.getItem('fp_bill_paid_marks_' + currentUser.id) || '{}'), session: JSON.parse(sessionStorage.getItem('fp_bills_paid_' + currentUser.id + '_2026_10') || '{}') }));
   ok('T14e toggling again clears the mark in both stores', !mk3.marks.evil1 && !mk3.session.evil1, JSON.stringify(mk3));
@@ -691,21 +703,24 @@ const loan = id => txns().find(t => t.id === id);
   ok('T26 weekly bill totals count five payments and omit annual bills not due',await billTotal()==='$50 still due' && /5 payments open/.test(await page.textContent('#bill-list-view')) && /Weekly/.test(await page.textContent('#bill-list-view')) && !/Annual March/.test(await page.textContent('#bill-list-view')),await page.textContent('#bill-list-view'));
   const calendarBeforeMark=await cashOut();
   await page.click('[aria-label="Mark oldest open payment for Weekly bill"]');
+  await page.waitForTimeout(200);
   ok('T26 marking oldest overdue payment preserves four future occurrences',await billTotal()==='$40 still due' && /Oct 9/.test(await page.textContent('#bill-list-view')),await page.textContent('#bill-list-view'));
   ok('T26 upcoming unpaid payment remains in badge',await page.textContent('#bill-badge')==='1',await page.textContent('#bill-badge'));
   await page.click('[aria-label="Mark oldest open payment for Weekly bill"]');
+  await page.waitForTimeout(200);
   ok('T26 paid upcoming occurrence clears badge immediately while later payments remain',await billTotal()==='$30 still due' && await page.textContent('#bill-badge')==='0',await billTotal());
   await page.evaluate(()=>{renderCalendar();updateStats();});
   ok('T26 local paid marks do not refund calendar cash outflows',await cashOut()===calendarBeforeMark,await cashOut());
   const failureState=await page.evaluate(()=>localStorage.getItem('fp_bill_paid_marks_user-A'));
   await page.evaluate(()=>{window.__paidSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(this===localStorage && k==='fp_bill_paid_marks_user-A')throw Error('Injected full storage');return window.__paidSetItem.call(this,k,v)};});
   await page.click('[aria-label="Mark oldest open payment for Weekly bill"]');
-  ok('T26 failed browser storage leaves marks and displayed total unchanged',await page.evaluate(()=>localStorage.getItem('fp_bill_paid_marks_user-A'))===failureState && await billTotal()==='$30 still due' && /Could not save/.test(await toast()),await toast());
+  await page.waitForTimeout(300);
+  ok('T26 confirmed account mark survives blocked browser cache',await page.evaluate(()=>localStorage.getItem('fp_bill_paid_marks_user-A'))===failureState && await billTotal()==='$20 still due' && /in your account/.test(await toast()),await toast());
   await page.evaluate(()=>{Storage.prototype.setItem=window.__paidSetItem;delete window.__paidSetItem;});
   await page.clock.setFixedTime(new Date(2026,9,30,12));
   await page.evaluate(()=>{renderBillsView();updateBillBadge();});
   ok('T26 badge counts both today and next-month weekly payment',await page.textContent('#bill-badge')==='2',await page.textContent('#bill-badge'));
-  ok('T26 local status controls perform no financial backend writes',JSON.stringify(db.transactions)===billRecords && reqlog.filter(r=>r.op!=='select').length===billWrites,'paid status changed financial rows');
+  ok('T26 status controls perform no financial transaction writes',JSON.stringify(db.transactions)===billRecords && reqlog.filter(r=>r.op!=='select'&&r.table!=='bill_paid_marks').length===billWrites,'paid status changed financial rows');
   await page.clock.setFixedTime(new Date(2026,9,8,12));
 
   // ---- T27 Statement format and asynchronous review checks
@@ -725,6 +740,25 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>window.__lateImport);
   ok('T27 canceled pending read cannot repopulate import preview',await page.evaluate(()=>_pendingImportRows.length===0&&document.getElementById('import-preview').style.display==='none'),'stale read repopulated');
   await page.evaluate(()=>closeConnectAccounts());
+
+  // ---- T28 Shared paid status and account-owned confirmations
+  seed();db.transactions=[{id:'shared-bill',user_id:'user-A',type:'bill',description:'Shared bill',amount:25,date:'2026-10-09',anchor_date:'2026-10-09',frequency:'monthly',recurring:true}];
+  await load();await hideStage();await page.evaluate(()=>showView('bills',null));await page.waitForTimeout(300);
+  await page.click('[aria-label="Mark oldest open payment for Shared bill"]');await page.waitForTimeout(300);
+  ok('T28 paid status confirmed by account row',db.bill_paid_marks.some(r=>r.bill_id==='shared-bill'&&r.paid===true)&&await billTotal()==='All cleared ✓',JSON.stringify(db.bill_paid_marks));
+  await page.evaluate(()=>{localStorage.removeItem('fp_bill_paid_marks_user-A');sessionStorage.clear();});await load();await hideStage();await page.evaluate(()=>showView('bills',null));await page.waitForTimeout(300);
+  ok('T28 clean device cache restores paid status from server',await billTotal()==='All cleared ✓',await billTotal());
+  db.bill_paid_marks[0].paid=false;
+  await page.click('button:has-text("Refresh paid status")');await page.waitForTimeout(300);
+  ok('T28 another device unmark clears stale local status',await billTotal()==='$25 still due'&&await page.textContent('#bill-badge')==='1',await billTotal());
+  const old={due:'2026-10-09',at:'2026-10-08'};await page.evaluate(m=>localStorage.setItem('fp_bill_paid_marks_user-A',JSON.stringify({'shared-bill':[m]})),old);
+  await page.click('button:has-text("Sync older device marks")');await page.waitForTimeout(400);
+  ok('T28 syncing old marks preserves account unmark tombstone',db.bill_paid_marks[0].paid===false&&await billTotal()==='$25 still due',JSON.stringify(db.bill_paid_marks));
+  writeFault='bill-reject';
+  await page.click('[aria-label="Mark oldest open payment for Shared bill"]');await page.waitForTimeout(300);
+  ok('T28 missing write confirmation never shows paid success',await billTotal()==='$25 still due'&&/Could not confirm/.test(await toast()),await toast());
+  await page.click('button:has-text("Refresh paid status")');await page.waitForTimeout(300);
+  ok('T28 refresh recovers committed paid mark after lost confirmation',await billTotal()==='All cleared ✓',await billTotal());
 
   // ---- console / network
   const dbErrors = reqlog.filter(r => r.error);

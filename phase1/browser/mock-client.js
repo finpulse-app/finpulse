@@ -5,6 +5,8 @@
     const api = {
       select(cols) { if (spec.op !== 'select') spec.returning = true; return api; },
       insert(p) { spec.op = 'insert'; spec.payload = p; return api; },
+      upsert(p,o) { spec.op = 'upsert'; spec.payload=p;spec.ignoreDuplicates=!!(o&&o.ignoreDuplicates);return api; },
+      range(a,b) { spec.range=[a,b];return api; },
       update(p) { spec.op = 'update'; spec.payload = p; return api; },
       delete() { spec.op = 'delete'; return api; },
       in(c, v) { spec.filters.push([c, v, 'in']); return api; },
