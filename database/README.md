@@ -1,8 +1,8 @@
 # Atomic FinPulse operations
 
-`atomic-loan-operations.sql` is reviewed deployment SQL. It has **not** been
-applied to the live Supabase project. Apply it through the migration workflow
-before deploying this candidate HTML. The client deliberately fails clearly if
+`atomic-loan-operations.sql` is reviewed deployment SQL. It was applied to
+FinPulse Supabase as the atomic_transaction_operations migration. The updated
+HTML remains a draft and still requires staged Auth/Data API verification. The client deliberately fails clearly if
 the RPC is missing; it never falls back to separate balance/payment writes.
 
 The public `fp_mutate_transaction` wrapper runs as the caller. Its private

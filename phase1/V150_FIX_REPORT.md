@@ -1,84 +1,71 @@
 # FinPulse v150 review candidate
 
-Based on the user-supplied redacted v149 review ZIP. Original v149 source is retained
-as `finpulse-v2-149.html`; v150 is a separate candidate. `index.html` is unchanged.
+Draft PR: https://github.com/finpulse-app/finpulse/pull/1
+Verified code revision: `ba652e70b2faa6668f77f7fcd73be0586e723dea`.
+All seven jobs passed in [GitHub Actions run 37989499589](https://github.com/finpulse-app/finpulse/actions/runs/37989499589).
 
-## Changes
+## Implemented
 
-- Escape transaction descriptions and category/lender labels at HTML display
-  boundaries in expenses, calendar details, loan dialogs/cards, bills, income and
-  Insights. Stored descriptions and financial matching remain unchanged.
-- Require a successful returned settings row before updating settings, dated
-  balances or the browser cache. Read errors, write errors, network exceptions and
-  zero-row writes preserve the prior state. Balance/setup/income dialogs remain
-  open after failure and do not show a success message.
-- Load both settings and transactions for a captured account ID, and discard
-  responses from an older load or a different signed-in account. Clear financial
-  state, pending dialogs/imports/undo state and cached Insights on account changes.
-  Reset the visible section to Calendar before displaying the next account.
-- Use a year-and-account-scoped skipped-purchase cache. Legacy unscoped cache is
-  deliberately not imported because its account cannot be determined.
-- Open the authenticated app after signup only when Supabase returns a session.
-  Otherwise show the email-confirmation message.
-- Reject impossible CSV dates instead of normalizing them into another month.
-  Supported formats: ISO date (optionally followed by a timestamp), MM/DD/YYYY and
-  MM/DD/YY. Invalid/unsupported rows use the existing unreadable-row summary.
-- Restore only the existing publicly published Supabase anon key in v150. v149
-  remains redacted. No service-role keys or private financial data are included.
-- Preserve explicit zero loan balances when calculating a payment or reversing
-  payment deletion/undo. A paid-off loan cannot use its monthly amount as debt.
-- Add standard-library Node regression checks and GitHub Actions for four time
-  zones. Adjust the supplied browser fake backend to return settings rows for
-  `.select().single()` after writes and model signup sessions correctly; make its
-  Playwright module path configurable.
+The candidate preserves the supplied redacted v149 as a control and fixes unsafe
+stored-text rendering, failed settings saves, account state leaking across account
+changes, signup before email confirmation, and impossible imported dates. Failed
+settings saves preserve the old state/cache and keep dialogs open. Account and
+load guards discard stale responses. Skipped-purchase caches are account/year scoped.
+
+Loan recording, transaction deletion and undo now call one database operation.
+Regular and optional extra payment rows commit with their principal reduction.
+Deletion/undo commit with the matching balance reversal. The database calculates
+from stored owner rows, locks changes, and protects receipts in a private schema.
+Undo restores the original row UUID so payment links survive restoring a loan.
+Explicit zero balances remain zero. Legacy regular payments retain the prior
+interest estimate only when a unique owned loan matches; ambiguous matches fail.
+
+A pending operation UUID is stored before sending the request. A lost confirmation
+can be retried without applying a second payment. Reload offers Check change to
+recover pending recording, deletion or undo. Success animations/toasts await a
+commit; failed forms stay open, confirmation controls recover, and undo state is
+retained. Responses and animations from a different account/dialog are discarded.
 
 ## Verification
 
-40 focused client regression checks pass in America/New_York, UTC, America/Los_Angeles and
-Pacific/Auckland. They include fault injection, zero-row writes, valid/invalid
-signup sessions, HTML payload rendering, leap-year dates, empty new accounts,
-late account responses, clearing pending state, cache isolation, dated-balance
-failure and keeping failed edit dialogs open. Four additional checks cover numeric
-and text zero balances, deleting a payment from a paid-off loan and undo.
+- 40 client regression tests passed in New York, UTC, Los Angeles and Auckland.
+- 26 real PostgreSQL 17 tests passed against the live schema's column constraints
+  and synthetic accounts. They cover commit/rollback, injected failures, retries,
+  concurrent requests, cross-account denial, anonymous access, receipt permissions,
+  zero balances, payment links, legacy matching and stale undo.
+- 134 Chromium browser assertions passed in New York and Auckland. This includes
+  real clicks and recovery after reload for a committed operation whose response
+  was lost. Browser tests use a fake backend; database tests run independently.
+- The unchanged formula suite has 226 passes in each of four time zones, 18
+  unavailable v147 comparisons and 12 skips. Missing comparisons are never counted
+  as passes. Inline JavaScript and changed test scripts pass syntax checks.
 
-The supplied formula suite is unchanged. Against v150 it reports the same result
-as v149 in all four time zones: 226 passes, 18 missing-v147 comparison failures,
-12 skips (missing v148 comparisons and the deferred payday behavior).
-`run-current-formulas.js` labels the 18 missing-input failures as UNAVAILABLE and
-fails on any other failure. These missing comparisons are never counted as passes.
+## Supabase change and verification
 
-The original five independent audit reproductions failed against v149 before
-implementation. Their failure scenarios are covered by the new regression suite.
-Full inline JavaScript and the adapted browser harness pass syntax checks.
+The additive `atomic_transaction_operations` migration was applied to FinPulse
+project `qllshfubwzdoiyavypan`. It adds the private receipts table, private operation
+function, public invoker wrapper, and an index for owner-scoped transaction reads.
+No existing financial records were changed. The public `index.html`, Auth settings
+and website deployment remain unchanged; the updated client remains a draft.
 
-Browser tests run on GitHub-hosted Chromium in New York and Auckland time zones,
-with Playwright 1.58.2 and a fake backend. The first run passed 122 checks with zero failures in each time zone
-(commit f9624ab). The zero-balance revision (bd4dc87) also passed all 122
-checks in each time zone. All six GitHub jobs passed in run 37986767395. Local Chrome aborted
-before any assertion ran. No live Supabase mutation or two-account backend
-test was performed. Local tests use synthetic values and mocked responses.
+Live metadata checks confirmed the deployed function bodies match the tested SQL,
+empty search paths, anonymous execute denial, RLS on receipts, and no client
+SELECT/INSERT/UPDATE access to receipts. An unauthenticated function call was
+rejected and created no receipt. No signed-in financial mutation was run live.
 
-## Remaining release blockers
+Security advisor: the new [no-policy information notice](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy)
+is intentional: private receipts deny all direct client access, and the private
+function accesses them under its owner with explicit account checks. The existing
+[disabled leaked-password protection warning](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)
+remains. Performance notices concern existing [per-row auth checks in public RLS](https://supabase.com/docs/guides/database/database-linter?lint=0003_auth_rls_initplan)
+and the [new index not yet used](https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index).
 
-Loan recording, transaction deletion and undo now use one atomic database RPC.
-The deployment SQL is pending and must be applied before deploying this client.
-Other transaction writes still need consistent error/account-transition handling.
-Bill paid marks remain local to a device. Twice-monthly business-day shifts are
-deferred. Extra-payment allocation stays disabled. Staging auth/database integration,
-real imports and device checks are required before deployment.
+## Remaining release checks
 
-No production files, Supabase rows/schema, Auth configuration or deployment were
-changed. The GitHub work is a draft pull request for review.
-
-## Atomic-operation follow-up
-
-The client now uses the database RPC for recording, deletion and undo. Pending
-operation IDs survive reloads and retries. Failed saves retain input and undo state;
-a lost response cannot record the same payment twice. A Check change notice recovers
-pending recording/deletion/undo after reload. Account and dialog changes discard
-late responses and animations. Undo preserves transaction IDs and loan links.
-
-The first PostgreSQL 17 run passed 22 rollback, ownership, permission, retry and
-concurrency checks. Four additional database checks and the updated browser/client
-code are awaiting the next GitHub run. Client tests pass 40 checks locally.
-See database/README.md for security, legacy matching and deployment details.
+Other transaction writes (including loan edits, new entries and imports) still
+need consistent error and account-transition handling. Verify real Supabase sign-in,
+email confirmation, two-account API behavior and staged read/write flows before
+release. Real statement imports and device checks remain. Bill settlement marks
+are device-local, twice-monthly business-day shifts are deferred, and extra-payment
+allocation remains disabled. No local developer tools or browser package installs
+were required; test dependencies run on GitHub's machines.

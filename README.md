@@ -1,53 +1,37 @@
 # FinPulse development
 
-`finpulse-v2-150.html` is the current review candidate. It is based on the supplied
-v149 review ZIP, with fixes for unsafe description rendering, failed settings
-writes, account state isolation, signup awaiting email confirmation, and invalid
-CSV dates. The older numbered HTML files are historical snapshots.
+`finpulse-v2-150.html` is the review candidate based on the supplied v149 review
+ZIP. It fixes settings-save failures, unsafe text rendering, account isolation,
+signup confirmation, invalid import dates, and atomic loan recording/deletion/undo.
+The original redacted v149 is retained for regression controls. The candidate uses
+only the existing public Supabase anon key. Production `index.html` is unchanged.
 
-The production entry point `index.html` is unchanged. This branch is not a release.
-v149 is preserved as the original redacted review input for regression controls.
-The v150 client uses the existing project's public anon key, never a service-role key.
+The atomic database operation has been added to FinPulse Supabase through the
+`atomic_transaction_operations` migration. The updated HTML remains in a draft PR,
+not deployed. See `database/README.md` for ownership and retry behavior.
 
 ## Checks
 
-Requires Node.js 22 or newer; no npm install is required for the formula and
-security tests.
+Node.js 22 or newer runs the standard-library client and formula checks without
+npm dependencies:
 
 ```sh
 TZ=America/New_York node phase1/run-security-tests.js finpulse-v2-150.html
 TZ=America/New_York node phase1/run-current-formulas.js finpulse-v2-150.html
 ```
 
-GitHub Actions repeats these commands in four time zones. The original formula
-suite is preserved in `phase1/run-tests-v149.js`. It needs v147 and v148 to run
-historical comparison tests. The wrapper reports missing comparison inputs as
-unavailable, never as passing, and fails for other assertion failures.
+GitHub repeats these in four time zones, runs Chromium browser checks in New York
+and Auckland, and runs real SQL tests on a disposable PostgreSQL 17 service.
+Dependencies are installed only on GitHub runners. Never run the database fixture
+or test script on a real Supabase project.
 
-The supplied browser harness remains in `phase1/browser/`. Its Playwright import
-is configured through `PLAYWRIGHT_MODULE` or the installed `playwright` package,
-and `CHROME` can select a browser executable. It uses a fake backend. GitHub Actions
-runs it on Chromium in New York and Auckland time zones, installing dependencies
-only on the GitHub runner. Each run passed 122 checks on revision bd4dc87 (Actions run 37986767395).
-Local Chrome aborted on launch.
+On code revision ba652e7, all seven jobs passed: 40 client tests in each time zone,
+26 database tests, 134 browser assertions in each browser time zone, and 226 formula
+passes per time zone. Eighteen historical comparisons are unavailable because v147
+is missing, and 12 checks are skipped; missing comparisons are not passes.
 
-```sh
-TZ=America/New_York node phase1/browser/browser-test-v149.js finpulse-v2-150.html
-```
-
-Do not deploy this candidate until browser checks and a staging Supabase test
-confirm its read/write and auth flows. Settings saves now require a returned row;
-zero-row writes and explicit errors leave the form open and do not update cache.
-
-## Remaining work
-
-- Loan payment recording/deletion still needs atomic backend operations and
-  comprehensive error handling. These changes do not fix every transaction write.
-- Bill settlement marks remain local to a device.
-- Twice-monthly business-day shifts remain deferred.
-- The Supabase security advisor flags disabled compromised-password protection.
-- Extra-payment allocation remains disabled.
-- CSV dates accept ISO dates (optionally with a timestamp), MM/DD/YYYY, or
-  MM/DD/YY. Ambiguous free-form dates are rejected and counted as unreadable rows.
-
-See `phase1/V150_FIX_REPORT.md` for verification evidence and scope.
+Browser checks use a fake backend. Real Supabase Auth/Data API integration,
+remaining transaction-write failure handling and device/import checks still need
+verification before deployment. Bill marks remain device-local; business-day shifts
+are deferred; extra-payment allocation remains disabled. Auth password screening
+and public RLS performance notices are documented in `phase1/V150_FIX_REPORT.md`.
