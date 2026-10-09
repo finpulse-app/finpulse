@@ -30,3 +30,7 @@ Leaked-password protection needs a Supabase dashboard review. Billing and direct
 bank connections are not enabled. Weekend/holiday paycheck shifts and automatic
 extra-payment allocation remain deferred. Statement-format fixtures do not establish
 compatibility with every bank export. See the final PR checks for the verified revision.
+
+## Product functionality
+
+See phase1/PRODUCT_FUNCTIONALITY.md for account-saved goals, calendar agenda, expense search, CSV/JSON exports, calculator improvements and design polish. Current work prioritizes the look and everyday functionality; login/security configuration and publishing are deferred.

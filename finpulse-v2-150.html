@@ -495,7 +495,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <button class="nav-item active" onclick="showView('calendar',this)"><span class="nav-dot"></span> Calendar</button>
       <button class="nav-item" onclick="showView('expenses',this)"><span class="nav-dot"></span> Expenses</button>
       <button class="nav-item" onclick="showView('loans',this)"><span class="nav-dot"></span> Loans &amp; Debt</button>
-      <button class="nav-item" onclick="showView('plan',this)"><span class="nav-dot"></span> The Plan</button>
+      <button class="nav-item" onclick="showView('plan',this)"><span class="nav-dot"></span> Goals</button>
       <button class="nav-item" onclick="showView('bills',this)"><span class="nav-dot"></span> Bills<span class="nav-bill-badge" id="bill-badge" style="display:none;"></span></button>
       <button class="nav-item" onclick="showView('history',this)"><span class="nav-dot"></span> Your Story</button>
       <button class="nav-item" onclick="showView('insights',this)"><span class="nav-dot"></span> Insights</button>
@@ -4153,6 +4153,7 @@ function showView(v, btn) {
   document.querySelectorAll('[id^="view-"]').forEach(e => e.style.display = 'none');
   const viewEl = document.getElementById('view-' + v);
   if (viewEl) viewEl.style.display = 'block';
+  window.scrollTo(0,0);
   document.querySelectorAll('.nav-item').forEach(e => e.classList.toggle('active',(e.getAttribute('onclick')||'').includes("'"+v+"'")));
   if (btn) btn.classList.add('active');
   // Always force-close bottom sheet when leaving calendar
