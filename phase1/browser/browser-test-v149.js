@@ -298,10 +298,10 @@ const loan = id => txns().find(t => t.id === id);
   await page.click('#import-confirm-btn'); await page.waitForTimeout(1000);
   ok('T13h only the 2 new rows saved', txns().length === n0 + 2 && txns().filter(t => t.description === 'BATCH ROW').length === 1, 'rows ' + (txns().length - n0));
   // I. descriptions are escaped in the duplicates list
-  await pick([['x.csv', H + '2026-10-27,<i id="xss">hello</i>,-2.00\n']]);
+  await pick([['x.csv', H + '2026-10-27,"<i id=""xss"">hello</i>",-2.00\n']]);
   await page.click('#import-confirm-btn'); await page.waitForTimeout(800);
-  await pick([['x2.csv', H + '2026-10-27,<i id="xss">hello</i>,-2.00\n']]);
-  ok('T13i HTML in a description is shown as text in the duplicate list', await page.evaluate(() => !document.querySelector('#import-preview #xss') && /<i id=xss>hello/.test(document.getElementById('import-preview').innerText)), '');
+  await pick([['x2.csv', H + '2026-10-27,"<i id=""xss"">hello</i>",-2.00\n']]);
+  ok('T13i HTML in a description is shown as text in the duplicate list', await page.evaluate(() => !document.querySelector('#import-preview #xss') && /<i id="xss">hello/.test(document.getElementById('import-preview').innerText)), '');
   await page.click('#import-cancel-btn'); await page.waitForTimeout(300);
   await page.evaluate(() => closeConnectAccounts());
 
@@ -707,6 +707,24 @@ const loan = id => txns().find(t => t.id === id);
   ok('T26 badge counts both today and next-month weekly payment',await page.textContent('#bill-badge')==='2',await page.textContent('#bill-badge'));
   ok('T26 local status controls perform no financial backend writes',JSON.stringify(db.transactions)===billRecords && reqlog.filter(r=>r.op!=='select').length===billWrites,'paid status changed financial rows');
   await page.clock.setFixedTime(new Date(2026,9,8,12));
+
+  // ---- T27 Statement format and asynchronous review checks
+  seed();await load();await hideStage();
+  await page.evaluate(()=>openConnectAccounts());
+  await pick([['debit-credit.csv','Posting Date,Description,Debit,Credit\r\n10/09/2026,"Shop, ""local""\nbranch",25,\r\n10/10/2026,Pay,,100\r\n10/11/2026,Bad amount,12oops,\r\n']]);
+  ok('T27 actual file picker preserves multiline quoted text and debit/credit direction',/Shop, "local"/.test(await page.textContent('#import-preview')) && /Importing 2: -\$25 in expenses, \+\$100 in income/.test(await page.textContent('#import-totals')) && /1 row could not be read/.test(await page.textContent('#import-preview')),await page.textContent('#import-preview'));
+  await page.uncheck('#import-preview input[data-import-idx="0"]');
+  ok('T27 new transactions can be excluded before saving',/Importing 1: -\$0 in expenses, \+\$100 in income/.test(await page.textContent('#import-totals')),await page.textContent('#import-totals'));
+  await page.click('#import-confirm-btn');await page.waitForTimeout(1200);
+  ok('T27 only selected income saved with correct amount and date',db.transactions.some(t=>t.description==='Pay'&&t.type==='income'&&t.amount===100&&t.date==='2026-10-10')&&!db.transactions.some(t=>/Shop,/.test(t.description)),'selection or direction failed');
+  await page.selectOption('#import-account-type','card-negative');
+  await pick([['card-negative.csv','Date,Description,Amount\n2026-10-09,Card purchase,-12\n2026-10-10,Card payment,50\n']],'card-negative');
+  ok('T27 negative card purchase convention excludes positive card payment',/Importing 1: -\$12/.test(await page.textContent('#import-totals')) && /1 card payment or credit row/.test(await page.textContent('#import-preview')),await page.textContent('#import-preview'));
+  await page.evaluate(()=>cancelStatementImport());
+  await page.evaluate(()=>{window.__lateFile=null;window.__lateImport=handleStatementFiles([{name:'late.csv',text:()=>new Promise(r=>window.__lateFile=r)}]);cancelStatementImport();window.__lateFile('Date,Description,Amount\n2026-10-09,Late row,-5\n');});
+  await page.evaluate(()=>window.__lateImport);
+  ok('T27 canceled pending read cannot repopulate import preview',await page.evaluate(()=>_pendingImportRows.length===0&&document.getElementById('import-preview').style.display==='none'),'stale read repopulated');
+  await page.evaluate(()=>closeConnectAccounts());
 
   // ---- console / network
   const dbErrors = reqlog.filter(r => r.error);

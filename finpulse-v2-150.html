@@ -1036,10 +1036,12 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
     <div style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:18px;">Direct bank connections are coming soon. For now, upload your statement CSVs (up to 20 files) and we'll read them in.</div>
     <div class="form-group">
       <label class="form-label">This batch is from a</label>
-      <select class="form-select" id="import-account-type">
-        <option value="bank">Bank / Checking Account</option>
-        <option value="card">Credit Card</option>
+      <select class="form-select" id="import-account-type" onchange="cancelStatementImport()">
+        <option value="bank">Bank: expenses negative, income positive</option>
+        <option value="card">Card: purchases positive</option>
+        <option value="card-negative">Card: purchases negative</option>
       </select>
+      <div style="font-size:11px;color:var(--text2);margin-top:6px;">Choose the sign used for purchases in your file. Separate Debit/Credit columns use their own direction. Card payments and credits are excluded; review the preview before importing.</div>
     </div>
     <div class="form-group">
       <label class="form-label">Upload statement CSVs</label>
@@ -1660,6 +1662,7 @@ async function undoLastDelete() {
 
 // Clear every account-scoped value before displaying or loading a different account.
 function fpResetAccountState() {
+  _importReadVersion++;
   _dataLoadVersion++;
   _fpMutationVersion++;
   _fpMutationBusy = false;
@@ -5882,6 +5885,7 @@ async function saveStartingBalance() {
 }
 
 function openConnectAccounts() {
+  _importReadVersion++;
   document.getElementById('import-preview').style.display = 'none';
   document.getElementById('import-confirm-btn').style.display = 'none';
   document.getElementById('import-cancel-btn').style.display = 'none';
@@ -5890,11 +5894,13 @@ function openConnectAccounts() {
   document.getElementById('connect-accounts-overlay').style.display = 'flex';
 }
 function closeConnectAccounts() {
+  _importReadVersion++;
   // Closing without confirming saves nothing
   _pendingImportRows = [];
   document.getElementById('connect-accounts-overlay').style.display = 'none';
 }
 function cancelStatementImport() {
+  _importReadVersion++;
   _pendingImportRows = [];
   document.getElementById('import-preview').style.display = 'none';
   document.getElementById('import-confirm-btn').style.display = 'none';
@@ -5907,24 +5913,74 @@ function cancelStatementImport() {
 // Reads CSV exports from a bank or card statement, parses them, categorizes each row
 // using the same keyword logic as manual entry, and shows a preview before committing.
 let _pendingImportRows = [];
+let _importReadVersion = 0;
 
 function parseCsvText(text) {
-  // Simple CSV parser that handles quoted fields with embedded commas
   const rows = [];
-  const lines = text.split(/\r\n|\n/).filter(function(l) { return l.trim().length > 0; });
-  lines.forEach(function(line) {
-    const fields = [];
-    let cur = '', inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') { inQuotes = !inQuotes; }
-      else if (ch === ',' && !inQuotes) { fields.push(cur.trim()); cur = ''; }
-      else { cur += ch; }
-    }
-    fields.push(cur.trim());
-    rows.push(fields);
-  });
+  const input = String(text || '').replace(/^\uFEFF/, '');
+  let fields = [], cur = '', quoted = false, closed = false;
+  function field() { fields.push(cur.trim()); cur = ''; closed = false; }
+  function row() { field(); if (fields.some(function(v) { return v !== ''; })) rows.push(fields); fields = []; }
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (quoted) {
+      if (ch === '"' && input[i+1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') { quoted = false; closed = true; }
+      else cur += ch;
+    } else if (ch === '"') {
+      if (cur.trim() || closed) throw new Error('Unexpected quote in CSV');
+      cur = ''; quoted = true;
+    } else if (ch === ',') field();
+    else if (ch === '\r' || ch === '\n') { row(); if (ch === '\r' && input[i+1] === '\n') i++; }
+    else { if (closed && ch.trim()) throw new Error('Text after quoted CSV field'); cur += ch; }
+  }
+  if (quoted) throw new Error('Unclosed quoted CSV field');
+  if (cur.length || fields.length) row();
   return rows;
+}
+
+function fpImportAmount(raw) {
+  let value = String(raw == null ? '' : raw).trim();
+  if (!value) return null;
+  let negative = false;
+  if (/^\(.*\)$/.test(value)) { negative = true; value = value.slice(1,-1).trim(); }
+  value = value.replace(/^\$/, '').trim();
+  if (!/^[+-]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(value)) return null;
+  const amount = Number(value.replace(/,/g, ''));
+  if (!Number.isFinite(amount) || (negative && amount < 0)) return null;
+  return negative ? -amount : amount;
+}
+
+function fpParseStatement(text, accountType) {
+  const rows = parseCsvText(text), result = { rows: [], unreadable: 0, cardCredits: 0 };
+  if (rows.length < 2) return result;
+  const header = rows[0];
+  const dateIdx = findColumn(header, ['transaction date','posting date','date']);
+  const descIdx = findColumn(header, ['description','merchant','payee','name']);
+  const moneyColumn = function(names) { return header.findIndex(function(h) { return names.indexOf(h.toLowerCase().trim()) !== -1; }); };
+  const amtIdx = moneyColumn(['amount','transaction amount']);
+  const debitIdx = moneyColumn(['debit','debit amount','withdrawal','withdrawals']);
+  const creditIdx = moneyColumn(['credit','credit amount','deposit','deposits']);
+  if (dateIdx < 0 || descIdx < 0 || (amtIdx < 0 && debitIdx < 0 && creditIdx < 0)) return result;
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i], description = String(row[descIdx] || '').trim();
+    const date = parseImportDate(row[dateIdx]);
+    let rawAmount;
+    if (amtIdx >= 0) rawAmount = fpImportAmount(row[amtIdx]);
+    else {
+      const debit = debitIdx < 0 || !String(row[debitIdx] || '').trim() ? 0 : fpImportAmount(row[debitIdx]);
+      const credit = creditIdx < 0 || !String(row[creditIdx] || '').trim() ? 0 : fpImportAmount(row[creditIdx]);
+      if (debit === null || credit === null || (debit !== 0 && credit !== 0)) rawAmount = null;
+      else rawAmount = Math.abs(credit) - Math.abs(debit);
+    }
+    if (!date || !description || rawAmount === null || rawAmount === 0) { result.unreadable++; continue; }
+    // Debit/Credit columns describe direction explicitly; signed Amount columns use the chosen convention.
+    const cardPositive = accountType === 'card' && amtIdx >= 0;
+    if ((accountType === 'card' || accountType === 'card-negative') && (cardPositive ? rawAmount < 0 : rawAmount > 0)) { result.cardCredits++; continue; }
+    const expense = cardPositive || rawAmount < 0;
+    result.rows.push({type:expense?'expense':'income',description:description,amount:Math.abs(rawAmount),date:fpIso(date),category:expense?categorizeImportedRow(description):null,recurring:false});
+  }
+  return result;
 }
 
 function findColumn(headerRow, candidates) {
@@ -5963,7 +6019,7 @@ function categorizeImportedRow(description) {
 // Parse bank-statement dates as LOCAL calendar dates (new Date('2026-10-01') is UTC and lands on the previous day in US time zones)
 function parseImportDate(raw) {
   const str = String(raw || '').replace(/"/g, '').trim();
-  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T ]\d{2}:\d{2})/.exec(str);
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ]([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d)(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?)?$/.exec(str);
   let y, mo, day;
   if (m) { y = +m[1]; mo = +m[2]; day = +m[3]; }
   else {
@@ -6025,59 +6081,33 @@ let _importMeta = { files: 0, fileNames: [], unreadable: 0, cardCredits: 0, empt
 async function handleStatementFiles(fileList) {
   const files = Array.from(fileList || []);
   if (files.length === 0) return;
-  if (files.length > 20) { alert('Please upload 20 files or fewer at a time.'); return; }
-
-  const accountType = document.getElementById('import-account-type').value; // 'bank' or 'card'
+  if (files.length > 20) { showToast('Please upload 20 files or fewer at a time.', 'error'); return; }
+  if (!currentUser) return;
+  const uid = currentUser.id, version = ++_importReadVersion;
+  const active = function() { return currentUser && currentUser.id === uid && version === _importReadVersion; };
+  const accountType = document.getElementById('import-account-type').value;
   const allRows = [];
-  const meta = { files: files.length, fileNames: files.map(function(f) { return f.name || 'file'; }), unreadable: 0, cardCredits: 0, emptyFiles: 0 };
-
+  const meta = { files: files.length, fileNames: files.map(function(f) { return f.name || 'file'; }), unreadable: 0, cardCredits: 0, emptyFiles: 0, failedFiles: 0 };
+  _pendingImportRows = [];
+  document.getElementById('import-preview').style.display = 'block';
+  document.getElementById('import-preview').textContent = 'Reading statements…';
+  document.getElementById('import-confirm-btn').style.display = 'none';
+  document.getElementById('import-cancel-btn').style.display = 'block';
   for (let fi = 0; fi < files.length; fi++) {
-    const file = files[fi];
-    const text = await file.text();
-    const rows = parseCsvText(text);
-    if (rows.length < 2) { meta.emptyFiles++; continue; }
-    const header = rows[0];
-    const dateIdx = findColumn(header, ['date', 'transaction date', 'posting date']);
-    const descIdx = findColumn(header, ['description', 'merchant', 'payee', 'name']);
-    const amtIdx = findColumn(header, ['amount', 'debit']);
-    if (dateIdx === -1 || descIdx === -1 || amtIdx === -1) { meta.emptyFiles++; continue; } // unrecognized file
-
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row[dateIdx] || !row[descIdx] || !row[amtIdx]) { meta.unreadable++; continue; }
-      const rawAmt = parseFloat(row[amtIdx].replace(/[^0-9.-]/g, ''));
-      if (isNaN(rawAmt) || rawAmt === 0) { meta.unreadable++; continue; }
-
-      // Sign convention differs: bank accounts show expenses as negative,
-      // credit cards show purchases as positive and payments/credits as negative
-      let isExpense, amount;
-      if (accountType === 'card') {
-        if (rawAmt < 0) { meta.cardCredits++; continue; } // skip card payments/credits, those are transfers not real spending
-        isExpense = true; amount = rawAmt;
-      } else {
-        isExpense = rawAmt < 0;
-        amount = Math.abs(rawAmt);
-      }
-
-      const parsedDate = parseImportDate(row[dateIdx]);
-      if (!parsedDate) { meta.unreadable++; continue; }
-      const dateStr = parsedDate.getFullYear() + '-' + String(parsedDate.getMonth()+1).padStart(2,'0') + '-' + String(parsedDate.getDate()).padStart(2,'0');
-
-      allRows.push({
-        type: isExpense ? 'expense' : 'income',
-        description: row[descIdx].replace(/"/g,'').trim(),
-        amount: amount,
-        date: dateStr,
-        category: isExpense ? categorizeImportedRow(row[descIdx]) : null,
-        recurring: false,
-        fileIdx: fi,
-        fileName: meta.fileNames[fi]
-      });
+    try {
+      const text = await files[fi].text();
+      if (!active()) return;
+      const result = fpParseStatement(text, accountType);
+      meta.unreadable += result.unreadable; meta.cardCredits += result.cardCredits;
+      if (!result.rows.length) meta.emptyFiles++;
+      result.rows.forEach(function(row) { allRows.push(Object.assign(row, {fileIdx:fi,fileName:meta.fileNames[fi]})); });
+    } catch(e) {
+      if (!active()) return;
+      meta.failedFiles++;
     }
   }
-
-  _importMeta = meta;
-  _pendingImportRows = allRows;
+  if (!active()) return;
+  _importMeta = meta; _pendingImportRows = allRows;
   if (allRows.length > 0) fpClassifyImportRows(allRows, transactions);
   renderImportPreview();
 }
@@ -6089,6 +6119,7 @@ function renderImportPreview() {
   const confirmBtn = document.getElementById('import-confirm-btn');
   const cancelBtn = document.getElementById('import-cancel-btn');
   const skipNotes = [];
+  if (meta.failedFiles > 0) skipNotes.push(meta.failedFiles + ' file' + (meta.failedFiles===1?'':'s') + ' could not be read or had invalid CSV quoting');
   if (meta.unreadable > 0) skipNotes.push(meta.unreadable + ' row' + (meta.unreadable===1?'':'s') + ' could not be read and ' + (meta.unreadable===1?'was':'were') + ' left out');
   if (meta.cardCredits > 0) skipNotes.push(meta.cardCredits + ' card payment or credit row' + (meta.cardCredits===1?'':'s') + ' left out');
   if (meta.emptyFiles > 0) skipNotes.push(meta.emptyFiles + ' file' + (meta.emptyFiles===1?'':'s') + ' had no usable rows');
@@ -6098,7 +6129,7 @@ function renderImportPreview() {
     preview.style.display = 'block';
     preview.innerHTML = '<div style="font-size:12.5px;color:var(--danger);">No recognizable transactions found. Make sure the CSV has Date, Description, and Amount columns.</div>' + skipHtml;
     confirmBtn.style.display = 'none';
-    cancelBtn.style.display = 'none';
+    cancelBtn.style.display = 'block';
     return;
   }
   const newRows = allRows.filter(function(r) { return r.dupKind === null; });
@@ -6114,6 +6145,15 @@ function renderImportPreview() {
     + '<div id="import-totals" style="font-size:12px;color:var(--text2);margin-top:2px;"></div>';
   if (repeats > 0) html += '<div style="font-size:11px;color:var(--text3);margin-top:4px;">' + repeats + ' identical purchase' + (repeats===1?'':'s') + ' inside a file ' + (repeats===1?'is':'are') + ' kept as separate transactions.</div>';
 
+  html += '<div style="margin-top:10px;font-size:11px;font-weight:700;">Review selected transactions</div><div style="max-height:220px;overflow-y:auto;margin-top:6px;">';
+  allRows.forEach(function(r, i) {
+    if (r.dupKind !== null) return;
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:7px 0;font-size:12px;cursor:pointer;">'
+      + '<input type="checkbox" data-import-idx="' + i + '"' + (r.include ? ' checked' : '') + ' onchange="toggleImportRow(' + i + ', this.checked)">'
+      + '<span style="flex:1;min-width:0;overflow-wrap:anywhere;">' + fpEscHtml(r.description) + '<span style="display:block;font-size:10.5px;color:var(--text2);">' + fpEscHtml(r.date) + ' · ' + fpEscHtml(r.fileName) + '</span></span>'
+      + '<span style="font-weight:600;white-space:nowrap;">' + (r.type==='income'?'+':'-') + '$' + fmt(r.amount) + '</span></label>';
+  });
+  html += '</div>';
   if (dupRows.length > 0) {
     html += '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">'
       + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:4px;">Possible duplicates (skipped unless checked)</div>'
@@ -6159,11 +6199,12 @@ function toggleImportRow(i, on) {
 }
 function setAllImportDups(on) {
   _pendingImportRows.forEach(function(r) { if (r.dupKind !== null) r.include = on; });
-  document.querySelectorAll('#import-preview input[data-import-idx]').forEach(function(cb) { cb.checked = on; });
+  document.querySelectorAll('#import-preview input[data-import-idx]').forEach(function(cb) { cb.checked = _pendingImportRows[Number(cb.getAttribute('data-import-idx'))].include; });
   updateImportSummary();
 }
 
 async function confirmStatementImport() {
+  if (!currentUser || _fpMutationBusy) return;
   const toSave = _pendingImportRows.filter(function(r) { return r.include !== false; });
   if (toSave.length === 0) return;
   const skippedDups = _pendingImportRows.filter(function(r) { return r.include === false; }).length;

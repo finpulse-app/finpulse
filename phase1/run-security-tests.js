@@ -13,7 +13,7 @@ function make(names, extra={}) {
   const element = id => els[id] || (els[id]={value:'',style:{},textContent:'',innerHTML:'',classList:{remove(){},toggle(){}}});
   const c = vm.createContext(Object.assign({console,Date,Math,JSON,parseFloat,isNaN,setTimeout(){},
     currentUser:{id:'A'},userSettings:{startingBalance:100,payAmount:0},monthBalances:{},transactions:[],
-    _dataLoadVersion:0,_activeUserId:'A', savedPurchases:[],
+    _dataLoadVersion:0,_activeUserId:'A', savedPurchases:[],_importReadVersion:0,
     window:{},document:{getElementById:element,querySelector(){return element('modal')},querySelectorAll(){return []}},
     localStorage:{getItem:k=>cache[k]||null,setItem:(k,v)=>{cache[k]=v},removeItem:k=>{delete cache[k]}},
     crypto:{randomUUID:()=> '11111111-1111-4111-8111-111111111111'},
@@ -85,6 +85,24 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   await test('account switch during JWT retry cannot read or populate old account',async()=>{
     let reads=0,delayed,readyResolve;const ready=new Promise(r=>readyResolve=r);const c=make(['loadUserData'],{setTimeout(fn){delayed=fn;readyResolve()},sb:{from:()=>({select(){return this},eq(){return this},single:async()=>{reads++;return{error:{code:'PGRST303'}}},order:async()=>({data:[],error:null})})}});
     const loading=c.loadUserData();await ready;c.currentUser={id:'B'};c.userSettings={startingBalance:7};delayed();await loading;assert.equal(reads,1);assert.equal(c.userSettings.startingBalance,7);assert.equal(c._messages.length,0);
+  });
+  await test('CSV preserves quoted commas, escaped quotes, multiline fields and BOM',()=>{
+    const c=make(['parseCsvText']);const r=c.parseCsvText('\uFEFFDate,Description,Amount\r\n2026-10-09,"Coffee, ""daily""\nshop",-3.25\r\n');assert.equal(r.length,2);assert.equal(r[0][0],'Date');assert.equal(r[1][1],'Coffee, "daily"\nshop');
+    assert.throws(()=>c.parseCsvText('Date,Description\n2026-10-09,"unfinished'));
+  });
+  for(const [raw,want] of [['($1,234.56)',-1234.56],['$4.20',4.2],['-20.01',-20.01],['12oops',null],['1,23',null],['1.234',null],['Infinity',null],['',null]]) await test('CSV strict amount '+raw,()=>{const c=make(['fpImportAmount']);assert.equal(c.fpImportAmount(raw),want)});
+  for(const mode of ['bank','card','card-negative']) await test('statement signed direction '+mode,()=>{
+    const c=make(['fpParseStatement','parseCsvText','findColumn','fpImportAmount','parseImportDate','fpIso','fpPad2','categorizeImportedRow']);const r=c.fpParseStatement('Date,Description,Amount\n2026-10-09,Purchase,-25\n2026-10-10,Deposit,30\n2026-02-31,Bad date,-5\n2026-10-11,Bad amount,2oops\n',mode);
+    assert.equal(r.unreadable,2);if(mode==='bank'){assert.equal(r.rows.length,2);assert.equal(r.rows[0].type,'expense');assert.equal(r.rows[1].type,'income')}else{assert.equal(r.rows.length,1);assert.equal(r.rows[0].type,'expense');assert.equal(r.rows[0].amount,mode==='card'?30:25);assert.equal(r.cardCredits,1)}
+  });
+  await test('statement Debit/Credit columns do not invert income and spending',()=>{
+    const c=make(['fpParseStatement','parseCsvText','findColumn','fpImportAmount','parseImportDate','fpIso','fpPad2','categorizeImportedRow']);const r=c.fpParseStatement('Posting Date,Description,Debit Amount,Credit Amount\n10/09/2026,Shop,25,\n10/10/2026,Pay,,100\n10/11/2026,Ambiguous,20,30\n','bank');assert.equal(r.rows.length,2);assert.equal(r.rows[0].type,'expense');assert.equal(r.rows[1].type,'income');assert.equal(r.unreadable,1);
+  });
+  for(const change of ['account','cancel','newer']) await test('late statement read discarded after '+change,async()=>{
+    let resolveRead;const c=make(['handleStatementFiles'],{_pendingImportRows:[],fpParseStatement:()=>({rows:[{}]}),fpClassifyImportRows(){throw Error('stale classified')},renderImportPreview(){throw Error('stale rendered')}});const loading=c.handleStatementFiles([{name:'test.csv',text:()=>new Promise(r=>{resolveRead=r})}]);if(change==='account')c.currentUser={id:'B'};else c._importReadVersion++;resolveRead('Date,Description,Amount');await loading;assert.equal(c._pendingImportRows.length,0);
+  });
+  await test('failed statement file is reported while readable files still preview',async()=>{
+    let renders=0;const c=make(['handleStatementFiles'],{_pendingImportRows:[],fpParseStatement:()=>({rows:[{type:'expense'}],unreadable:0,cardCredits:0}),fpClassifyImportRows(){},renderImportPreview(){renders++}});await c.handleStatementFiles([{name:'bad',text:async()=>{throw Error('unreadable')}},{name:'good',text:async()=> 'CSV'}]);assert.equal(renders,1);assert.equal(c._importMeta.failedFiles,1);assert.equal(c._pendingImportRows.length,1);
   });
   await test('Insights escapes stored description and category without changing data',()=>{
     const payload='<img src=x onerror="window.marker=1">';
