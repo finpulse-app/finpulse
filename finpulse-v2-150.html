@@ -84,6 +84,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 .trial-fill{height:100%;width:3%;background:var(--accent);border-radius:99px;}
 
 .main{margin-left:224px;flex:1;padding:24px 28px;}
+.mobile-menu-btn{display:none;}
+
 
 .topbar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border);}
 .topbar h2{font-family:'Playfair Display',serif;font-size:24px;font-weight:600;letter-spacing:-0.5px;}
@@ -378,6 +380,34 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 #d-amt-slider,#d-yr-slider{accent-color:var(--accent);-webkit-appearance:none;appearance:none;height:5px;border-radius:99px;background:var(--border);outline:none;cursor:pointer;}
 #d-amt-slider::-webkit-slider-thumb,#d-yr-slider::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.15);}
 #d-amt-slider::-moz-range-thumb,#d-yr-slider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.15);}
+@media (max-width:760px){
+  .layout{display:block;}
+  .sidebar{position:static;width:100%;height:auto;border-right:0;border-bottom:1px solid var(--border);}
+  .sidebar-top{padding:12px;overflow:visible;}
+  .logo-wrap{margin-bottom:0;}
+  .mobile-menu-btn{display:block;margin-left:auto;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font:inherit;color:var(--text);cursor:pointer;}
+  .logo-tagline{display:none;}
+  #primary-navigation,.sidebar-footer{display:none;}
+  .sidebar.mobile-nav-open #primary-navigation,.sidebar.mobile-nav-open .sidebar-footer{display:block;}
+  .nav-item{padding:11px 9px;}
+  .main{margin-left:0;padding:16px 12px;width:100%;min-width:0;}
+  .main [style*="grid-template-columns"]{grid-template-columns:minmax(0,1fr)!important;}
+  .main [style*="grid-template-columns"]>*{min-width:0;}
+  .topbar{flex-wrap:wrap;gap:12px;}
+  .topbar-actions{flex-wrap:wrap;}
+  .topbar h2{font-size:22px;}
+  .breathing-room{flex-wrap:wrap;gap:8px;padding:14px;}
+  .br-left{flex:1 1 220px;min-width:0;}
+  .stats-row{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .stat-card{padding:10px;min-width:0;}
+  .card-header{flex-wrap:wrap;gap:6px;}
+  #view-calendar .card-body{padding:10px 6px;}
+  .cal-grid{grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;}
+  .cal-day{min-width:0;padding:4px 2px;min-height:82px;}
+  .day-balance{font-size:9px;white-space:nowrap;}
+  .day-event{font-size:8px;padding:1px;}
+  .auth-card{padding:24px;}
+}
 </style>
 </head>
 <body>
@@ -433,8 +463,10 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
           <svg viewBox="0 0 18 18" fill="none"><rect x="1" y="3" width="16" height="2.5" rx="1" fill="rgba(255,255,255,0.22)"/><rect x="3.5" y="1" width="2" height="4" rx="1" fill="rgba(255,255,255,0.9)"/><rect x="12.5" y="1" width="2" height="4" rx="1" fill="rgba(255,255,255,0.9)"/><rect x="1" y="7" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.4)"/><rect x="6.75" y="7" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.4)"/><rect x="12.5" y="7" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.9)"/><rect x="1" y="12" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.4)"/><rect x="6.75" y="12" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.9)"/><rect x="12.5" y="12" width="4.5" height="3.5" rx="1" fill="rgba(255,255,255,0.2)"/><circle cx="14.75" cy="13.75" r="2.5" fill="#00e5a0"/></svg>
         </div>
         <div class="logo"><span class="fin">Fin</span><span class="pulse">Pulse</span></div>
+        <button class="mobile-menu-btn" id="mobile-menu-btn" onclick="fpToggleNavigation()" aria-expanded="false" aria-controls="primary-navigation">Menu</button>
       </div>
       <div class="logo-tagline">Not where did it go.<br>What happens if I spend today.</div>
+      <nav id="primary-navigation" aria-label="Main navigation">
       <div class="nav-label">Overview</div>
       <button class="nav-item active" onclick="showView('calendar',this)"><span class="nav-dot"></span> Calendar</button>
       <button class="nav-item" onclick="showView('expenses',this)"><span class="nav-dot"></span> Expenses</button>
@@ -447,6 +479,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
       <button class="nav-item" onclick="showView('dreams',this)"><span class="nav-dot"></span> Future Value</button>
       <button class="nav-item" onclick="showView('cards',this)"><span class="nav-dot"></span> Card Finder</button>
       <button class="nav-item" onclick="showView('settings',this)"><span class="nav-dot"></span> Settings</button>
+      </nav>
     </div>
     <div class="sidebar-footer">
       <div class="user-row">
@@ -3964,7 +3997,17 @@ function updateRippleAlert(dayMap) {
 function prevMonth() { if (currentMonth === 0) { currentMonth = 11; currentYear--; } else { currentMonth--; } renderCalendar(); updateStats(); }
 function nextMonth() { if (currentMonth === 11) { currentMonth = 0; currentYear++; } else { currentMonth++; } renderCalendar(); updateStats(); }
 
+function fpSetNavigation(open) {
+  document.querySelector('.sidebar').classList.toggle('mobile-nav-open', open);
+  document.getElementById('mobile-menu-btn').setAttribute('aria-expanded', String(open));
+}
+
+function fpToggleNavigation() {
+  fpSetNavigation(document.getElementById('mobile-menu-btn').getAttribute('aria-expanded') !== 'true');
+}
+
 function showView(v, btn) {
+  fpSetNavigation(false);
   document.querySelectorAll('[id^="view-"]').forEach(e => e.style.display = 'none');
   const viewEl = document.getElementById('view-' + v);
   if (viewEl) viewEl.style.display = 'block';

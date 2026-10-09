@@ -644,6 +644,20 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>{userSettings.startingBalance=-5000;monthBalances['2026-10']=-5000;updateStats();});
   ok('T23 negative estimate does not claim verified debt or bank cash',await page.textContent('.br-label')==='Month-end estimate' && await page.textContent('#br-tag')==='Projected shortfall' && /Not a confirmed bank balance/.test(await page.textContent('#br-sub')) && /Confirm your current bank balance/.test(await page.textContent('#br-coach')),await page.textContent('#breathing-room'));
 
+  // ---- T24 narrow-screen calendar and navigation
+  seed();await page.setViewportSize({width:312,height:800});await load();await hideStage();
+  const fits=()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1 && document.querySelector('#main-content').getBoundingClientRect().left>=0 && document.querySelector('#main-content').getBoundingClientRect().right<=window.innerWidth+1);
+  ok('T24 calendar fits a 312-pixel panel without horizontal overflow',await fits(),await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth})));
+  ok('T24 compact menu replaces the fixed sidebar and stats use two columns',await page.isVisible('#mobile-menu-btn') && !await page.isVisible('#primary-navigation') && await page.evaluate(()=>getComputedStyle(document.querySelector('.stats-row')).gridTemplateColumns.split(' ').length)===2,'sidebar or stats remain desktop-sized');
+  await page.click('#mobile-menu-btn');
+  ok('T24 menu exposes navigation and account controls',await page.isVisible('#primary-navigation') && await page.isVisible('.signout-btn') && await page.getAttribute('#mobile-menu-btn','aria-expanded')==='true','menu did not expand');
+  await page.click('#primary-navigation button:has-text("Expenses")');
+  ok('T24 selecting a view closes the menu and keeps expenses inside panel',await page.isVisible('#view-expenses') && !await page.isVisible('#primary-navigation') && await fits(),'view or menu sizing failed');
+  await page.click('#mobile-menu-btn');await page.click('#primary-navigation button:has-text("Calendar")');
+  ok('T24 menu returns to calendar without changing its monthly total',await page.isVisible('#view-calendar') && await ringsTotal()===400 && await fits(),'calendar navigation failed');
+  await page.setViewportSize({width:1280,height:900});
+  ok('T24 desktop retains visible sidebar and four-column stats',await page.isVisible('#primary-navigation') && !await page.isVisible('#mobile-menu-btn') && await page.evaluate(()=>getComputedStyle(document.querySelector('.stats-row')).gridTemplateColumns.split(' ').length)===4,'desktop layout regressed');
+
   // ---- console / network
   const dbErrors = reqlog.filter(r => r.error);
   const realConsole = consoleErrors.filter(e => !/Failed to load resource|fonts|net::ERR|favicon/i.test(e));
