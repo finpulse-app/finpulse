@@ -786,6 +786,13 @@ const loan = id => txns().find(t => t.id === id);
   ok('T29 blank growth rate asks for an assumption',await page.textContent('#d-future')==='—'&&/Enter an assumed/.test(await page.textContent('#d-coach')),await page.textContent('#d-coach'));
   await page.fill('#d-rate-input','10');
 
+  await page.setViewportSize({width:312,height:900});
+  for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {
+    await page.evaluate(v=>showView(v,null),view);
+    const collapsed=await page.evaluate(v=>Array.from(document.querySelectorAll('#view-'+v+' .card')).filter(e=>e.getClientRects().length).map(e=>e.getBoundingClientRect().width).filter(w=>w<200),view);
+    ok('T29 '+view+' cards remain readable at 312 pixels',collapsed.length===0,JSON.stringify(collapsed));
+  }
+  await page.setViewportSize({width:1280,height:900});
   const offline=await browser.newContext();
   await offline.route('**/cdn.jsdelivr.net/**',r=>r.fulfill({contentType:'application/javascript',body:''}));
   await offline.route(/fonts\.(googleapis|gstatic)\.com|cdnjs|chart/,r=>r.fulfill({contentType:'text/css',body:''}));
