@@ -817,10 +817,29 @@ const loan = id => txns().find(t => t.id === id);
   ok('T30 goals do not change calendar cash or financial rows',financialBefore===JSON.stringify(db.transactions)&&near(await endBal(),calendarBefore),'cash changed');
   await page.evaluate(()=>showView('calendar',null));await page.click('#calendar-agenda-btn');
   ok('T30 agenda includes every October day and scheduled loan',await page.locator('#cal-agenda .agenda-day').count()===31&&/Test Car Loan/.test(await page.textContent('#cal-agenda')),'incomplete agenda');
-  await page.click('[aria-label="Open October 10"]');
+  await page.click('#cal-agenda [aria-label="Open October 10"]');
   ok('T30 agenda day opens editor',await page.isVisible('#bottom-sheet'),'editor missing');await page.evaluate(()=>closeBottomSheet());
   await page.click('#calendar-month-btn');
   ok('T30 month toggle restores calendar',await page.isVisible('#cal-grid')&&!await page.isVisible('#cal-agenda'),'toggle failed');
+
+  db.transactions.push({id:'coffee-search',user_id:'user-A',type:'expense',description:'Coffee search',amount:6.25,date:'2026-10-09',category:'food',recurring:false},{id:'groceries-search',user_id:'user-A',type:'expense',description:'Groceries search',amount:25,date:'2026-10-09',category:'food',recurring:false});
+  await load();await page.evaluate(()=>showView('expenses',null));const monthOutBefore=await page.textContent('#exp-stat-total');
+  await page.fill('#expense-search','Coffee search');
+  ok('T31 search filters records while retaining month totals',/Coffee search/.test(await page.textContent('#fv-variable-list'))&&!/Groceries search/.test(await page.textContent('#fv-variable-list'))&&await page.textContent('#exp-stat-total')===monthOutBefore,'search changed totals or missed filter');
+  await page.click('button:text-is("Clear search")');
+  ok('T31 clearing search restores records',/Groceries search/.test(await page.textContent('#fv-variable-list')),'clear failed');
+  await page.evaluate(()=>showView('settings',null));
+  const csvDownloadWait=page.waitForEvent('download');await page.click('button:text-is("Export transactions CSV")');const csvDownload=await csvDownloadWait;
+  ok('T31 CSV button downloads all transaction records',csvDownload.suggestedFilename().endsWith('.csv')&&fs.readFileSync(await csvDownload.path(),'utf8').includes('Coffee search'),'CSV missing rows');
+  const jsonDownloadWait=page.waitForEvent('download');await page.click('button:text-is("Export full data JSON")');const jsonDownload=await jsonDownloadWait;
+  const exportData=JSON.parse(fs.readFileSync(await jsonDownload.path(),'utf8'));
+  ok('T31 JSON export includes goals, settings and transactions',exportData.format==='finpulse-data'&&exportData.goals.length===2&&exportData.transactions.length===db.transactions.length&&Array.isArray(exportData.bill_paid_marks),'incomplete export');
+  await page.evaluate(()=>showView('dreams',null));await page.fill('#d-amt-input','12.50');await page.fill('#d-rate-input','0');
+  ok('T31 scenario preserves cents in entered amount',await page.textContent('#d-future')==='$12.5','cents lost');
+  await page.fill('#d-amt-input','12oops');
+  ok('T31 malformed scenario amount cannot show a stale result',await page.textContent('#d-future')==='—'&&/valid amount/.test(await page.textContent('#d-coach')),'stale result');
+  await page.fill('#d-amt-input','0');
+  ok('T31 zero scenario amount is supported',await page.textContent('#d-future')==='$0','zero rejected');await page.fill('#d-amt-input','5000');await page.fill('#d-rate-input','10');
 
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {

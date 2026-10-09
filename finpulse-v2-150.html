@@ -430,6 +430,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .agenda-day{display:block;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--border);padding:16px 0;cursor:pointer;color:var(--text);font:inherit;}.agenda-day:hover{background:var(--surface2);}.agenda-heading{display:flex;justify-content:space-between;gap:10px;font-size:13px;font-weight:600;margin-bottom:8px;}.agenda-row{display:flex;justify-content:space-between;gap:10px;font-size:12px;line-height:1.7;color:var(--text2);}.agenda-row span:first-child{overflow-wrap:anywhere;}.agenda-balance{font-size:12px;color:var(--text3);margin-top:8px;}
 .trial-bar{display:none;}
 @media(max-width:800px){.main{padding:18px 14px;}.topbar h2{font-size:25px;}.card-header{flex-wrap:wrap;gap:8px;}.goal-editor .form-row{grid-template-columns:1fr;}.goal-headline{font-size:28px;}.goal-actions{flex-wrap:wrap;}}
+.expense-tools{display:flex;align-items:flex-end;gap:10px;}.goal-tile{font:inherit;background:var(--surface);color:var(--text);}.goal-tile:focus-visible,.cal-day:focus-visible{outline:3px solid var(--accent);outline-offset:2px;}
+@media(max-width:800px){.expense-tools{flex-wrap:wrap;}.expense-tools>div{flex-basis:100%!important;}}
 </style>
 </head>
 <body>
@@ -698,6 +700,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
         <div id="fv-ratio-insight" style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:8px;"></div>
       </div>
 
+      <div class="expense-tools"><div style="flex:1;"><label class="form-label" for="expense-search">Find a saved record</label><input class="form-input" id="expense-search" type="search" placeholder="Search name, category, or date" oninput="_fpExpenseQuery=this.value;renderExpensesView()"></div><button class="btn btn-outline" onclick="document.getElementById('expense-search').value='';_fpExpenseQuery='';renderExpensesView()">Clear search</button><button class="btn btn-outline" onclick="fpExportTransactions()">Export CSV</button></div><p class="goal-note" style="margin:8px 0 18px;">Search filters the saved records below. Monthly totals stay unchanged.</p>
       <!-- Fixed vs Variable, side by side, click any row for details -->
       <h3 style="font-size:15px;margin-bottom:6px;">Saved records</h3>
       <p id="exp-records-note" style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px;">All dates. Recurring rows show the amount per occurrence; recorded payments and one-time expenses show their saved amount. Click a row to view or edit it. This list is separate from the monthly totals above.</p>
@@ -912,10 +915,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
         <div class="card-header"><span class="card-title">What matters most to you?</span></div>
         <div class="card-body">
           <div class="goal-grid">
-            <div class="goal-tile" onclick="pickGoal(this,'cashback')"><div class="goal-em" style="color:var(--accent);display:flex;justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M15 9.7c0-1.5-1.3-2.2-3-2.2s-3 .8-3 2.2 1.3 1.8 3 2.1 3 .8 3 2.2-1.3 2.2-3 2.2-3-.8-3-2.2"/></svg></div><div class="goal-lbl">Cash Back</div></div>
-            <div class="goal-tile" onclick="pickGoal(this,'travel')"><div class="goal-em" style="color:var(--accent);display:flex;justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3L3 10.5l7 2.5 2.5 7L21 3z"/></svg></div><div class="goal-lbl">Travel Points</div></div>
-            <div class="goal-tile" onclick="pickGoal(this,'dining')"><div class="goal-em" style="color:var(--accent);display:flex;justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v6a2 2 0 0 0 4 0V3M9 11v10M17 3c-2 0-3.5 2-3.5 5s1.5 5 3.5 5M17 3v18"/></svg></div><div class="goal-lbl">Dining Rewards</div></div>
-            <div class="goal-tile" onclick="pickGoal(this,'debt')"><div class="goal-em" style="color:var(--accent);display:flex;justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l7 7 4-4 5 5"/><path d="M15 14h5v-5"/></svg></div><div class="goal-lbl">0% APR / Pay Off Debt</div></div>
+            <button type="button" class="goal-tile" onclick="pickGoal(this,'cashback')"><div class="goal-em" style="color:var(--accent);display:flex;justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M15 9.7c0-1.5-1.3-2.2-3-2.2s-3 .8-3 2.2 1.3 1.8 3 2.1 3 .8 3 2.2-1.3 2.2-3 2.2-3-.8-3-2.2"/></svg></div><div class="goal-lbl">Cash Back</div></button>
+            <button type="button" class="goal-tile" onclick="pickGoal(this,'travel')"><div class="goal-em" style="color:var(--accent);display:flex;justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3L3 10.5l7 2.5 2.5 7L21 3z"/></svg></div><div class="goal-lbl">Travel Points</div></button>
+            <button type="button" class="goal-tile" onclick="pickGoal(this,'dining')"><div class="goal-em" style="color:var(--accent);display:flex;justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v6a2 2 0 0 0 4 0V3M9 11v10M17 3c-2 0-3.5 2-3.5 5s1.5 5 3.5 5M17 3v18"/></svg></div><div class="goal-lbl">Dining Rewards</div></button>
+            <button type="button" class="goal-tile" onclick="pickGoal(this,'debt')"><div class="goal-em" style="color:var(--accent);display:flex;justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l7 7 4-4 5 5"/><path d="M15 14h5v-5"/></svg></div><div class="goal-lbl">0% APR / Pay Off Debt</div></button>
           </div>
           <div id="card-results" style="display:none;"><div class="rec-label">Explore issuer information</div><div id="card-recs"></div></div>
         </div>
@@ -944,6 +947,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
           <button class="save-btn" onclick="saveStartingBalance()">Save Balance</button>
         </div>
       </div>
+      <div class="card" style="margin-top:14px;"><div class="card-header"><span class="card-title">Your data</span></div><div class="card-body"><p class="goal-note">Download your saved transactions as a spreadsheet, or a full JSON copy of your records, balances and goals.</p><div class="goal-actions"><button class="btn btn-outline" onclick="fpExportTransactions()">Export transactions CSV</button><button class="btn btn-outline" onclick="fpExportData()">Export full data JSON</button></div></div></div>
       <div class="card" style="max-width:480px;margin-top:14px;">
         <div class="card-header"><span class="card-title">Account access</span></div><div class="card-body"><p style="font-size:13px;color:var(--text2);line-height:1.6;">Billing is not enabled in this preview. No subscription purchase is available here.</p></div>
       </div>
@@ -1336,6 +1340,7 @@ let _fpSettingsBusy = false;
 let _fpSignOutBusy = false;
 let _fpGoals=[], _fpGoalsReady=false, _fpGoalBusy=false, _fpGoalDraftId=null;
 let _fpCalendarMode='month';
+let _fpExpenseQuery='';
 let currentYear = new Date().getFullYear();
 let currentMonth = new Date().getMonth();
 let transactions = [];
@@ -1669,7 +1674,9 @@ function fpResetAccountState() {
   _fpSettingsVersion++;
   _fpSettingsBusy = false;
   _fpGoals=[];_fpGoalsReady=false;_fpGoalBusy=false;_fpGoalDraftId=null;
-  _fpCalendarMode="month";
+  _fpCalendarMode="month";_fpExpenseQuery="";
+  const search=document.getElementById("expense-search");if(search)search.value="";
+  const goalEditor=document.getElementById("goal-editor");if(goalEditor)goalEditor.style.display="none";
   _fpMutationVersion++;
   _fpMutationBusy = false;
   _lastDeletedOperation = null;
@@ -2670,7 +2677,7 @@ function renderCalendar() {
       const balHtml = '<div class="day-section-bot"><div class="day-bal-label">Balance</div><div class="day-balance ' + bc + '">' + balDisplay + '</div></div>';
       inner = incHtml + expHtml + balHtml;
     }
-    html += '<div class="' + cls + '" onclick="openDayPanel(' + d + ')"><div class="day-num">' + d + '</div>' + inner + '</div>';
+    html += '<div class="' + cls + '" role="button" tabindex="0" aria-label="Open '+new Date(currentYear,currentMonth,d).toLocaleDateString('en-US',{month:'long',day:'numeric'})+'" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openDayPanel('+d+')}" onclick="openDayPanel(' + d + ')"><div class="day-num">' + d + '</div>' + inner + '</div>';
   }
   grid.innerHTML = html;
   fpRenderAgenda();
@@ -2745,7 +2752,8 @@ function fpExpenseRecordLabel(t) {
 }
 
 function renderExpensesView() {
-  const allExp = transactions.filter(function(t) { return (t.type === 'expense' || t.type === 'bill') && t.type !== 'note'; });
+  const query=_fpExpenseQuery.trim().toLowerCase();
+  const allExp = transactions.filter(function(t) { return (t.type === 'expense' || t.type === 'bill') && (!query || [t.description,t.category,t.date,t.anchor_date].join(' ').toLowerCase().includes(query)); });
   // Fixed = recurring (bills, subscriptions, rent) OR a recorded loan payment (the obligation is fixed
   // even though each payment gets logged as a discrete one-time transaction).
   // Variable = genuine one-time, day-to-day discretionary spending.
@@ -4146,7 +4154,7 @@ function showView(v, btn) {
   document.querySelectorAll('[id^="view-"]').forEach(e => e.style.display = 'none');
   const viewEl = document.getElementById('view-' + v);
   if (viewEl) viewEl.style.display = 'block';
-  document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(e => e.classList.toggle('active',(e.getAttribute('onclick')||'').includes("'"+v+"'")));
   if (btn) btn.classList.add('active');
   // Always force-close bottom sheet when leaving calendar
   if (v !== 'calendar') {
@@ -5436,6 +5444,32 @@ async function toggleBillPaid(billId) {
 
 
 // ── THE PLAN ────────────────────────────────────────────────────
+function fpTransactionCsv(rows) {
+  const columns=['date','type','description','amount','category','recurring','frequency','balance','min_payment','principal_applied','loan_id'];
+  const numeric=['amount','balance','min_payment','principal_applied'];
+  function cell(value,key) {
+    if(value==null)return '';
+    if(numeric.includes(key))return Number.isFinite(Number(value))?String(Number(value)):'';
+    let text=String(value);
+    if(/^[\s]*[=+\-@]/.test(text)||/^[\t\r\n]/.test(text))text="'"+text;
+    return '"'+text.replace(/"/g,'""')+'"';
+  }
+  return columns.join(',')+'\r\n'+rows.map(r=>columns.map(c=>cell(r[c],c)).join(',')).join('\r\n');
+}
+function fpDownloadData(text,name,type) {
+  const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function fpExportTransactions() {
+  if(!currentUser)return;
+  fpDownloadData(fpTransactionCsv(transactions),'finpulse-transactions-'+fpIso(new Date())+'.csv','text/csv;charset=utf-8');
+}
+function fpExportData() {
+  if(!currentUser)return;
+  if(!_fpGoalsReady||!_fpBillMarksReady){showToast('Refresh goals and Bills before exporting a full copy.','error');return;}
+  const data={format:'finpulse-data',version:1,exported_at:new Date().toISOString(),transactions,settings:userSettings,month_balances:monthBalances,goals:_fpGoals,bill_paid_marks:_fpBillMarkRows,saved_purchases:savedPurchases};
+  fpDownloadData(JSON.stringify(data,null,2),'finpulse-data-'+fpIso(new Date())+'.json','application/json');
+}
+
 function fpGoalProgress(goal) {
   const target=Number(goal.target_amount),saved=Number(goal.saved_amount),monthly=Number(goal.monthly_amount);
   const remaining=Math.max(0,fpRound2(target-saved));
@@ -6194,26 +6228,21 @@ function pickGoal(el, goal) {
 // ── DREAMS CALCULATOR ──────────────────────────────────────────
 let RATE = 0.10;
 let dAmount = 5000;
+let _fpDreamAmountValid=true;
 let dChart;
-function dCompound(p, y) { return Math.round(p * Math.pow(1 + RATE, y)); }
+function dCompound(p, y) { return fpRound2(p * Math.pow(1 + RATE, y)); }
 function dFmt(n) { return '$' + n.toLocaleString(); }
 function dSyncAmt(source) {
-  if (source === 'slider') {
-    dAmount = parseInt(document.getElementById('d-amt-slider').value);
-    document.getElementById('d-amt-input').value = dFmt(dAmount);
-  } else {
-    const raw = document.getElementById('d-amt-input').value.replace(/[$,]/g,'');
-    const parsed = parseInt(raw);
-    if (!isNaN(parsed) && parsed > 0) { dAmount = parsed; document.getElementById('d-amt-slider').value = Math.min(dAmount, 100000); }
-  }
+  const parsed=source==='slider'?Number(document.getElementById('d-amt-slider').value):fpImportAmount(document.getElementById('d-amt-input').value);
+  _fpDreamAmountValid=parsed!==null&&Number.isFinite(parsed)&&parsed>=0&&parsed<=1000000000;
+  if(_fpDreamAmountValid){dAmount=parsed;document.getElementById('d-amt-slider').value=Math.min(Math.max(dAmount,100),100000);if(source==='slider')document.getElementById('d-amt-input').value=dFmt(dAmount);}
   dUpdate();
 }
 function dFormatInput() {
-  const raw = document.getElementById('d-amt-input') ? document.getElementById('d-amt-input').value.replace(/[$,]/g,'') : '';
-  const parsed = parseInt(raw);
-  if (!isNaN(parsed) && parsed > 0) { dAmount = parsed; document.getElementById('d-amt-input').value = dFmt(dAmount); document.getElementById('d-amt-slider').value = Math.min(dAmount, 100000); dUpdate(); }
+  dSyncAmt('text');if(_fpDreamAmountValid)document.getElementById('d-amt-input').value=dFmt(dAmount);
 }
 function dUpdate() {
+  if(!_fpDreamAmountValid){document.getElementById('d-future').textContent='—';document.getElementById('d-coach').textContent='Enter a valid amount between $0 and $1 billion, with up to two decimal places.';return;}
   const rateInput=document.getElementById('d-rate-input');
   if (rateInput) {
     const rate=Number(rateInput.value);

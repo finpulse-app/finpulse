@@ -14,7 +14,7 @@ function make(names, extra={}) {
   const c = vm.createContext(Object.assign({console,Date,Math,JSON,parseFloat,isNaN,setTimeout(){},
     currentUser:{id:'A'},userSettings:{startingBalance:100,payAmount:0},monthBalances:{},transactions:[],
     _dataLoadVersion:0,_activeUserId:'A', savedPurchases:[],_importReadVersion:0,_fpSettingsVersion:0,_fpSettingsBusy:false,_fpSignOutBusy:false,fpReadTransactions:async()=>({data:[],error:null}),
-    fpLoadGoals:async()=>true,_fpGoals:[],_fpGoalsReady:true,_fpGoalBusy:false,_fpGoalDraftId:null,fpRenderAgenda(){},
+    fpLoadGoals:async()=>true,_fpGoals:[],_fpGoalsReady:true,_fpGoalBusy:false,_fpGoalDraftId:null,fpRenderAgenda(){},_fpExpenseQuery:'',
     _fpBillMarkRows:[],_fpBillMarksReady:true,_fpBillMarkBusy:false,_fpBillMarkVersion:0,fpRefreshBillMarks:async()=>true,renderPriorityReport(){},
     window:{},document:{getElementById:element,querySelector(){return element('modal')},querySelectorAll(){return []}},
     localStorage:{getItem:k=>cache[k]||null,setItem:(k,v)=>{cache[k]=v},removeItem:k=>{delete cache[k]}},
@@ -360,6 +360,18 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   });
   for(const name of ['saveEditBalance','saveStartingBalance','saveSetup']) await test(name+' rejects blank balance without writing',async()=>{
     let written=false;const c=make([name],{fpApplyDatedBalance:async()=>{written=true}});await c[name]();assert.equal(written,false);assert.equal(c._messages.length,1);
+  });
+  await test('goal progress caps completion and retains over-target saved amount',()=>{
+    const c=make(['fpGoalProgress','fpRound2']);const p=c.fpGoalProgress({target_amount:100,saved_amount:150,monthly_amount:10});assert.equal(p.percent,100);assert.equal(p.remaining,0);assert.equal(p.saved,150);assert.equal(p.months,0);
+  });
+  await test('goal timeline uses remaining cents and has no estimate without monthly plan',()=>{
+    const c=make(['fpGoalProgress','fpRound2']);assert.equal(c.fpGoalProgress({target_amount:1000,saved_amount:250.5,monthly_amount:100}).months,8);assert.equal(c.fpGoalProgress({target_amount:1000,saved_amount:0,monthly_amount:0}).months,null);
+  });
+  await test('invalid goal target never reaches storage',async()=>{
+    let wrote=false;const c=make(['fpSaveGoal'],{fpWriteGoal:async()=>{wrote=true},_fpGoalDraftId:'goal'});for(const [id,v] of [['goal-name','Fund'],['goal-target','0'],['goal-saved','0'],['goal-monthly','0']])c.document.getElementById(id).value=v;assert.equal(await c.fpSaveGoal(),false);assert.equal(wrote,false);
+  });
+  await test('CSV export escapes quotes, newlines and formula-like text while preserving numeric amounts',()=>{
+    const c=make(['fpTransactionCsv']);const csv=c.fpTransactionCsv([{date:'2026-10-09',type:'expense',description:'=SUM(1,2)',amount:-12.5,category:'A "quote"\nline'}]);assert(csv.includes('"\'=SUM(1,2)"'));assert(csv.includes(',-12.5,'));assert(csv.includes('"A ""quote""\nline"'));
   });
   console.log('TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
 })();
