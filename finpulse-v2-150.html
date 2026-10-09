@@ -480,7 +480,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <button class="nav-item" onclick="showView('insights',this)"><span class="nav-dot"></span> Insights</button>
       <div class="nav-label">Tools</div>
       <button class="nav-item" onclick="showView('dreams',this)"><span class="nav-dot"></span> Future Value</button>
-      <button class="nav-item" onclick="showView('cards',this)"><span class="nav-dot"></span> Card Finder</button>
+      <button class="nav-item" onclick="showView('cards',this)"><span class="nav-dot"></span> Card research</button>
       <button class="nav-item" onclick="showView('settings',this)"><span class="nav-dot"></span> Settings</button>
       </nav>
     </div>
@@ -740,11 +740,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label">Lender / Name</label>
+            <label class="form-label" for="lm-desc">Lender / Name</label>
             <input class="form-input" id="lm-desc" placeholder="e.g. Chase, Affirm, Student Loan">
           </div>
           <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label">Type</label>
+            <label class="form-label" for="lm-cat">Type</label>
             <select class="form-select" id="lm-cat">
               <option>Credit Card</option><option>Personal Loan</option><option>Student Loan</option><option>Car Loan</option><option>Affirm</option><option>Klarna</option><option>Afterpay</option><option>Medical Debt</option><option>Other</option>
             </select>
@@ -752,11 +752,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px;">
           <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label">Balance owed ($)</label>
+            <label class="form-label" for="lm-balance">Balance owed ($)</label>
             <input class="form-input" type="number" id="lm-balance" placeholder="e.g. 3500" oninput="calcLoanMinPayment()">
           </div>
           <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label">APR %</label>
+            <label class="form-label" for="lm-apr">APR %</label>
             <input class="form-input" type="number" id="lm-apr" placeholder="e.g. 24.99" step="0.01" oninput="calcLoanMinPayment()">
           </div>
           <div class="form-group" style="margin-bottom:0;">
@@ -766,7 +766,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
         </div>
         <div style="margin-top:12px;">
           <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label">Due date each month</label>
+            <label class="form-label" for="lm-anchor">Due date each month</label>
             <input class="form-input" type="date" id="lm-anchor">
           </div>
         </div>
@@ -827,7 +827,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
     <!-- THE PLAN VIEW -->
     <div id="view-plan" style="display:none;">
       <div class="topbar">
-        <div><h2>The Plan</h2><p>Every action moves your finish line closer.</p></div>
+        <div><h2>The Plan</h2><p>Review your calendar totals and set goals.</p></div>
       </div>
 
       <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,var(--surface) 0%,var(--accent-light) 100%);border:1px solid #c3ddd1;">
@@ -845,7 +845,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
           </div>
           <div style="margin-top:20px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-              <div style="font-size:11px;font-weight:600;color:var(--text2);">Overall progress</div>
+              <div style="font-size:11px;font-weight:600;color:var(--text2);">Savings progress is not tracked yet</div>
               <div style="font-size:11px;font-weight:700;color:var(--accent);" id="finish-pct">0%</div>
             </div>
             <div style="height:8px;background:var(--border);border-radius:99px;overflow:hidden;">
@@ -934,11 +934,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
         <div class="card-header"><span class="card-title">Bank Balance</span></div>
         <div class="card-body">
           <div class="form-group">
-            <label class="form-label">What does your bank account show?</label>
+            <label class="form-label" for="settings-balance">What does your bank account show?</label>
             <input class="form-input" type="number" id="settings-balance" placeholder="e.g. 2500">
           </div>
           <div class="form-group">
-            <label class="form-label">Balance as of (this month)</label>
+            <label class="form-label" for="settings-balance-date">Balance as of (this month)</label>
             <input class="form-input" type="date" id="settings-balance-date" onchange="fpRefreshPayQuestion('settings-balance')">
             <div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4;">Use today if you just checked. Spending dated on or after this day is taken off it; income dated on this day is not added, because it may already be in it.</div>
           </div>
@@ -996,11 +996,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
     <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">Update your paycheck details anytime.</div>
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:10px;">Primary income</div>
     <div class="form-group">
-      <label class="form-label">How much do you take home each paycheck?</label>
+      <label class="form-label" for="ei-amount">How much do you take home each paycheck?</label>
       <input class="form-input" type="number" id="ei-amount" placeholder="e.g. 1400" style="font-size:18px;padding:12px;">
     </div>
     <div class="form-group">
-      <label class="form-label">How often do you get paid?</label>
+      <label class="form-label" for="ei-frequency">How often do you get paid?</label>
       <select class="form-select" id="ei-frequency">
         <option value="weekly">Every week</option>
         <option value="biweekly">Every 2 weeks</option>
@@ -1009,8 +1009,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Next or last payday</label>
+      <label class="form-label" for="ei-payday">Next or last payday</label>
       <input class="form-input" type="date" id="ei-payday">
+      <p style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px;">Dates follow your saved schedule. Weekends and holidays are not shifted automatically; confirm your employer's actual deposit dates.</p>
     </div>
     <div style="display:flex;gap:8px;margin-top:4px;">
       <button class="save-btn" style="flex:1;" onclick="saveEditIncome()">Save Changes</button>
@@ -1033,7 +1034,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
     <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:600;margin-bottom:4px;">Import statements</div>
     <div style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:18px;">Upload CSV exports from your bank or card (up to 20 files). Review transactions before saving. This does not connect to your bank.</div>
     <div class="form-group">
-      <label class="form-label">This batch is from a</label>
+      <label class="form-label" for="import-account-type">This batch is from a</label>
       <select class="form-select" id="import-account-type" onchange="cancelStatementImport()">
         <option value="bank">Bank: expenses negative, income positive</option>
         <option value="card">Card: purchases positive</option>
@@ -1042,7 +1043,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <div style="font-size:11px;color:var(--text2);margin-top:6px;">Choose the sign used for purchases in your file. Separate Debit/Credit columns use their own direction. Card payments and credits are excluded; review the preview before importing.</div>
     </div>
     <div class="form-group">
-      <label class="form-label">Upload statement CSVs</label>
+      <label class="form-label" for="import-csv-input">Upload statement CSVs</label>
       <input type="file" id="import-csv-input" accept=".csv" multiple style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;font-size:13px;font-family:Inter,sans-serif;" onchange="handleStatementFiles(this.files)">
       <div style="font-size:11px;color:var(--text3);margin-top:4px;">CSV exports only for now, most banks offer this under "Download transactions."</div>
     </div>
@@ -1058,15 +1059,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   <div style="background:var(--surface);border-radius:20px;padding:26px;width:400px;max-width:95vw;box-shadow:var(--shadow-md);">
     <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:600;margin-bottom:16px;" id="ais-title">Add Another Income</div>
     <div class="form-group">
-      <label class="form-label">What's this income?</label>
+      <label class="form-label" for="ais-desc">What's this income?</label>
       <input class="form-input" id="ais-desc" type="text" placeholder="e.g. Partner's paycheck, Side job, Freelance">
     </div>
     <div class="form-group">
-      <label class="form-label">Amount per paycheck</label>
+      <label class="form-label" for="ais-amount">Amount per paycheck</label>
       <input class="form-input" id="ais-amount" type="number" placeholder="e.g. 900">
     </div>
     <div class="form-group">
-      <label class="form-label">How often?</label>
+      <label class="form-label" for="ais-frequency">How often?</label>
       <select class="form-select" id="ais-frequency">
         <option value="weekly">Every week</option>
         <option value="biweekly" selected>Every 2 weeks</option>
@@ -1075,7 +1076,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Next or last payday</label>
+      <label class="form-label" for="ais-payday">Next or last payday</label>
       <input class="form-input" id="ais-payday" type="date">
     </div>
     <div style="display:flex;gap:8px;margin-top:4px;">
@@ -1105,11 +1106,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
     <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:600;margin-bottom:4px;">Your Financial Triage</div>
     <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">Before we can help, we need to understand where you stand. 60 seconds.</div>
     <div class="form-group">
-      <label class="form-label">What does your bank account show?</label>
+      <label class="form-label" for="setup-balance">What does your bank account show?</label>
       <input class="form-input" type="number" id="setup-balance" placeholder="e.g. 2500" style="font-size:18px;padding:12px;">
     </div>
     <div class="form-group">
-      <label class="form-label">Balance as of (this month)</label>
+      <label class="form-label" for="setup-balance-date">Balance as of (this month)</label>
       <input class="form-input" type="date" id="setup-balance-date" onchange="fpRefreshPayQuestion('setup-balance')">
     </div>
     <div id="setup-balance-pay-wrap" style="display:none;margin-bottom:12px;">
@@ -1117,11 +1118,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <select class="form-select" id="setup-balance-pay"><option value="">Not sure</option><option value="yes">Yes, it is included</option><option value="no">No, not yet</option></select>
     </div>
     <div class="form-group">
-      <label class="form-label">Your next or last payday</label>
+      <label class="form-label" for="setup-payday">Your next or last payday</label>
       <input class="form-input" type="date" id="setup-payday" onchange="fpRefreshPayQuestion('setup-balance')">
     </div>
     <div class="form-group">
-      <label class="form-label">How often do you get paid?</label>
+      <label class="form-label" for="setup-frequency">How often do you get paid?</label>
       <select class="form-select" id="setup-frequency" onchange="fpRefreshPayQuestion('setup-balance')">
         <option value="weekly">Every week</option>
         <option value="biweekly" selected>Every 2 weeks</option>
@@ -1130,7 +1131,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">How much do you take home each paycheck?</label>
+      <label class="form-label" for="setup-payamount">How much do you take home each paycheck?</label>
       <input class="form-input" type="number" id="setup-payamount" placeholder="e.g. 1400" oninput="fpRefreshPayQuestion('setup-balance')">
     </div>
     <div style="display:flex;gap:8px;margin-top:4px;">
@@ -1223,15 +1224,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   <div style="background:var(--surface);border-radius:20px;padding:26px;width:420px;max-width:95vw;box-shadow:var(--shadow-md);">
     <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:600;margin-bottom:16px;">Edit Expense</div>
     <div class="form-group">
-      <label class="form-label">Description</label>
+      <label class="form-label" for="ee-desc">Description</label>
       <input class="form-input" id="ee-desc" type="text" onkeydown="if(event.key==='Enter'){event.preventDefault();saveExpenseEdit();}">
     </div>
     <div class="form-group">
-      <label class="form-label">Amount</label>
+      <label class="form-label" for="ee-amount">Amount</label>
       <input class="form-input" id="ee-amount" type="number" step="0.01" onkeydown="if(event.key==='Enter'){event.preventDefault();saveExpenseEdit();}">
     </div>
     <div class="form-group">
-      <label class="form-label">Date</label>
+      <label class="form-label" for="ee-date">Date</label>
       <input class="form-input" id="ee-date" type="date" onkeydown="if(event.key==='Enter'){event.preventDefault();saveExpenseEdit();}">
     </div>
     <div style="display:flex;gap:8px;margin-top:4px;">
@@ -1261,10 +1262,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 <div id="loan-edit-overlay" style="position:fixed;inset:0;background:rgba(26,25,22,0.55);backdrop-filter:blur(4px);z-index:400;display:none;align-items:center;justify-content:center;padding:20px;">
   <div style="background:var(--surface);border-radius:20px;padding:26px;width:420px;max-width:95vw;box-shadow:var(--shadow-md);">
     <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:600;margin-bottom:16px;">Edit Loan</div>
-    <div class="form-group"><label class="form-label">Lender name</label><input class="form-input" id="le-desc" type="text"></div>
+    <div class="form-group"><label class="form-label" for="le-desc">Lender name</label><input class="form-input" id="le-desc" type="text"></div>
     <div class="form-row" style="margin-bottom:12px;">
-      <div><label class="form-label">Balance owed ($)</label><input class="form-input" id="le-balance" type="number" step="0.01" oninput="calcLoanEditMin()"></div>
-      <div><label class="form-label">APR (%)</label><input class="form-input" id="le-apr" type="number" step="0.01" oninput="calcLoanEditMin()"></div>
+      <div><label class="form-label" for="le-balance">Balance owed ($)</label><input class="form-input" id="le-balance" type="number" step="0.01" oninput="calcLoanEditMin()"></div>
+      <div><label class="form-label" for="le-apr">APR (%)</label><input class="form-input" id="le-apr" type="number" step="0.01" oninput="calcLoanEditMin()"></div>
     </div>
     <div class="form-group"><label class="form-label">Monthly payment ($) <span style="font-weight:400;color:var(--text3);font-size:10px;">edit if your statement differs</span></label><input class="form-input" id="le-payment" type="number" step="0.01"></div>
     <div style="display:flex;gap:8px;margin-top:4px;">

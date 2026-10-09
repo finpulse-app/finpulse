@@ -776,7 +776,7 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>{openEditBalance();document.getElementById('edit-balance-input').value='';});await page.evaluate(()=>saveEditBalance());
   ok('T29 blank bank balance preserves saved settings and open editor',JSON.stringify(db.user_settings)===settingsBefore && await page.isVisible('#edit-balance-overlay'),'blank wrote settings');
   await page.evaluate(()=>{document.getElementById('edit-balance-input').value='0';document.getElementById('edit-balance-date').value='2026-10-08';return saveEditBalance();});
-  ok('T29 explicit zero bank balance saves successfully',db.user_settings[0].starting_balance===0 && !await page.isVisible('#edit-balance-overlay'),JSON.stringify(db.user_settings));
+  ok('T29 explicit zero bank balance saves successfully',Object.values(JSON.parse(db.user_settings[0].month_balances_json)).some(r=>r && r.v===2 && r.amount===0) && !await page.isVisible('#edit-balance-overlay'),JSON.stringify(db.user_settings));
   await page.evaluate(()=>showView('dreams',null));
   await page.fill('#d-rate-input','0');
   ok('T29 zero-growth scenario preserves principal',await page.evaluate(()=>dCompound(100,10)===100),'incorrect zero return');
@@ -785,6 +785,14 @@ const loan = id => txns().find(t => t.id === id);
   await page.fill('#d-rate-input','');
   ok('T29 blank growth rate asks for an assumption',await page.textContent('#d-future')==='—'&&/Enter an assumed/.test(await page.textContent('#d-coach')),await page.textContent('#d-coach'));
   await page.fill('#d-rate-input','10');
+
+  const offline=await browser.newContext();
+  await offline.route('**/cdn.jsdelivr.net/**',r=>r.fulfill({contentType:'application/javascript',body:''}));
+  await offline.route(/fonts\.(googleapis|gstatic)\.com|cdnjs|chart/,r=>r.fulfill({contentType:'text/css',body:''}));
+  const offlinePage=await offline.newPage();let offlineErrors=[];offlinePage.on('pageerror',e=>offlineErrors.push(e.message));
+  await offlinePage.goto('file://'+FILE);
+  ok('T29 missing account library displays usable connection error instead of spinner',await offlinePage.isVisible('#auth-screen') && /connection could not load/.test(await offlinePage.textContent('#signin-error')) && await offlinePage.isDisabled('#signin-btn') && offlineErrors.length===0,offlineErrors.join(' | '));
+  await offline.close();
 
   // ---- console / network
   const dbErrors = reqlog.filter(r => r.error);
