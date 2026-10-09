@@ -28,7 +28,8 @@ The supplied browser harness remains in `phase1/browser/`. Its Playwright import
 is configured through `PLAYWRIGHT_MODULE` or the installed `playwright` package,
 and `CHROME` can select a browser executable. It uses a fake backend. GitHub Actions
 runs it on Chromium in New York and Auckland time zones, installing dependencies
-only on the GitHub runner. The first run is pending; local Chrome aborted on launch.
+only on the GitHub runner. Each run passed 122 checks on revision bd4dc87 (Actions run 37986767395).
+Local Chrome aborted on launch.
 
 ```sh
 TZ=America/New_York node phase1/browser/browser-test-v149.js finpulse-v2-150.html

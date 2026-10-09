@@ -52,8 +52,10 @@ implementation. Their failure scenarios are covered by the new regression suite.
 Full inline JavaScript and the adapted browser harness pass syntax checks.
 
 Browser tests run on GitHub-hosted Chromium in New York and Auckland time zones,
-with Playwright 1.58.2 and a fake backend. Their first run is pending; local Chrome
-aborted before any assertion ran. No live Supabase mutation or two-account backend
+with Playwright 1.58.2 and a fake backend. The first run passed 122 checks with zero failures in each time zone
+(commit f9624ab). The zero-balance revision (bd4dc87) also passed all 122
+checks in each time zone. All six GitHub jobs passed in run 37986767395. Local Chrome aborted
+before any assertion ran. No live Supabase mutation or two-account backend
 test was performed. Local tests use synthetic values and mocked responses.
 
 ## Remaining release blockers
@@ -62,7 +64,7 @@ This patch handles settings persistence, not every transaction write. Loan
 recording/deletion still uses multiple backend operations and must be made atomic.
 Other transaction writes need consistent error and account-transition handling.
 Bill paid marks remain local to a device. Twice-monthly business-day shifts are
-deferred. Extra-payment allocation stays disabled. Staging auth, browser flows,
+deferred. Extra-payment allocation stays disabled. Staging auth/database integration,
 real imports and device checks are required before deployment.
 
 No production files, Supabase rows/schema, Auth configuration or deployment were
