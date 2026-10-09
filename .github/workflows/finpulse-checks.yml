@@ -20,3 +20,23 @@ jobs:
           node-version: '22'
       - run: node phase1/run-security-tests.js finpulse-v2-150.html
       - run: node phase1/run-current-formulas.js finpulse-v2-150.html
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        timezone: [America/New_York, Pacific/Auckland]
+    env:
+      TZ: ${{ matrix.timezone }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser test dependencies on runner
+        run: npm install --no-save --package-lock=false playwright@1.58.2
+      - name: Install Chromium on runner
+        run: npx playwright install --with-deps chromium
+      - name: Run browser regression checks against fake backend
+        run: node phase1/browser/browser-test-v149.js finpulse-v2-150.html
