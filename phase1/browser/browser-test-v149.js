@@ -658,6 +658,31 @@ const loan = id => txns().find(t => t.id === id);
   await page.setViewportSize({width:1280,height:900});
   ok('T24 desktop retains visible sidebar and four-column stats',await page.isVisible('#primary-navigation') && !await page.isVisible('#mobile-menu-btn') && await page.evaluate(()=>getComputedStyle(document.querySelector('.stats-row')).gridTemplateColumns.split(' ').length)===4,'desktop layout regressed');
 
+  // ---- T25 Expenses monthly summary versus saved-record library
+  seed();db.transactions.push(
+    {id:'historic-payment',user_id:'user-A',type:'expense',description:'Historic payment',amount:999,date:'2025-06-15',category:'loan_payment',recurring:false},
+    {id:'historic-expense',user_id:'user-A',type:'expense',description:'Old expense',amount:900,date:'2025-08-01',category:'shopping',recurring:false},
+    {id:'oct-item',user_id:'user-A',type:'expense',description:'October item',amount:20,date:'2026-10-09',category:'food',recurring:false},
+    {id:'nov-item',user_id:'user-A',type:'expense',description:'November item',amount:70,date:'2026-11-04',category:'food',recurring:false},
+    {id:'weekly-item',user_id:'user-A',type:'expense',description:'Weekly item',amount:10,date:'2026-10-01',anchor_date:'2026-10-01',frequency:'weekly',recurring:true},
+    {id:'yearly-item',user_id:'user-A',type:'bill',description:'Yearly item',amount:30,date:'2025-10-10',anchor_date:'2025-10-10',frequency:'yearly',recurring:true});
+  await load();await hideStage();const originalRecords=JSON.stringify(db.transactions),originalWrites=reqlog.filter(r=>r.op!=='select').length;
+  await page.evaluate(()=>showView('expenses',null));
+  const expenseTotal=async()=>parseFloat((await page.textContent('#exp-stat-total')).replace(/[^0-9.]/g,''));
+  ok('T25 October Expenses total reconciles with calendar and spending split',await expenseTotal()===500 && await cashOut()===500 && await ringsTotal()===500 && await page.textContent('#exp-month-label')==='October 2026',await page.textContent('#exp-stat-total'));
+  ok('T25 Expenses monthly split counts weekly/yearly occurrences and scheduled loans',await page.textContent('#exp-stat-recurring')==='-$480' && await page.textContent('#exp-stat-onetime')==='-$20',await page.textContent('#exp-stats-row'));
+  ok('T25 saved fixed records preserve historic payments and show correct frequencies and years',/Historic payment/.test(await page.textContent('#fv-fixed-list')) && /2025/.test(await page.textContent('#fv-fixed-list')) && /Weekly/.test(await page.textContent('#fv-fixed-list')) && /Yearly/.test(await page.textContent('#fv-fixed-list')) && !/\/mo/.test(await page.textContent('#fv-fixed-list')) && await page.textContent('#fv-fixed-total')==='3 saved records',await page.textContent('#fv-fixed-list'));
+  ok('T25 saved one-time records remain available across dates',/Old expense/.test(await page.textContent('#fv-variable-list')) && /November item/.test(await page.textContent('#fv-variable-list')) && await page.textContent('#fv-variable-total')==='3 saved records',await page.textContent('#fv-variable-list'));
+  await page.click('[aria-label="Next expense month"]');
+  ok('T25 Expenses month control recalculates November without hiding records',await expenseTotal()===510 && await cashOut()===510 && await page.textContent('#exp-month-label')==='November 2026' && /October item/.test(await page.textContent('#fv-variable-list')),await page.textContent('#exp-stat-total'));
+  await page.click('[aria-label="Previous expense month"]');
+  ok('T25 Expenses month control returns to October consistently',await expenseTotal()===500 && await page.textContent('#exp-month-label')==='October 2026',await page.textContent('#exp-stat-total'));
+  await page.click('.fv-row:has-text("Historic payment")');
+  ok('T25 historic payment details retain year and do not invent missing principal',await page.isVisible('#lp-info-overlay') && /Historic payment/.test(await page.textContent('#lp-info-title')) && /2025/.test(await page.textContent('#lp-info-date')) && await page.textContent('#lp-info-principal')==='Not recorded','payment record became inaccessible or invented principal');
+  await page.evaluate(()=>{document.getElementById('lp-info-overlay').style.display='none';currentYear=2024;currentMonth=0;renderExpensesView();});
+  ok('T25 empty month has zero summary while saved records remain visible',await expenseTotal()===0 && /No calendar outflows/.test(await page.textContent('#fv-ratio-bar')) && /Historic payment/.test(await page.textContent('#fv-fixed-list')),await page.textContent('#fv-ratio-bar'));
+  ok('T25 viewing records and changing months performs no financial writes',JSON.stringify(db.transactions)===originalRecords && reqlog.filter(r=>r.op!=='select').length===originalWrites,'record navigation mutated backend');
+
   // ---- console / network
   const dbErrors = reqlog.filter(r => r.error);
   const realConsole = consoleErrors.filter(e => !/Failed to load resource|fonts|net::ERR|favicon/i.test(e));

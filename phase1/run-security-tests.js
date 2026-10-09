@@ -96,6 +96,21 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
     const c=make(['fpMonthlySpendingBreakdown'],{buildDayMap(y,m){assert.equal(y,2026);assert.equal(m,9);return dm}});
     const r=c.fpMonthlySpendingBreakdown(2026,9);assert.equal(r.fixedTotal,150);assert.equal(r.varTotal,3.75);assert.equal(r.total,153.75);
   });
+  for(const [frequency,label] of [['weekly','Weekly'],['biweekly','Every two weeks'],['twicemonthly','Twice monthly'],['monthly','Monthly'],['yearly','Yearly']]) await test('expense record labels '+frequency+' without claiming a monthly amount',()=>{
+    const c=make(['fpExpenseRecordLabel']);const text=c.fpExpenseRecordLabel({recurring:true,frequency,anchor_date:'2026-10-01'});assert(text.startsWith(label));assert(text.includes('2026'));assert(!text.includes('/mo'));
+  });
+  await test('historical loan payment label includes its recorded year',()=>{
+    const c=make(['fpExpenseRecordLabel']);assert.equal(c.fpExpenseRecordLabel({category:'loan_payment',date:'2025-06-15'}),'Payment recorded · Jun 15, 2025');
+  });
+  for(const principal of [null,0]) await test('payment details '+principal+' do not invent principal allocation',()=>{
+    const c=make(['openLoanPaymentInfo','fmt'],{transactions:[{id:'payment',description:'Recorded payment',amount:999,date:'2025-06-15',principal_applied:principal}]});
+    c.openLoanPaymentInfo('payment');assert.equal(c._els['lp-info-principal'].textContent,principal===null?'Not recorded':'$0');assert(c._els['lp-info-date'].textContent.includes('2025'));
+  });
+  await test('expense summary uses monthly events while library retains historical records',()=>{
+    const old={id:'old',type:'expense',description:'Old payment',amount:999,date:'2025-06-15',category:'loan_payment'},weekly={id:'weekly',type:'expense',description:'Weekly item',amount:10,date:'2026-10-01',anchor_date:'2026-10-01',recurring:true,frequency:'weekly'},expense={id:'other',type:'expense',description:'One time',amount:2,date:'2026-10-09'};
+    const c=make(['renderExpensesView','fpExpenseRecordLabel','fpEscHtml','fmt'],{currentYear:2026,currentMonth:9,transactions:[old,weekly,expense],fpMonthlySpendingBreakdown(y,m){assert.equal(y,2026);assert.equal(m,9);return{fixedTotal:50,varTotal:2,total:52}},catIconSvg:()=>''});
+    c.renderExpensesView();assert.equal(c._els['exp-stat-total'].textContent,'-$52');assert.equal(c._els['exp-stat-recurring'].textContent,'-$50');assert.equal(c._els['fv-fixed-total'].textContent,'2 saved records');assert(c._els['fv-fixed-list'].innerHTML.includes('Old payment'));assert(c._els['fv-fixed-list'].innerHTML.includes('2025'));assert(c._els['fv-fixed-list'].innerHTML.includes('Weekly'));assert(!c._els['fv-fixed-list'].innerHTML.includes('/mo'));assert.equal(c.transactions[0],old);
+  });
   for (const end of [-50,50]) await test('month-end estimate '+end+' avoids unsupported bank-balance claims',()=>{
     const dm={};for(let d=1;d<=31;d++)dm[d]={income:[],expenses:[],bills:[],loans:[],balance:end};
     const c=make(['updateStats','fmt'],{currentYear:2026,currentMonth:9,buildDayMap:()=>dm,getStartingBalanceForMonth:()=>end,fpAllocationEnabled:()=>false,renderSpendingRings(){},renderPriorityReport(){},updateBillBadge(){},detectStage(){return null},clearTimeout(){}});

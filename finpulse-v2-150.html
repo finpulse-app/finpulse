@@ -657,10 +657,16 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
       </div>
 
       <!-- Summary stats -->
+      <div class="cal-nav" style="margin-bottom:8px;">
+        <button class="cal-btn" onclick="fpChangeExpenseMonth(-1)" aria-label="Previous expense month">&#8249;</button>
+        <strong id="exp-month-label" style="font-size:14px;">Selected month</strong>
+        <button class="cal-btn" onclick="fpChangeExpenseMonth(1)" aria-label="Next expense month">&#8250;</button>
+      </div>
+      <p style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px;">Calendar outflows for this month, including scheduled payments. These estimates use the same items as the calendar.</p>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;" id="exp-stats-row">
-        <div class="stat-card"><div class="stat-divider neg"></div><div class="stat-label">Fixed costs</div><div class="stat-value neg" id="exp-stat-recurring">$0</div><div class="stat-sub">same every month</div></div>
-        <div class="stat-card"><div class="stat-divider warn"></div><div class="stat-label">Variable spending</div><div class="stat-value warn" id="exp-stat-onetime">$0</div><div class="stat-sub">your day-to-day choices</div></div>
-        <div class="stat-card"><div class="stat-divider neg"></div><div class="stat-label">Total tracked</div><div class="stat-value neg" id="exp-stat-total">$0</div><div class="stat-sub">all expenses</div></div>
+        <div class="stat-card"><div class="stat-divider neg"></div><div class="stat-label">Fixed outflows</div><div class="stat-value neg" id="exp-stat-recurring">$0</div><div class="stat-sub">recurring items and loan payments</div></div>
+        <div class="stat-card"><div class="stat-divider warn"></div><div class="stat-label">Variable outflows</div><div class="stat-value warn" id="exp-stat-onetime">$0</div><div class="stat-sub">one-time calendar expenses</div></div>
+        <div class="stat-card"><div class="stat-divider neg"></div><div class="stat-label">Total outflows</div><div class="stat-value neg" id="exp-stat-total">$0</div><div class="stat-sub">selected month</div></div>
       </div>
 
       <!-- Fixed vs Variable ratio bar -->
@@ -670,15 +676,17 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
       </div>
 
       <!-- Fixed vs Variable, side by side, click any row for details -->
+      <h3 style="font-size:15px;margin-bottom:6px;">Saved records</h3>
+      <p id="exp-records-note" style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px;">All dates. Recurring rows show the amount per occurrence; recorded payments and one-time expenses show their saved amount. Click a row to view or edit it. This list is separate from the monthly totals above.</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
         <div class="card" style="overflow:visible;">
-          <div class="card-header"><span class="card-title" style="color:var(--danger);">Fixed</span><span class="card-meta" id="fv-fixed-total"></span></div>
+          <div class="card-header"><span class="card-title" style="color:var(--danger);">Recurring &amp; loan payments</span><span class="card-meta" id="fv-fixed-total"></span></div>
           <div class="card-body" style="padding:6px 10px;" id="fv-fixed-list">
             <div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0;">No fixed costs yet. Add subscriptions, rent, or bills.</div>
           </div>
         </div>
         <div class="card" style="overflow:visible;">
-          <div class="card-header"><span class="card-title" style="color:var(--warning);">Variable</span><span class="card-meta" id="fv-variable-total"></span></div>
+          <div class="card-header"><span class="card-title" style="color:var(--warning);">One-time expenses</span><span class="card-meta" id="fv-variable-total"></span></div>
           <div class="card-body" style="padding:6px 10px;" id="fv-variable-list">
             <div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0;">No variable spending tracked yet.</div>
           </div>
@@ -1345,9 +1353,9 @@ function openLoanPaymentInfo(txnId) {
   if (!txn) return;
   window._lpInfoId = txn.id;
   document.getElementById('lp-info-title').textContent = txn.description;
-  document.getElementById('lp-info-date').textContent = txn.date ? new Date(txn.date + 'T12:00:00').toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'}) : '';
+  document.getElementById('lp-info-date').textContent = txn.date ? new Date(txn.date + 'T12:00:00').toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'}) : '';
   document.getElementById('lp-info-amount').textContent = '$' + fmt(txn.amount);
-  document.getElementById('lp-info-principal').textContent = '$' + fmt(txn.principal_applied != null ? txn.principal_applied : txn.amount);
+  document.getElementById('lp-info-principal').textContent = txn.principal_applied != null ? '$' + fmt(txn.principal_applied) : 'Not recorded';
   document.getElementById('lp-info-overlay').style.display = 'flex';
 }
 
@@ -2677,6 +2685,21 @@ function toggleExpCat(catId, viewId) {
   if (row) row.classList.toggle('open', !isOpen);
 }
 
+function fpChangeExpenseMonth(delta) {
+  if (delta === -1) prevMonth();
+  else if (delta === 1) nextMonth();
+  else return;
+  renderExpensesView();
+}
+
+function fpExpenseRecordLabel(t) {
+  const frequencies = { monthly: 'Monthly', weekly: 'Weekly', biweekly: 'Every two weeks', twicemonthly: 'Twice monthly', yearly: 'Yearly' };
+  const label = t.recurring ? (frequencies[t.frequency || 'monthly'] || 'Recurring') : (t.category === 'loan_payment' ? 'Payment recorded' : 'Recorded');
+  const iso = t.recurring ? (t.anchor_date || t.date) : t.date;
+  const date = iso ? new Date(iso + 'T12:00:00') : null;
+  return label + (date && !isNaN(date.getTime()) ? ' · ' + (t.recurring ? 'from ' : '') + date.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '');
+}
+
 function renderExpensesView() {
   const allExp = transactions.filter(function(t) { return (t.type === 'expense' || t.type === 'bill') && t.type !== 'note'; });
   // Fixed = recurring (bills, subscriptions, rent) OR a recorded loan payment (the obligation is fixed
@@ -2685,9 +2708,10 @@ function renderExpensesView() {
   const recurring = allExp.filter(function(t) { return t.recurring || t.category === 'loan_payment'; });
   const onetime = allExp.filter(function(t) { return !t.recurring && t.category !== 'loan_payment'; });
 
-  const recurTotal = recurring.reduce(function(s,t) { return s + parseFloat(t.amount); }, 0);
-  const oneTimeTotal = onetime.reduce(function(s,t) { return s + parseFloat(t.amount); }, 0);
-  const totalAll = recurTotal + oneTimeTotal;
+  const breakdown = fpMonthlySpendingBreakdown(currentYear, currentMonth);
+  const recurTotal = breakdown.fixedTotal, oneTimeTotal = breakdown.varTotal, totalAll = breakdown.total;
+  const monthLabel = document.getElementById('exp-month-label');
+  if (monthLabel) monthLabel.textContent = new Date(currentYear, currentMonth, 1).toLocaleDateString('en-US', {month:'long',year:'numeric'});
 
   const statR = document.getElementById('exp-stat-recurring');
   const statO = document.getElementById('exp-stat-onetime');
@@ -2711,14 +2735,10 @@ function renderExpensesView() {
       + '<span>Variable ' + varPct + '%<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-left:4px;"></span></span>'
       + '</div>';
     if (ratioInsight) {
-      ratioInsight.textContent = fixedPct >= 65
-        ? 'Your fixed costs take up most of your spending. These are the hardest to change quickly, look for recurring subscriptions or bills you could reduce or cancel.'
-        : fixedPct <= 35
-        ? 'Most of your spending is variable, day-to-day choices. That\'s actually good news, this is exactly where you have the most control to save.'
-        : 'A healthy mix. Fixed costs are your floor, variable spending is where day-to-day choices matter most.';
+      ratioInsight.textContent = 'This split covers the selected month\'s calendar outflows, including scheduled payments. It is separate from the saved records below.';
     }
   } else if (ratioBar) {
-    ratioBar.innerHTML = '<div style="font-size:12px;color:var(--text3);text-align:center;padding:6px 0;">Add expenses to see your fixed vs variable split.</div>';
+    ratioBar.innerHTML = '<div style="font-size:12px;color:var(--text3);text-align:center;padding:6px 0;">No calendar outflows in this month.</div>';
     if (ratioInsight) ratioInsight.textContent = '';
   }
 
@@ -2830,9 +2850,7 @@ function renderExpensesView() {
     return sorted.map(function(t) {
       const catDef = CAT_DEFS.find(function(c) { return c.id === (t.category || 'other').toLowerCase(); }) || { id:'other', color:'#6b7280' };
       const isLoanPayment = t.category === 'loan_payment';
-      const dateStr = t.anchor_date
-        ? ordinal(new Date(t.anchor_date + 'T12:00:00').getDate()) + '/mo'
-        : (t.date ? new Date(t.date + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'}) : '');
+      const dateStr = fpExpenseRecordLabel(t);
       const clickFn = isLoanPayment ? 'openLoanPaymentInfo(\'' + t.id + '\')' : 'openExpenseEdit(\'' + t.id + '\')';
       return '<div class="fv-row" onclick="' + clickFn + '">'
         + '<div class="fv-row-icon" style="background:' + catDef.color + '18;color:' + catDef.color + ';">' + catIconSvg(catDef.id, 15) + '</div>'
@@ -2848,8 +2866,8 @@ function renderExpensesView() {
   const varTotalEl = document.getElementById('fv-variable-total');
   if (fixedListEl) fixedListEl.innerHTML = buildFvRows(recurring) || '<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0;">No fixed costs yet. Add subscriptions, rent, or bills.</div>';
   if (varListEl) varListEl.innerHTML = buildFvRows(onetime) || '<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0;">No variable spending tracked yet.</div>';
-  if (fixedTotalEl) fixedTotalEl.textContent = '-$' + fmt(recurTotal) + '/mo';
-  if (varTotalEl) varTotalEl.textContent = '-$' + fmt(oneTimeTotal);
+  if (fixedTotalEl) fixedTotalEl.textContent = recurring.length + ' saved record' + (recurring.length === 1 ? '' : 's');
+  if (varTotalEl) varTotalEl.textContent = onetime.length + ' saved record' + (onetime.length === 1 ? '' : 's');
 }
 
 function fpMonthlySpendingBreakdown(year, month) {
