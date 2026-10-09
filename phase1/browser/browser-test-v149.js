@@ -767,6 +767,7 @@ const loan = id => txns().find(t => t.id === id);
   await page.click('button:has-text("Refresh paid status")');await page.waitForTimeout(300);
   ok('T28 refresh recovers committed paid mark after lost confirmation',await billTotal()==='All cleared ✓',await billTotal());
 
+  async function scenarioRate(value){if(!await page.isVisible('#d-rate-input'))await page.click('summary:text-is("Change the growth assumption")');await page.fill('#d-rate-input',value);}
   // ---- T29 Large-account reload and financial presentation
   seed();db.transactions=Array.from({length:1001},(_,i)=>({id:'row-'+String(i).padStart(5,'0'),user_id:'user-A',type:'expense',description:'Expense '+i,amount:0.01,date:'2026-10-09',category:'Other',recurring:false}));
   await load();
@@ -785,13 +786,13 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>{document.getElementById('edit-balance-input').value='0';document.getElementById('edit-balance-date').value='2026-10-08';return saveEditBalance();});
   ok('T29 explicit zero bank balance saves successfully',Object.values(JSON.parse(db.user_settings[0].month_balances_json)).some(r=>r && r.v===2 && r.amount===0) && !await page.isVisible('#edit-balance-overlay'),JSON.stringify(db.user_settings));
   await page.evaluate(()=>showView('dreams',null));
-  await page.fill('#d-rate-input','0');
+  await scenarioRate('0');
   ok('T29 zero-growth scenario preserves principal',await page.evaluate(()=>dCompound(100,10)===100),'incorrect zero return');
-  await page.fill('#d-rate-input','-10');
+  await scenarioRate('-10');
   ok('T29 negative-growth scenario shows loss without guaranteed-return copy',await page.evaluate(()=>dCompound(100,10)<100)&&/negative/.test(await page.textContent('#d-coach')),await page.textContent('#d-coach'));
-  await page.fill('#d-rate-input','');
+  await scenarioRate('');
   ok('T29 blank growth rate asks for an assumption',await page.textContent('#d-future')==='—'&&/Enter an assumed/.test(await page.textContent('#d-coach')),await page.textContent('#d-coach'));
-  await page.fill('#d-rate-input','10');
+  await scenarioRate('10');
 
   // Goal creation, progress, archive and save recovery on synthetic data.
   seed();await load();await page.evaluate(()=>showView('plan',null));await page.waitForTimeout(200);
@@ -834,12 +835,12 @@ const loan = id => txns().find(t => t.id === id);
   const jsonDownloadWait=page.waitForEvent('download');await page.click('button:text-is("Export full data JSON")');const jsonDownload=await jsonDownloadWait;
   const exportData=JSON.parse(fs.readFileSync(await jsonDownload.path(),'utf8'));
   ok('T31 JSON export includes goals, settings and transactions',exportData.format==='finpulse-data'&&exportData.goals.length===2&&exportData.transactions.length===db.transactions.length&&Array.isArray(exportData.bill_paid_marks),'incomplete export');
-  await page.evaluate(()=>showView('dreams',null));await page.fill('#d-amt-input','12.50');await page.fill('#d-rate-input','0');
+  await page.evaluate(()=>showView('dreams',null));await page.fill('#d-amt-input','12.50');await scenarioRate('0');
   ok('T31 scenario preserves cents in entered amount',await page.textContent('#d-future')==='$12.5','cents lost');
   await page.fill('#d-amt-input','12oops');
   ok('T31 malformed scenario amount cannot show a stale result',await page.textContent('#d-future')==='—'&&await page.textContent('#d-milestones')===''&&/valid amount/.test(await page.textContent('#d-coach')),'stale result');
   await page.fill('#d-amt-input','0');
-  ok('T31 zero scenario amount is supported',await page.textContent('#d-future')==='$0','zero rejected');await page.fill('#d-amt-input','5000');await page.fill('#d-rate-input','10');
+  ok('T31 zero scenario amount is supported',await page.textContent('#d-future')==='$0','zero rejected');await page.fill('#d-amt-input','5000');await scenarioRate('10');
 
   await page.evaluate(()=>{showView('loans',null);openLoanModal();});await page.selectOption('#lm-cat','Car Loan');await page.fill('#lm-desc','Statement payment loan');await page.fill('#lm-balance','1200');await page.fill('#lm-apr','0');await page.fill('#lm-payment','125.50');
   await page.fill('#lm-apr','9');
@@ -848,6 +849,26 @@ const loan = id => txns().find(t => t.id === id);
   ok('T32 zero APR loan saves the user-entered statement payment',statementLoan&&statementLoan.apr===0&&statementLoan.min_payment===125.5,'loan missing or estimate substituted');
   await page.evaluate(id=>openLoanEdit(id),statementLoan.id);await page.fill('#le-balance','1000');await page.fill('#le-apr','5');
   ok('T32 editing loan balance and APR keeps existing payment',Number(await page.inputValue('#le-payment'))===125.5,'edit overwrote payment');await page.keyboard.press('Escape');
+
+
+  await page.evaluate(()=>showView('dreams',null));await page.fill('#d-amt-input','200');await scenarioRate('10');await page.click('button:text-is("10 years")');
+  ok('T33 one-purchase comparison explains the immediate tradeoff',await page.textContent('#d-future')==='$518.75'&&/Spend \$200 now/.test(await page.textContent('#d-coach')),'comparison missing');
+  await page.click('#d-monthly-btn');
+  ok('T33 monthly habit uses end-of-month contributions',await page.textContent('#d-future')==='$39,972.77'&&await page.textContent('#d-purchase')==='$24,000','monthly formula wrong: '+await page.textContent('#d-future'));
+  await scenarioRate('0');
+  ok('T33 monthly zero growth preserves every contribution',await page.textContent('#d-future')==='$24,000','zero monthly growth wrong');
+  await page.click('#d-goal-btn');await page.waitForTimeout(300);
+  ok('T33 calculator opens a ready-to-review goal without recording savings',await page.isVisible('#goal-editor')&&await page.inputValue('#goal-target')==='2400'&&await page.inputValue('#goal-monthly')==='200'&&await page.inputValue('#goal-saved')==='0'&&db.financial_goals.length===2,'unexpected goal write or draft');await page.click('#goal-editor button:text-is("Cancel")');
+  await page.evaluate(()=>showView('dreams',null));await page.click('#d-once-btn');await page.fill('#d-amt-input','oops');
+  ok('T33 invalid spending amount disables goal shortcut',await page.isDisabled('#d-goal-btn'),'invalid amount can become goal');await page.fill('#d-amt-input','200');await scenarioRate('10');
+  seed();db.transactions.push({id:'priority-bill',user_id:'user-A',type:'bill',description:'Priority bill',amount:25,date:'2026-10-01',anchor_date:'2026-10-01',category:'Other',recurring:true,frequency:'monthly',created_at:'2026-09-01T00:00:00Z'});await load();
+  await page.evaluate(()=>{currentMonth=8;showView('calendar',null);renderPriorityReport();});
+  const priorityWrites=db.transactions.length;await page.click('#priority-report button:text-is("Update balance")');
+  ok('T34 priority balance shortcut opens current-month balance entry',await page.isVisible('#edit-balance-overlay')&&await page.evaluate(()=>currentMonth===9)&&db.transactions.length===priorityWrites,'wrong month or unexpected write');await page.keyboard.press('Escape');
+  await page.evaluate(()=>{showView('calendar',null);renderPriorityReport();});
+  const billShortcut=page.locator('#priority-report button:text-is("Review bill")');
+  ok('T34 due-bill priority offers a direct review action',await billShortcut.count()>0,'missing bill shortcut');await billShortcut.first().click();
+  ok('T34 reviewing a priority bill opens Bills without changing paid status',await page.isVisible('#view-bills')&&db.transactions.length===priorityWrites,'shortcut saved money action');
 
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {

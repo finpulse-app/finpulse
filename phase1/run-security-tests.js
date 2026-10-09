@@ -376,5 +376,12 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   await test('late goal refresh cannot replace newer saved progress',async()=>{
     let done;const c=make(['fpLoadGoals'],{renderPlan(){},sb:{from(){const q={select(){return q},eq(){return q},order(){return q},range:()=>new Promise(r=>{done=r})};return q;}}});const load=c.fpLoadGoals(false);c._fpGoalVersion++;c._fpGoals=[{id:'saved',saved_amount:100}];done({data:[{id:'saved',saved_amount:0}],error:null});assert.equal(await load,false);assert.equal(c._fpGoals[0].saved_amount,100);
   });
+  await test('monthly spending comparison compounds each contribution, including zero and losses',()=>{
+    const c=make(['dScenario','dCompound','fpRound2'],{RATE:0.1,_fpDreamMode:'monthly'});let expected=0;const factor=Math.pow(1.1,1/12);for(let month=0;month<120;month++)expected=expected*factor+200;assert.equal(c.dScenario(200,10),Math.round(expected*100)/100);
+    c.RATE=0;assert.equal(c.dScenario(12.5,2),300);c.RATE=-1;assert.equal(c.dScenario(200,10),200);c._fpDreamMode='once';assert.equal(c.dScenario(200,10),0);
+  });
+  await test('priority shortcuts route obligations and balance checks to working editors',()=>{
+    const c=make(['fpPriorityShortcut']);assert.equal(c.fpPriorityShortcut('overdue_bill').destination,'bills');assert.equal(c.fpPriorityShortcut('due_loan').destination,'loans');assert.equal(c.fpPriorityShortcut('income_unconfirmed').destination,'balance');assert.equal(c.fpPriorityShortcut('on_track').destination,'plan');assert.equal(c.fpPriorityShortcut('unknown'),null);
+  });
   console.log('TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
 })();

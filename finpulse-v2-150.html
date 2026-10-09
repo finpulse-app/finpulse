@@ -872,38 +872,42 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
         
       </div>
       <div class="card" style="max-width:600px;">
-        <div class="card-header"><span class="card-title">Future value scenario</span><span class="card-meta">Hypothetical annual growth</span></div>
+        <div class="card-header"><span class="card-title">Is it worth buying now?</span><span class="card-meta">Hypothetical annual growth</span></div>
         <div class="card-body">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
-            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;">
-              <div style="font-size:11px;color:var(--text3);margin-bottom:5px;">If I buy it</div>
-              <div style="font-family:'DM Serif Display',serif;font-size:24px;color:var(--text);" id="d-purchase">$5,000</div>
-              <div style="font-size:11px;color:var(--danger);font-weight:600;margin-top:2px;">gone today</div>
-            </div>
-            <div style="background:var(--accent-light);border:1px solid #c3ddd1;border-radius:var(--radius-sm);padding:12px 14px;">
-              <div style="font-size:11px;color:var(--text3);margin-bottom:5px;">If I invest it</div>
-              <div style="font-family:'DM Serif Display',serif;font-size:24px;color:var(--accent);" id="d-future">$8,154</div>
-              <div style="font-size:11px;color:var(--accent-mid);margin-top:2px;" id="d-sub">in 5 years</div>
-            </div>
-          </div>
           <div class="slider-row">
-            <label>Purchase</label>
+            <label for="d-amt-input">Cost</label>
             <input type="range" min="100" max="100000" step="100" value="5000" id="d-amt-slider" oninput="dSyncAmt('slider')">
             <input type="text" class="dreams-input" id="d-amt-input" value="$5,000" oninput="dSyncAmt('text')" onblur="dFormatInput()">
           </div>
           <div class="slider-row" style="margin-bottom:14px;">
-            <label>Years</label>
+            <label for="d-yr-slider">Years</label>
             <input type="range" min="1" max="50" step="1" value="5" id="d-yr-slider" oninput="dUpdate()">
             <span class="slider-val" id="d-yr-out">5 years</span>
           </div>
-          <div class="form-group"><label class="form-label" for="d-rate-input">Assumed annual growth (%)</label><input class="form-input" id="d-rate-input" type="number" min="-100" max="100" step="0.1" value="10" oninput="dUpdate()"><p style="font-size:12px;line-height:1.5;color:var(--text2);margin-top:6px;">A calculation scenario, not a forecast or guaranteed return. Annual compounding; no fees, taxes, inflation or added contributions.</p></div>
+          <div class="goal-actions" role="group" aria-label="Spending frequency"><button class="btn btn-outline" id="d-once-btn" aria-pressed="true" onclick="dSetMode('once')">One purchase</button><button class="btn btn-outline" id="d-monthly-btn" aria-pressed="false" onclick="dSetMode('monthly')">Every month</button></div><p id="d-mode-note" class="goal-note" style="margin:8px 0 14px;">Compare spending this amount once with keeping it invested.</p>
+          <div class="goal-actions" role="group" aria-label="Compare years"><button class="btn btn-outline" onclick="dSetYears(5)">5 years</button><button class="btn btn-outline" onclick="dSetYears(10)">10 years</button><button class="btn btn-outline" onclick="dSetYears(20)">20 years</button><button class="btn btn-outline" onclick="dSetYears(30)">30 years</button></div>
+          <details style="margin:14px 0;"><summary style="cursor:pointer;">Change the growth assumption</summary>          <div class="form-group"><label class="form-label" for="d-rate-input">Assumed annual growth (%)</label><input class="form-input" id="d-rate-input" type="number" min="-100" max="100" step="0.1" value="10" oninput="dUpdate()"><p style="font-size:12px;line-height:1.5;color:var(--text2);margin-top:6px;">The default 10% is an illustration for an S&amp;P 500 investing scenario, not a measured current return or forecast. Returns vary and can be negative. Annual compounding; no fees, taxes, inflation or added contributions. <a href="https://www.investor.gov/financial-tools-calculators/calculators/compound-interest-calculator" target="_blank" rel="noopener noreferrer">How compounding works</a></p></div>
+</details>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:11px;color:var(--text3);margin-bottom:5px;">Spend it</div>
+              <div style="font-family:'DM Serif Display',serif;font-size:24px;color:var(--text);" id="d-purchase">$5,000</div>
+              <div style="font-size:11px;color:var(--danger);font-weight:600;margin-top:2px;">$0 of this amount left to grow</div>
+            </div>
+            <div style="background:var(--accent-light);border:1px solid #c3ddd1;border-radius:var(--radius-sm);padding:12px 14px;">
+              <div style="font-size:11px;color:var(--text3);margin-bottom:5px;">Keep it invested</div>
+              <div style="font-family:'DM Serif Display',serif;font-size:24px;color:var(--accent);" id="d-future">$8,154</div>
+              <div style="font-size:11px;color:var(--accent-mid);margin-top:2px;" id="d-sub">in 5 years</div>
+            </div>
+          </div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:12px;" id="d-milestones"></div>
           <div style="display:flex;gap:10px;font-size:11px;color:var(--text3);margin-bottom:7px;">
             <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:2px;background:var(--accent);display:inline-block;border-radius:2px;"></span>Hypothetical growth</span>
-            <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:0;border-top:2px dashed var(--danger);display:inline-block;"></span>Your purchase</span>
+            <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:0;border-top:2px dashed var(--danger);display:inline-block;"></span>Left to grow after spending</span>
           </div>
           <div style="position:relative;width:100%;height:190px;margin-bottom:12px;"><canvas id="d-chart" role="img" aria-label="Investment growth chart"></canvas></div>
-          <div class="coach-box" id="d-coach"></div>
+          <div class="coach-box" id="d-coach" aria-live="polite"></div><p id="d-tradeoff" class="goal-note" style="margin-top:10px;"></p><button class="btn btn-outline" id="d-goal-btn" style="margin-top:10px;" onclick="dMakeGoal()">Put this toward a goal</button>
         </div>
       </div>
     </div>
@@ -3935,6 +3939,23 @@ function ordinal(n) {
   return n + (s[(v-20)%10] || s[v] || s[0]);
 }
 
+function fpPriorityShortcut(code) {
+  if(['balance_needed','balance_stale','income_inclusion_unknown','income_unconfirmed'].includes(code))return {label:'Update balance',destination:'balance'};
+  if(['overdue_bill','unverified_bill','possible_payment','due_bill'].includes(code))return {label:'Review bill',destination:'bills'};
+  if(['overdue_loan','unverified_loan','due_loan','extra_debt'].includes(code))return {label:'Review loan',destination:'loans'};
+  if(['goal_room','on_track','payday_buffer'].includes(code))return {label:'Plan a goal',destination:'plan'};
+  if(['shortfall','negative_month','below_buffer','due_expense'].includes(code))return {label:'Review spending',destination:'expenses'};
+  if(code==='setup_income')return {label:'Add income',destination:'income'};
+  return null;
+}
+function fpOpenPriority(destination) {
+  if(destination==='balance'||destination==='income') {
+    const today=new Date();currentYear=today.getFullYear();currentMonth=today.getMonth();showView('calendar',null);renderCalendar();updateStats();
+    if(destination==='balance')openEditBalance();else openEditIncome();return;
+  }
+  if(['bills','loans','expenses','plan'].includes(destination))showView(destination,null);
+}
+
 function renderPriorityReport() {
   const el = document.getElementById('priority-report');
   const dateEl = document.getElementById('priority-date');
@@ -3964,7 +3985,7 @@ function renderPriorityReport() {
   const hasIncome = userSettings.payAmount > 0;
   const hasAnyData = transactions.length > 0 || hasIncome;
   if (!hasAnyData) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:10px 0;">Tap <strong>Edit Income</strong> at the top right to get started.</div>';
+    el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:10px 0;">Add your income to see what comes in and what needs to go out.<div style="margin-top:10px;"><button class="btn btn-outline" onclick="fpOpenPriority(\'income\')">Add income</button></div></div>';
     return;
   }
 
@@ -3972,9 +3993,9 @@ function renderPriorityReport() {
   const actions = built.actions;
   if (actions.length === 0) {
     if (hasIncome) {
-      actions.push({ id: 'setup-1', level: 'p3', text: 'Your income is set up. Now add your recurring bills and expenses so we can build your full action plan.' });
+      actions.push({ id: 'setup-1', code:'due_bill', level: 'p3', text: 'Your income is set up. Now add your recurring bills and expenses so we can build your full action plan.' });
     } else {
-      el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:10px 0;">Tap <strong>Edit Income</strong> at the top right to set your paycheck, then add your bills and expenses.</div>';
+      el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:10px 0;">Start with your paycheck, then add bills and expenses.<div style="margin-top:10px;"><button class="btn btn-outline" onclick="fpOpenPriority(\'income\')">Add income</button></div></div>';
       return;
     }
   }
@@ -3986,10 +4007,12 @@ function renderPriorityReport() {
 
   const listHtml = actions.map(function(p, i) {
     const isDone = !!checkedIds[p.id];
+    const shortcut=fpPriorityShortcut(p.code);
+    const shortcutHtml=shortcut?'<div style="margin-top:8px;"><button class="btn btn-outline" onclick="fpOpenPriority(\''+shortcut.destination+'\')">'+shortcut.label+'</button></div>':'';
     const optionsHtml = p.options ? '<div class="priority-options">' + p.options.map(function(o) { return '<div class="priority-option">' + o + '</div>'; }).join('') + '</div>' : '';
     return '<div class="priority-item">'
       + '<div class="priority-num ' + p.level + (isDone ? ' done' : '') + '" id="pcheck-' + i + '" data-pid="' + p.id + '" data-num="' + (i + 1) + '" style="cursor:pointer;" onclick="togglePriorityCheck(' + i + ', \'' + p.id + '\')">' + (isDone ? '' : (i + 1)) + '</div>'
-      + '<div class="priority-text" id="ptext-' + i + '" style="opacity:' + (isDone ? '0.4' : '1') + ';text-decoration:' + (isDone ? 'line-through' : 'none') + ';">' + p.text + optionsHtml + '</div>'
+      + '<div class="priority-text" id="ptext-' + i + '" style="opacity:' + (isDone ? '0.4' : '1') + ';text-decoration:' + (isDone ? 'line-through' : 'none') + ';">' + p.text + optionsHtml + shortcutHtml + '</div>'
       + '</div>';
   }).join('');
   const notesHtml = built.notes.length
@@ -6235,8 +6258,36 @@ let RATE = 0.10;
 let dAmount = 5000;
 let _fpDreamAmountValid=true;
 let dChart;
+let _fpDreamMode="once";
+let _fpDreamGoalBusy=false;
 function dCompound(p, y) { return fpRound2(p * Math.pow(1 + RATE, y)); }
-function dFmt(n) { return '$' + n.toLocaleString(); }
+function dFmt(n) { return '$' + n.toLocaleString('en-US',{maximumFractionDigits:2}); }
+function dScenario(amount, years) {
+  if(_fpDreamMode!=='monthly')return dCompound(amount,years);
+  const months=years*12, factor=Math.pow(1+RATE,1/12);
+  return fpRound2(Math.abs(factor-1)<1e-12?amount*months:amount*(Math.pow(factor,months)-1)/(factor-1));
+}
+function dSetMode(mode) { _fpDreamMode=mode==='monthly'?'monthly':'once';dUpdate(); }
+function dSetYears(years) { document.getElementById('d-yr-slider').value=years;dUpdate(); }
+async function dMakeGoal() {
+  if(_fpDreamGoalBusy)return;
+  dUpdate();
+  if(!_fpDreamAmountValid||document.getElementById('d-future').textContent==='—'||dAmount<=0)return;
+  if(_fpGoalBusy||document.getElementById('goal-editor').style.display==='block'){showToast('Finish or cancel your open goal first.');return;}
+  const amount=dAmount,monthly=_fpDreamMode==='monthly',uid=currentUser&&currentUser.id,version=_dataLoadVersion;
+  if(!uid)return;
+  _fpDreamGoalBusy=true;document.getElementById('d-goal-btn').disabled=true;
+  try{
+  showView('plan',null);
+  const loaded=await fpLoadGoals();
+  if(!currentUser||currentUser.id!==uid||version!==_dataLoadVersion)return;
+  if(!loaded){showToast('Goals could not load. Tap Retry goals to try again.','error');return;}
+  fpOpenGoal();document.getElementById('goal-name').value=monthly?'Money I choose to keep each month':'A purchase I choose to wait on';
+  document.getElementById('goal-target').value=fpRound2(monthly?amount*12:amount);
+  document.getElementById('goal-monthly').value=monthly?amount:0;
+  showToast('Your goal is ready to review. No money has been moved or recorded as saved.');
+  }finally{_fpDreamGoalBusy=false;document.getElementById('d-goal-btn').disabled=!_fpDreamAmountValid||dAmount<=0;}
+}
 function dSyncAmt(source) {
   const parsed=source==='slider'?Number(document.getElementById('d-amt-slider').value):fpImportAmount(document.getElementById('d-amt-input').value);
   _fpDreamAmountValid=parsed!==null&&Number.isFinite(parsed)&&parsed>=0&&parsed<=1000000000;
@@ -6251,6 +6302,7 @@ function dClearResult(message) {
   const milestones=document.getElementById('d-milestones');if(milestones)milestones.textContent='';
   if(dChart){dChart.data.labels=[];dChart.data.datasets.forEach(function(set){set.data=[];});dChart.update();}
   document.getElementById('d-coach').textContent=message;
+  document.getElementById('d-tradeoff').textContent='';document.getElementById('d-goal-btn').disabled=true;
 }
 function dUpdate() {
   if(!_fpDreamAmountValid){dClearResult('Enter a valid amount between $0 and $1 billion, with up to two decimal places.');return;}
@@ -6263,19 +6315,24 @@ function dUpdate() {
   const yrEl = document.getElementById('d-yr-slider');
   if (!yrEl) return;
   const years = parseInt(yrEl.value);
-  const future = dCompound(dAmount, years);
+  const future = dScenario(dAmount, years);
+  const monthly=_fpDreamMode==='monthly',total=fpRound2(dAmount*(monthly?years*12:1));
+  document.getElementById('d-goal-btn').disabled=dAmount<=0;
+  ['once','monthly'].forEach(function(mode){document.getElementById('d-'+mode+'-btn').setAttribute('aria-pressed',String(_fpDreamMode===mode));});
+  document.getElementById('d-mode-note').textContent=monthly?'Compare this monthly habit with investing the same amount at the end of each month.':'Compare spending this amount once with keeping it invested.';
   function setEl(id, val) { const e = document.getElementById(id); if(e) e.textContent = val; }
   setEl('d-yr-out', years + ' year' + (years===1?'':'s'));
-  setEl('d-purchase', dFmt(dAmount));
+  setEl('d-purchase', dFmt(total));
   setEl('d-future', dFmt(future));
   setEl('d-sub', 'in ' + years + ' year' + (years===1?'':'s'));
-  const gain = future - dAmount;
-  const coachLines = 'At the assumed ' + Math.round(RATE*1000)/10 + '% annual rate, '+dFmt(dAmount)+' would become '+dFmt(future)+' after '+years+' years. Actual returns can differ or be negative.';
+  const gain = fpRound2(future-total);
+  setEl('d-tradeoff','You put in '+dFmt(total)+'. '+(gain>=0?'Illustrated growth: '+dFmt(gain)+'.':'Illustrated loss: '+dFmt(Math.abs(gain))+'.'));
+  const coachLines = 'Spend '+dFmt(dAmount)+(monthly?' every month':' now')+', or see what it could become: '+dFmt(future)+' after '+years+' years at an assumed '+Math.round(RATE*1000)/10+'% annual rate. Actual returns can differ or be negative.';
   setEl('d-coach', coachLines);
   const milestones = [5,10,20,50];
   const mEl = document.getElementById('d-milestones');
   if (mEl) mEl.innerHTML = milestones.map(y => {
-    const val = dCompound(dAmount, y);
+    const val = dScenario(dAmount, y);
     const isA = y===years;
     return '<div style="background:' + (isA?'var(--accent-light)':'var(--surface2)') + ';border:1px solid ' + (isA?'#c3ddd1':'var(--border)') + ';border-radius:var(--radius-sm);padding:8px 5px;text-align:center;">'
       + '<div style="font-size:9.5px;color:var(--text3);margin-bottom:3px;">' + y + 'yr' + (y===1?'':'s') + '</div>'
@@ -6284,7 +6341,8 @@ function dUpdate() {
   }).join('');
   const step = years<=10?1:years<=20?2:years<=30?3:5;
   const labels=[], gd=[], fd=[];
-  for(let y=0;y<=years;y+=step){labels.push(y===0?'Now':'Yr '+y);gd.push(dCompound(dAmount,y));fd.push(dAmount);}
+  for(let y=0;y<=years;y+=step){labels.push(y===0?'Now':'Yr '+y);gd.push(dScenario(dAmount,y));fd.push(0);}
+  if(labels[labels.length-1]!=='Yr '+years){labels.push('Yr '+years);gd.push(future);fd.push(0);}
   if (dChart) { dChart.data.labels=labels;dChart.data.datasets[0].data=gd;dChart.data.datasets[1].data=fd;dChart.update(); }
   else if (typeof Chart !== 'undefined') {
     const canvas = document.getElementById('d-chart');
@@ -6293,7 +6351,7 @@ function dUpdate() {
       type:'line',
       data:{labels,datasets:[
         {label:'Hypothetical growth',data:gd,borderColor:'#1a6b4a',backgroundColor:'rgba(26,107,74,0.07)',fill:true,tension:0.4,pointRadius:2,borderWidth:2},
-        {label:'Purchase',data:fd,borderColor:'#c0392b',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1.5,borderDash:[5,4]}
+        {label:'Amount left to grow after spending',data:fd,borderColor:'#c0392b',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1.5,borderDash:[5,4]}
       ]},
       options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:20}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+': '+dFmt(ctx.parsed.y);}}}},scales:{x:{grid:{display:false},ticks:{font:{size:10},maxTicksLimit:8}},y:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{size:10},callback:function(v){return v>=1000000?'$'+(v/1000000).toFixed(1)+'M':v>=1000?'$'+Math.round(v/1000)+'k':'$'+v;}}}}}
     });

@@ -43,3 +43,18 @@ The financial_goals table is additive and separate from transactions. A new goal
 does not change a loan balance, payment history or calendar cash. Existing repair
 checks remain required. Eighteen missing historical comparisons and twelve skips
 are not counted as passes.
+
+## Functionality first: fewer steps
+
+Future Value now starts with the purchase cost, compares one purchase or a monthly
+habit, and offers one-tap 5/10/20/30-year comparisons. Monthly amounts are invested
+at the end of each month, using an annual effective rate. It separates amounts
+contributed from illustrated growth/loss and shows zero money left to grow from
+the amount spent. The default 10% is explicitly an illustration for an S&P 500
+scenario, not a measured historical/current return. Assumptions are expandable.
+The explanation links to the [SEC compounding calculator](https://www.investor.gov/financial-tools-calculators/calculators/compound-interest-calculator).
+
+A goal shortcut prepares a draft with zero recorded savings for review; it never
+automatically moves money or saves a goal. Priority buttons open the relevant
+balance editor, Bills, Loans, Expenses or Goals. Balance/income shortcuts return
+to the current month, even when reviewing an old calendar.
