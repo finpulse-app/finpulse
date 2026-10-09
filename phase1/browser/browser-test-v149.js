@@ -683,6 +683,31 @@ const loan = id => txns().find(t => t.id === id);
   ok('T25 empty month has zero summary while saved records remain visible',await expenseTotal()===0 && /No calendar outflows/.test(await page.textContent('#fv-ratio-bar')) && /Historic payment/.test(await page.textContent('#fv-fixed-list')),await page.textContent('#fv-ratio-bar'));
   ok('T25 viewing records and changing months performs no financial writes',JSON.stringify(db.transactions)===originalRecords && reqlog.filter(r=>r.op!=='select').length===originalWrites,'record navigation mutated backend');
 
+  // ---- T26 Bill status is occurrence-based, local, and requires persistence
+  seed();db.transactions=[{id:'weekly-bill',user_id:'user-A',type:'bill',description:'Weekly bill',amount:10,date:'2026-10-02',anchor_date:'2026-10-02',frequency:'weekly',recurring:true},{id:'annual-bill',user_id:'user-A',type:'bill',description:'Annual March bill',amount:100,date:'2026-03-02',anchor_date:'2026-03-02',frequency:'yearly',recurring:true}];
+  await load();await hideStage();await page.evaluate(()=>{localStorage.removeItem('fp_bill_paid_marks_user-A');showView('bills',null);updateBillBadge();});
+  const billRecords=JSON.stringify(db.transactions),billWrites=reqlog.filter(r=>r.op!=='select').length;
+  const billTotal=()=>page.textContent('#bills-total');
+  ok('T26 weekly bill totals count five payments and omit annual bills not due',await billTotal()==='$50 still due' && /5 payments open/.test(await page.textContent('#bill-list-view')) && /Weekly/.test(await page.textContent('#bill-list-view')) && !/Annual March/.test(await page.textContent('#bill-list-view')),await page.textContent('#bill-list-view'));
+  const calendarBeforeMark=await cashOut();
+  await page.click('[aria-label="Mark oldest open payment for Weekly bill"]');
+  ok('T26 marking oldest overdue payment preserves four future occurrences',await billTotal()==='$40 still due' && /Oct 9/.test(await page.textContent('#bill-list-view')),await page.textContent('#bill-list-view'));
+  ok('T26 upcoming unpaid payment remains in badge',await page.textContent('#bill-badge')==='1',await page.textContent('#bill-badge'));
+  await page.click('[aria-label="Mark oldest open payment for Weekly bill"]');
+  ok('T26 paid upcoming occurrence clears badge immediately while later payments remain',await billTotal()==='$30 still due' && await page.textContent('#bill-badge')==='0',await billTotal());
+  await page.evaluate(()=>{renderCalendar();updateStats();});
+  ok('T26 local paid marks do not refund calendar cash outflows',await cashOut()===calendarBeforeMark,await cashOut());
+  const failureState=await page.evaluate(()=>localStorage.getItem('fp_bill_paid_marks_user-A'));
+  await page.evaluate(()=>{window.__paidSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(this===localStorage && k==='fp_bill_paid_marks_user-A')throw Error('Injected full storage');return window.__paidSetItem.call(this,k,v)};});
+  await page.click('[aria-label="Mark oldest open payment for Weekly bill"]');
+  ok('T26 failed browser storage leaves marks and displayed total unchanged',await page.evaluate(()=>localStorage.getItem('fp_bill_paid_marks_user-A'))===failureState && await billTotal()==='$30 still due' && /Could not save/.test(await toast()),await toast());
+  await page.evaluate(()=>{Storage.prototype.setItem=window.__paidSetItem;delete window.__paidSetItem;});
+  await page.clock.setFixedTime(new Date(2026,9,30,12));
+  await page.evaluate(()=>{renderBillsView();updateBillBadge();});
+  ok('T26 badge counts both today and next-month weekly payment',await page.textContent('#bill-badge')==='2',await page.textContent('#bill-badge'));
+  ok('T26 local status controls perform no financial backend writes',JSON.stringify(db.transactions)===billRecords && reqlog.filter(r=>r.op!=='select').length===billWrites,'paid status changed financial rows');
+  await page.clock.setFixedTime(new Date(2026,9,8,12));
+
   // ---- console / network
   const dbErrors = reqlog.filter(r => r.error);
   const realConsole = consoleErrors.filter(e => !/Failed to load resource|fonts|net::ERR|favicon/i.test(e));

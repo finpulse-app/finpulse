@@ -96,6 +96,29 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
     const c=make(['fpMonthlySpendingBreakdown'],{buildDayMap(y,m){assert.equal(y,2026);assert.equal(m,9);return dm}});
     const r=c.fpMonthlySpendingBreakdown(2026,9);assert.equal(r.fixedTotal,150);assert.equal(r.varTotal,3.75);assert.equal(r.total,153.75);
   });
+  for(const failure of ['write','corrupt']) await test('bill paid '+failure+' failure cannot show success or alter marks',()=>{
+    const c=make(['toggleBillPaid'],{transactions:[{id:'bill',type:'bill'}],sessionStorage:{getItem:()=>null,setItem(){}},fpIso:()=> '2026-10-08',fpAddDays:()=>new Date(2026,8,1),fpPriorityConfig:()=>({OVERDUE_LOOKBACK:45}),fpOccurrences:()=>['2026-10-03'],fpReadPaidMarks:()=>({}),fpBillPaidFor:()=>false,fpMarksFor:()=>[],fpDateLabel:s=>s,renderBillsView(){throw Error('failed save rendered')},updateBillBadge(){throw Error('failed save updated badge')}});
+    const value=failure==='corrupt'?'bad JSON':'{}';c._cache.fp_bill_paid_marks_A=value;
+    if(failure==='write')c.localStorage.setItem=()=>{throw Error('Storage full')};
+    assert.equal(c.toggleBillPaid('bill'),false);assert.equal(c._cache.fp_bill_paid_marks_A,value);assert.equal(c._messages.length,1);assert(c._messages[0][0].startsWith('Could not'));
+  });
+  await test('explicit unpaid mark suppresses stale legacy session paid flag',()=>{
+    const c=make(['fpReadPaidMarks','fpMarksFor'],{fpIso:()=> '2026-10-08',sessionStorage:{getItem:()=>JSON.stringify({bill:true,legacy:true})}});
+    c._cache.fp_bill_paid_marks_A=JSON.stringify({bill:null});const marks=c.fpReadPaidMarks();assert(!marks.bill);assert.equal(marks.legacy.length,1);
+  });
+  await test('bill unmark cannot claim to undo a recorded expense',()=>{
+    const c=make(['toggleBillPaid'],{transactions:[{id:'bill',type:'bill'}],sessionStorage:{getItem:()=>null,setItem(){throw Error('unexpected write')}},fpIso:()=> '2026-10-08',fpAddDays:()=>new Date(2026,8,1),fpPriorityConfig:()=>({OVERDUE_LOOKBACK:45}),fpOccurrences:()=>['2026-10-03'],fpReadPaidMarks:()=>({}),fpBillPaidFor:()=>true,fpMarksFor:()=>[]});
+    c._cache.fp_bill_paid_marks_A='{}';assert.equal(c.toggleBillPaid('bill'),false);assert.equal(c._cache.fp_bill_paid_marks_A,'{}');assert(c._messages[0][0].includes('recorded as an expense'));
+  });
+  await test('bill totals count open occurrences and remaining partial amounts',()=>{
+    const c=make(['fpBillStatusRows','fpIso','fpPad2','fpAddDays'],{transactions:[{id:'weekly',type:'bill'},{id:'yearly',type:'bill'}],fpPriorityConfig:()=>({OVERDUE_LOOKBACK:45}),fpReadPaidMarks:()=>({}),fpAmountDue:b=>b.id==='weekly'?10:100,fpOccurrences:(b,from,to)=>b.id==='weekly'?['2026-10-02','2026-10-09','2026-10-16','2026-10-23','2026-10-30']:[],fpPaidTotal:(b,d)=>({settled:d==='2026-10-02',total:d==='2026-10-09'?5:0})});
+    const rows=c.fpBillStatusRows(new Date(2026,9,8,12));assert.equal(rows.length,1);assert.equal(rows[0].open.length,4);assert.equal(rows[0].openTotal,35);
+  });
+  await test('bill badge checks unpaid occurrences through next month',()=>{
+    class ClockDate extends Date {constructor(...args){super(...(args.length?args:[2026,9,30,12]))}}
+    let through;const c=make(['updateBillBadge','fpIso','fpPad2','fpAddDays'],{Date:ClockDate,fpBillStatusRows:(now,end)=>{through=end;return[{open:[{due:'2026-10-30'},{due:'2026-11-02'},{due:'2026-11-08'},{due:'2026-10-29'}]}]}});
+    c.updateBillBadge();assert.equal(through,'2026-11-06');assert.equal(c._els['bill-badge'].textContent,2);
+  });
   for(const [frequency,label] of [['weekly','Weekly'],['biweekly','Every two weeks'],['twicemonthly','Twice monthly'],['monthly','Monthly'],['yearly','Yearly']]) await test('expense record labels '+frequency+' without claiming a monthly amount',()=>{
     const c=make(['fpExpenseRecordLabel']);const text=c.fpExpenseRecordLabel({recurring:true,frequency,anchor_date:'2026-10-01'});assert(text.startsWith(label));assert(text.includes('2026'));assert(!text.includes('/mo'));
   });
