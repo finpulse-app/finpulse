@@ -10,12 +10,15 @@ function grab(name) {
 }
 function make(names, extra={}) {
   const els = {}, cache = {}, messages=[];
-  const element = id => els[id] || (els[id]={value:'',style:{},textContent:'',innerHTML:'',classList:{remove(){}}});
+  const element = id => els[id] || (els[id]={value:'',style:{},textContent:'',innerHTML:'',classList:{remove(){},toggle(){}}});
   const c = vm.createContext(Object.assign({console,Date,Math,JSON,parseFloat,isNaN,setTimeout(){},
     currentUser:{id:'A'},userSettings:{startingBalance:100,payAmount:0},monthBalances:{},transactions:[],
     _dataLoadVersion:0,_activeUserId:'A', savedPurchases:[],
     window:{},document:{getElementById:element,querySelector(){return element('modal')},querySelectorAll(){return []}},
-    localStorage:{getItem:k=>cache[k]||null,setItem:(k,v)=>{cache[k]=v}},
+    localStorage:{getItem:k=>cache[k]||null,setItem:(k,v)=>{cache[k]=v},removeItem:k=>{delete cache[k]}},
+    crypto:{randomUUID:()=> '11111111-1111-4111-8111-111111111111'},
+    _fpMutationBusy:false,_fpMutationVersion:0,_lastDeletedOperation:null,_rpPendingDate:null,_rpDialogVersion:0,_rpHasPending:false,
+    fpPendingOperation:()=>null,fpRenderTransactionState(){},fpUpdatePendingNotice(){},panelOpen:false,
     showToast:(...m)=>messages.push(m),renderCalendar(){},renderLoans(){},renderBillsView(){},updateStats(){},dUpdate(){},updateTopbarButtons(){},openSetup(){},loadSavedPurchases(){},shouldShowStageModal(){return false},checkMonthRollover:async()=>{},
     _els:els,_cache:cache,_messages:messages},extra));
   names.forEach(n=>vm.runInContext(grab(n),c)); return c;
@@ -95,17 +98,52 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
     const c=make(['confirmRecordPayment','fpLoanSplit'],{transactions:[{id:'loan',balance,amount:200,min_payment:200,apr:12}],_rpLoanId:'loan',_rpIncludeMonthly:true,sb:{from(){throw Error('paid-off loan attempted database write')}}});
     await c.confirmRecordPayment();assert.equal(c._messages.length,0);assert.equal(c.transactions[0].balance,balance);
   });
-  await test('deleting payment from paid-off loan restores only its principal',async()=>{
-    const calls=[];const sb={from(){const q={update(v){calls.push(v);return q},delete(){return q},eq(){return q},then(res){return Promise.resolve({error:null}).then(res)}};return q}};
-    const loan={id:'loan',type:'loan',balance:0,amount:200,description:'Car'};
-    const pay={id:'pay',type:'expense',category:'loan_payment',loan_id:'loan',principal_applied:80,amount:90};
-    const c=make(['deleteTxn','fpFindLoanForPayment','fpPrincipalToRestore'],{transactions:[loan,pay],sb,panelOpen:false,renderSpendingRings(){},renderExpensesView(){}});
-    const r=await c.deleteTxn('pay');assert.equal(r.amount,80);assert.equal(c.transactions[0].balance,80);assert.equal(calls[0].balance,80);
+  const atomicNames=['fpOperationStorageKey','fpPendingOperation','fpAtomicMutation'];
+  const snapshot=(params,rows=[])=>({data:{operation_id:params.p_operation_id,kind:params.p_kind,transactions:rows},error:null});
+  await test('atomic SQL rejection preserves rows and allows corrected retry',async()=>{
+    const c=make(atomicNames,{transactions:[{id:'old'}],sb:{rpc:async()=>({error:{code:'P0001',message:'invalid payment'}})}});
+    assert.equal(await c.fpAtomicMutation('record',{extra:10},'record:loan'),null);assert.equal(c.transactions[0].id,'old');assert.equal(Object.keys(c._cache).length,0);assert.equal(c._fpMutationBusy,false);assert.equal(c._messages.length,1);
   });
-  await test('undoing deletion keeps an explicit zero balance',async()=>{
-    let written;const sb={from(){const q={update(v){written=v;return q},eq(){return q},then(res){return Promise.resolve({error:null}).then(res)}};return q}};
-    const c=make(['undoLastDelete'],{transactions:[{id:'loan',balance:0,amount:200}],_lastDeleted:{id:'pay'},_lastDeletedRestoreInfo:{loanId:'loan',amount:80},sb,saveTxn:async()=>{},renderExpensesView(){},panelOpen:false});
-    await c.undoLastDelete();assert.equal(written.balance,0);assert.equal(c.transactions[0].balance,0);
+  await test('lost response retry reuses operation ID and accepts fresh owner snapshot',async()=>{
+    const ids=[];let n=0;const c=make(atomicNames,{sb:{rpc:async(name,params)=>{ids.push(params.p_operation_id);if(n++===0)throw Error('connection lost');return snapshot(params,[{id:'loan',user_id:'A',balance:0}]);}}});
+    const p={extra:10};assert.equal(await c.fpAtomicMutation('record',p,'record:loan'),null);assert.equal(Object.keys(c._cache).length,1);assert(await c.fpAtomicMutation('record',p,'record:loan'));assert.equal(ids[0],ids[1]);assert.equal(c.transactions[0].balance,0);assert.equal(Object.keys(c._cache).length,0);
+  });
+  await test('ambiguous retry cannot change amount or create a second request',async()=>{
+    let calls=0;const c=make(atomicNames,{sb:{rpc:async()=>{calls++;throw Error('lost')}}});
+    await c.fpAtomicMutation('record',{extra:10},'record:loan');await c.fpAtomicMutation('record',{extra:20},'record:loan');assert.equal(calls,1);assert.equal(Object.keys(c._cache).length,1);assert(c._messages[1][0].includes('Retry the pending'));
+  });
+  await test('unavailable local persistence prevents ambiguous financial write',async()=>{
+    let calls=0;const c=make(atomicNames,{sb:{rpc:async()=>{calls++;}}});c.localStorage.setItem=()=>{throw Error('storage unavailable')};
+    assert.equal(await c.fpAtomicMutation('record',{},'record:loan'),null);assert.equal(calls,0);assert.equal(c._fpMutationBusy,false);
+  });
+  await test('late mutation from account A cannot populate account B',async()=>{
+    let resolve,params;const wait=new Promise(r=>resolve=r);const c=make(atomicNames,{transactions:[],sb:{rpc:async(n,p)=>{params=p;return wait}}});
+    const task=c.fpAtomicMutation('record',{},'record:loan');c.currentUser={id:'B'};c._fpMutationVersion++;c._fpMutationBusy=false;
+    resolve(snapshot(params,[{id:'old',user_id:'A'}]));assert.equal(await task,null);assert.equal(c.transactions.length,0);assert.equal(c._messages.length,0);
+  });
+  await test('cross-account or incomplete mutation response cannot enter local state',async()=>{
+    for(const rows of [[{id:'foreign',user_id:'B'}],null]){const c=make(atomicNames,{transactions:[{id:'old'}],sb:{rpc:async(n,p)=>snapshot(p,rows)}});assert.equal(await c.fpAtomicMutation('delete',{},'delete:row'),null);assert.equal(c.transactions[0].id,'old');assert.equal(Object.keys(c._cache).length,1);}
+  });
+  await test('display exception after commit cannot create duplicate save',async()=>{
+    const c=make(atomicNames,{fpRenderTransactionState(){throw Error('display failed')},sb:{rpc:async(n,p)=>snapshot(p)}});
+    assert(await c.fpAtomicMutation('record',{},'record:loan'));assert.equal(Object.keys(c._cache).length,0);assert.equal(c._messages.length,0);
+  });
+  await test('double click sends only one in-flight operation',async()=>{
+    let resolve,params,calls=0;const pending=new Promise(r=>resolve=r);const c=make(atomicNames,{sb:{rpc:async(n,p)=>{calls++;params=p;return pending}}});
+    const first=c.fpAtomicMutation('record',{},'record:loan');assert.equal(await c.fpAtomicMutation('record',{},'record:loan'),null);resolve(snapshot(params));assert(await first);assert.equal(calls,1);
+  });
+  await test('failed payment stays open and re-enables confirmation without animation',async()=>{
+    const c=make(['confirmRecordPayment'],{currentYear:2026,currentMonth:9,_rpLoanId:'loan',_rpIncludeMonthly:true,transactions:[{id:'loan',balance:5000,amount:200,anchor_date:'2026-10-10'}],fpAtomicMutation:async()=>null});
+    c.document.getElementById('rp-input-stage').style.display='block';await c.confirmRecordPayment();assert.equal(c._els['rp-input-stage'].style.display,'block');assert.equal(c._els['rp-confirm-btn'].disabled,false);assert.equal(c._messages.length,0);
+  });
+  await test('failed deletion does not replace undo state or show success',async()=>{
+    const c=make(['deleteTxnWithUndo'],{deleteTxn:async()=>null,_lastDeleted:{id:'previous'},_lastDeletedOperation:'previous-op'});assert.equal(await c.deleteTxnWithUndo('row'),false);assert.equal(c._lastDeleted.id,'previous');assert.equal(c._lastDeletedOperation,'previous-op');assert.equal(c._messages.length,0);
+  });
+  await test('failed undo retains receipt for retry without success toast',async()=>{
+    const c=make(['undoLastDelete'],{_lastDeleted:{id:'deleted'},_lastDeletedOperation:'delete-op',fpAtomicMutation:async()=>null});await c.undoLastDelete();assert.equal(c._lastDeleted.id,'deleted');assert.equal(c._lastDeletedOperation,'delete-op');assert.equal(c._messages.length,0);
+  });
+  await test('loan deletion dialog remains open after database rejection',async()=>{
+    const c=make(['confirmLoanDelete'],{_loanDeleteId:'loan',_loanDeleteReason:'mistake',deleteTxnWithUndo:async()=>false});c.document.getElementById('loan-delete-overlay').style.display='flex';await c.confirmLoanDelete();assert.equal(c._els['loan-delete-overlay'].style.display,'flex');assert.equal(c._els['ld-confirm-btn'].disabled,false);assert.equal(c._loanDeleteId,'loan');
   });
   console.log('TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
 })();

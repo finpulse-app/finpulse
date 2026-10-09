@@ -104,7 +104,7 @@ begin
       where id=debt.id and user_id=actor;
     v_result := jsonb_build_object('loan_id',debt.id,'loan_description',debt.description,
       'before_balance',bal,'new_balance',bal-principal,'original_balance',coalesce(debt.original_balance,bal),
-      'interest',interest,'principal',principal,'total_paid',regular_amount+extra_principal,'extra_paid',extra_principal);
+      'apr',debt.apr,'minimum_payment',minimum,'interest',interest,'principal',principal,'total_paid',regular_amount+extra_principal,'extra_paid',extra_principal);
   elsif p_kind='delete' then
     payment_id := (p_payload->>'id')::uuid;
     select * into probe from public.transactions where id=payment_id and user_id=actor;

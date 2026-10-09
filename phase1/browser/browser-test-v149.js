@@ -7,8 +7,9 @@ const TZID = process.env.TZ || 'UTC';
 const COLS = 'id,user_id,type,description,amount,date,category,recurring,frequency,anchor_date,apr,min_payment,balance,lender,created_at,original_balance,original_min_payment,principal_applied,loan_id'.split(',');
 const TYPES = ['income','expense','bill','loan','note'];
 let db, reqlog, seq;
+const rpcBackend=require('./mock-rpc')({getDb:()=>db,setDb:v=>{db=v},log:r=>reqlog.push(r),nextId:()=> 'id-'+(++seq)});
 function seed() {
-  seq = 0; reqlog = [];
+  seq = 0; reqlog = []; rpcBackend.reset();
   const L = (id, d, bal, min, anchor) => ({ id, user_id: 'user-A', type: 'loan', description: d, amount: min, date: anchor, category: 'Other', recurring: true, frequency: 'monthly', anchor_date: anchor, apr: 12, min_payment: min, balance: bal, lender: 'Other', original_balance: bal, original_min_payment: min, principal_applied: null, loan_id: null, created_at: 'x' });
   db = {
     transactions: [L('loan-car', 'Test Car Loan', 5000, 200, '2026-10-10'), L('loan-small', 'Small Loan', 100, 200, '2026-10-20')],
@@ -55,6 +56,7 @@ const loan = id => txns().find(t => t.id === id);
   const page = await ctx.newPage();
   await page.clock.setFixedTime(new Date(2026, 9, 8, 12, 0, 0));
   await page.exposeFunction('__dbop', async s => dbop(s));
+  await page.exposeFunction('__rpc', params => rpcBackend.rpc(params));
   page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
   page.on('requestfailed', r => failedReq.push(r.url().slice(0,80)));
   page.on('pageerror', e => pageErrors.push(e.message));
@@ -528,6 +530,40 @@ const loan = id => txns().find(t => t.id === id);
   ok('T19 on Nov 2 the November calendar starts at 2,000 (1,000 on Oct 25 + the Oct 30 paycheck), not October\'s stored -600; no rollover prompt', near(nov.start, 2000) && nov.card === '$2,000' && nov.roll !== 'flex' && near(nov.stored, -600), JSON.stringify(nov));
   await page.clock.setFixedTime(new Date(2026, 9, 8, 12, 0, 0));
   seed(); await load(); await hideStage();
+
+  // ---- T20 atomic operation failures and ambiguous retries (fake backend)
+  seed(); await load(); await hideStage();
+  await page.evaluate(()=>{ showView('loans',null); recordLoanPayment('loan-car'); });
+  await page.fill('#rp-extra','30');rpcBackend.setFault('rollback-record');
+  await page.click('#rp-confirm-btn');await wait(300);
+  const failedPayment=await page.evaluate(()=>({input:document.getElementById('rp-input-stage').style.display,animation:document.getElementById('rp-anim-stage').style.display,disabled:document.getElementById('rp-confirm-btn').disabled,toast:document.getElementById('toast-msg').textContent}));
+  ok('T20 failed atomic payment preserves balance and history',near(loan('loan-car').balance,5000)&&!txns().some(t=>t.category==='loan_payment'),JSON.stringify(txns()));
+  ok('T20 failed payment keeps input open, enables retry and has no success animation',failedPayment.input==='block'&&failedPayment.animation==='none'&&!failedPayment.disabled&&/failure/.test(failedPayment.toast),JSON.stringify(failedPayment));
+  rpcBackend.setFault('lost-after-commit');await page.click('#rp-confirm-btn');await wait(300);
+  ok('T20 lost confirmation committed one regular and one extra payment',near(loan('loan-car').balance,4820)&&txns().filter(t=>t.category==='loan_payment').length===2,JSON.stringify(txns()));
+  await page.evaluate(()=>closeRecordPayment());
+  // Reload preserves the pending operation ID and inputs in owner-scoped storage.
+  await load();await hideStage();await page.evaluate(()=>{showView('loans',null);recordLoanPayment('loan-car')});
+  ok('T20 reopening pending payment restores extra amount after reload',await page.inputValue('#rp-extra')==='30',await page.inputValue('#rp-extra'));
+  await page.click('#rp-confirm-btn');await wait(300);
+  const recordCalls=reqlog.filter(r=>r.op==='rpc'&&r.payload.p_kind==='record');
+  ok('T20 retry after reload uses same operation ID and never double pays',recordCalls.length===3&&recordCalls[1].payload.p_operation_id===recordCalls[2].payload.p_operation_id&&near(loan('loan-car').balance,4820)&&txns().filter(t=>t.category==='loan_payment').length===2,JSON.stringify(recordCalls));
+  ok('T20 replay confirms already saved and local snapshot stays current',/already saved/.test(await toast())&&near(await page.evaluate(()=>transactions.find(t=>t.id==='loan-car').balance),4820),await toast());
+  const deletePay=txns().find(t=>t.description==='Test Car Loan payment').id;
+  rpcBackend.setFault('rollback-delete');await page.evaluate(id=>deleteTxnWithUndo(id),deletePay);await wait(200);
+  ok('T20 failed deletion leaves payment and balance unchanged with no Undo success',txns().some(t=>t.id===deletePay)&&near(loan('loan-car').balance,4820)&&!/Undo/.test(await page.textContent('#toast')),await toast());
+  rpcBackend.setFault('lost-after-commit');await page.evaluate(id=>deleteTxnWithUndo(id),deletePay);await load();await hideStage();
+  ok('T20 interrupted deletion offers recovery after reload',await page.isVisible('#fp-pending-notice'),await page.textContent('#fp-pending-notice'));
+  await page.click('#fp-pending-notice button');await wait(200);
+  ok('T20 deletion recovery restores principal once and offers Undo',near(loan('loan-car').balance,4970)&&!/Test Car Loan payment/.test(txns().map(t=>t.description).join('|'))&&/Undo/.test(await page.textContent('#toast')),await toast());
+  rpcBackend.setFault('rollback-undo');await page.evaluate(()=>undoLastDelete());await wait(200);
+  ok('T20 failed undo preserves deletion and restored principal',!txns().some(t=>t.id===deletePay)&&near(loan('loan-car').balance,4970),JSON.stringify(txns()));
+  await page.evaluate(()=>undoLastDelete());await wait(200);
+  ok('T20 retry undo restores original payment ID and exact balance',txns().some(t=>t.id===deletePay)&&near(loan('loan-car').balance,4820),JSON.stringify(txns()));
+  await page.evaluate(id=>deleteTxnWithUndo(id),deletePay);rpcBackend.setFault('lost-after-commit');await page.evaluate(()=>undoLastDelete());await load();await hideStage();
+  await page.click('#fp-pending-notice button');await wait(200);
+  ok('T20 interrupted undo recovery after reload never reduces debt twice',txns().some(t=>t.id===deletePay)&&near(loan('loan-car').balance,4820)&&txns().filter(t=>t.category==='loan_payment').length===2,JSON.stringify(txns()));
+  seed();await load();await hideStage();
 
   // ---- console / network
   const dbErrors = reqlog.filter(r => r.error);

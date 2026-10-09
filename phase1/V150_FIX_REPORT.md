@@ -34,7 +34,7 @@ as `finpulse-v2-149.html`; v150 is a separate candidate. `index.html` is unchang
 
 ## Verification
 
-30 new regression checks pass in America/New_York, UTC, America/Los_Angeles and
+40 focused client regression checks pass in America/New_York, UTC, America/Los_Angeles and
 Pacific/Auckland. They include fault injection, zero-row writes, valid/invalid
 signup sessions, HTML payload rendering, leap-year dates, empty new accounts,
 late account responses, clearing pending state, cache isolation, dated-balance
@@ -60,12 +60,25 @@ test was performed. Local tests use synthetic values and mocked responses.
 
 ## Remaining release blockers
 
-This patch handles settings persistence, not every transaction write. Loan
-recording/deletion still uses multiple backend operations and must be made atomic.
-Other transaction writes need consistent error and account-transition handling.
+Loan recording, transaction deletion and undo now use one atomic database RPC.
+The deployment SQL is pending and must be applied before deploying this client.
+Other transaction writes still need consistent error/account-transition handling.
 Bill paid marks remain local to a device. Twice-monthly business-day shifts are
 deferred. Extra-payment allocation stays disabled. Staging auth/database integration,
 real imports and device checks are required before deployment.
 
 No production files, Supabase rows/schema, Auth configuration or deployment were
 changed. The GitHub work is a draft pull request for review.
+
+## Atomic-operation follow-up
+
+The client now uses the database RPC for recording, deletion and undo. Pending
+operation IDs survive reloads and retries. Failed saves retain input and undo state;
+a lost response cannot record the same payment twice. A Check change notice recovers
+pending recording/deletion/undo after reload. Account and dialog changes discard
+late responses and animations. Undo preserves transaction IDs and loan links.
+
+The first PostgreSQL 17 run passed 22 rollback, ownership, permission, retry and
+concurrency checks. Four additional database checks and the updated browser/client
+code are awaiting the next GitHub run. Client tests pass 40 checks locally.
+See database/README.md for security, legacy matching and deployment details.

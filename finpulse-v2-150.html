@@ -1463,46 +1463,165 @@ function showToast(msg, type, actionLabel, actionFn, durationMs) {
 let _lastDeleted = null;
 let _lastDeletedRestoreInfo = null; // if the deleted item restored a loan balance, remember it so Undo can reverse that too
 
-async function deleteTxnWithUndo(id, label) {
-  const txn = transactions.find(function(t) { return String(t.id) === String(id); });
-  if (!txn) return;
-  _lastDeleted = { ...txn };
-  const restoreInfo = await deleteTxn(id);
-  _lastDeletedRestoreInfo = restoreInfo;
-  const msg = restoreInfo
-    ? 'Payment removed, $' + fmt(restoreInfo.amount) + ' added back to ' + restoreInfo.loanDescription
-    : (label || txn.description) + ' deleted';
-  showToast(msg, 'success', 'Undo', undoLastDelete, 7000);
-}
-async function undoLastDelete() {
-  if (!_lastDeleted) return;
-  const restore = { ..._lastDeleted };
-  delete restore.id; // let DB assign a fresh id
+let _fpMutationBusy = false;
+let _fpMutationVersion = 0;
+let _lastDeletedOperation = null;
+let _rpPendingDate = null;
+let _rpDialogVersion = 0;
+let _rpHasPending = false;
 
-  // If deleting this restored a loan's balance, undo must re-apply that same reduction
-  // so the loan doesn't end up with free debt relief from a delete+undo round trip
-  if (_lastDeletedRestoreInfo) {
-    const loan = transactions.find(function(t) { return String(t.id) === String(_lastDeletedRestoreInfo.loanId); });
-    if (loan) {
-      const currentBal = parseFloat((loan.balance == null || loan.balance === '') ? loan.amount : loan.balance) || 0;
-      const revertedBal = Math.max(0, currentBal - _lastDeletedRestoreInfo.amount);
-      await sb.from('transactions').update({ balance: revertedBal }).eq('id', loan.id).eq('user_id', currentUser.id);
-      const loanIdx = transactions.findIndex(function(t) { return String(t.id) === String(loan.id); });
-      if (loanIdx > -1) transactions[loanIdx] = { ...transactions[loanIdx], balance: revertedBal };
+function fpOperationStorageKey(key) {
+  return 'fp_pending_operation_' + currentUser.id + '_' + key;
+}
+function fpPendingOperation(key) {
+  if (!currentUser) return null;
+  const raw = localStorage.getItem(fpOperationStorageKey(key));
+  if (!raw) return null;
+  const pending = JSON.parse(raw);
+  if (!pending || !pending.id || !pending.kind || !pending.payload) throw new Error('Invalid pending operation');
+  return pending;
+}
+function fpRenderTransactionState() {
+  renderCalendar(); updateStats(); renderLoans(); renderBillsView();
+  renderSpendingRings(); renderExpensesView();
+  if (panelOpen) renderPanelBody();
+}
+function fpUpdatePendingNotice() {
+  const app = document.getElementById('app');
+  if (!app || !currentUser) return;
+  let notice = document.getElementById('fp-pending-notice');
+  const prefix = 'fp_pending_operation_' + currentUser.id + '_';
+  let key = null;
+  for (let i=0; i<localStorage.length; i++) {
+    const storedKey = localStorage.key(i);
+    if (storedKey && storedKey.indexOf(prefix) === 0) { key = storedKey.slice(prefix.length); break; }
+  }
+  if (!key) { if (notice) notice.style.display = 'none'; return; }
+  if (!notice) {
+    notice = document.createElement('div');
+    notice.id = 'fp-pending-notice';
+    notice.style.cssText = 'padding:12px 16px;margin:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);font-size:13px;';
+    app.prepend(notice);
+  }
+  notice.replaceChildren();
+  const label = document.createElement('span');
+  label.textContent = 'A previous change still needs confirmation. ';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn btn-outline';
+  button.textContent = 'Check change';
+  button.onclick = function() { fpResolvePendingOperation(key); };
+  notice.append(label, button);
+  notice.style.display = 'block';
+}
+async function fpResolvePendingOperation(key) {
+  let pending;
+  try { pending = fpPendingOperation(key); }
+  catch(e) { showToast('Pending change could not be read.', 'error'); return; }
+  if (!pending) return;
+  const data = await fpAtomicMutation(pending.kind, pending.payload, key);
+  if (!data) return;
+  if (data.kind === 'delete') {
+    _lastDeleted = data.deleted;
+    _lastDeletedOperation = data.operation_id;
+    _lastDeletedRestoreInfo = data.restore_info || null;
+    showToast('Deletion confirmed', 'success', 'Undo', undoLastDelete, 7000);
+  } else if (data.kind === 'undo') {
+    _lastDeleted = null;
+    _lastDeletedOperation = null;
+    _lastDeletedRestoreInfo = null;
+    showToast('Restored');
+  } else showToast('Payment confirmed');
+}
+
+async function fpAtomicMutation(kind, payload, key) {
+  if (!currentUser || _fpMutationBusy) return null;
+  const userId = currentUser.id;
+  const version = ++_fpMutationVersion;
+  const storageKey = fpOperationStorageKey(key);
+  _fpMutationBusy = true;
+  let pending;
+  try {
+    pending = fpPendingOperation(key);
+    if (pending && (pending.kind !== kind || JSON.stringify(pending.payload) !== JSON.stringify(payload))) {
+      throw new Error('Retry the pending change before changing its amount or date.');
+    }
+    if (!pending) {
+      pending = { id: crypto.randomUUID(), kind: kind, payload: payload };
+      // Persist before sending: a reload after a lost response must reuse this ID.
+      localStorage.setItem(storageKey, JSON.stringify(pending));
+    }
+    const response = await sb.rpc('fp_mutate_transaction', {
+      p_operation_id: pending.id, p_kind: pending.kind, p_payload: pending.payload
+    });
+    if (response.error) {
+      // SQL validation/constraint errors roll back the whole transaction. A
+      // transport failure is ambiguous, so keep its operation ID for retry.
+      if (/^(P0001|22|23|42501|PGRST202)/.test(response.error.code || '')) {
+        try { localStorage.removeItem(storageKey); } catch(e) {}
+      }
+      throw new Error(response.error.code === 'PGRST202'
+        ? 'Loan changes need the database upgrade before this version can be used.'
+        : response.error.message || 'Change was not saved. Please retry.');
+    }
+    const data = response.data;
+    if (!data || data.operation_id !== pending.id || data.kind !== kind || !Array.isArray(data.transactions)
+        || data.transactions.some(function(t) { return t.user_id !== userId; })) {
+      throw new Error('Save confirmation was incomplete. Please retry.');
+    }
+    if (!currentUser || currentUser.id !== userId || version !== _fpMutationVersion) return null;
+    transactions = data.transactions;
+    try { localStorage.removeItem(storageKey); } catch(e) {}
+    // A rendering error cannot turn a committed operation into a second save.
+    try { fpRenderTransactionState(); } catch(e) { console.warn('Saved transaction needs display refresh'); }
+    return data;
+  } catch(e) {
+    if (currentUser && currentUser.id === userId && version === _fpMutationVersion) {
+      showToast(e.message || 'Change was not confirmed. Please retry.', 'error', null, null, 5000);
+    }
+    return null;
+  } finally {
+    if (version === _fpMutationVersion) {
+      _fpMutationBusy = false;
+      try { fpUpdatePendingNotice(); } catch(e) {}
     }
   }
+}
 
+async function deleteTxnWithUndo(id, label) {
+  const result = await deleteTxn(id);
+  if (!result) return false;
+  _lastDeleted = result.deleted;
+  _lastDeletedOperation = result.operation_id;
+  _lastDeletedRestoreInfo = result.restore_info || null;
+  const info = _lastDeletedRestoreInfo;
+  const msg = info
+    ? 'Payment removed, $' + fmt(info.amount) + ' added back to ' + info.loanDescription
+    : (label || result.deleted.description) + ' deleted';
+  showToast(msg, 'success', 'Undo', undoLastDelete, 7000);
+  return true;
+}
+async function undoLastDelete() {
+  if (!_lastDeleted || !_lastDeletedOperation) return;
+  const operationId = _lastDeletedOperation;
+  const result = await fpAtomicMutation('undo', { delete_operation_id: operationId }, 'undo:' + operationId);
+  if (!result) return;
   _lastDeleted = null;
+  _lastDeletedOperation = null;
   _lastDeletedRestoreInfo = null;
-  await saveTxn(restore);
-  renderLoans(); renderCalendar(); updateStats(); renderExpensesView(); renderBillsView();
-  if (panelOpen) { try { renderBottomSheetBody(); } catch(e) {} } // show the restored row in the open day panel right away
+  if (panelOpen) { try { renderBottomSheetBody(); } catch(e) {} }
   showToast('Restored');
 }
 
 // Clear every account-scoped value before displaying or loading a different account.
 function fpResetAccountState() {
   _dataLoadVersion++;
+  _fpMutationVersion++;
+  _fpMutationBusy = false;
+  _lastDeletedOperation = null;
+  _rpDialogVersion++;
+  _rpHasPending = false;
+  _rpPendingDate = null;
   transactions = [];
   userSettings = { startingBalance: 0, payday: null, payFrequency: 'biweekly', payAmount: 0 };
   monthBalances = {};
@@ -1703,6 +1822,7 @@ async function loadUserData() {
   document.getElementById('app').style.display = 'block';
   if (!settings) openSetup();
   loadSavedPurchases();
+  try { fpUpdatePendingNotice(); } catch(e) {}
 
   renderCalendar();
   renderLoans();
@@ -1754,29 +1874,7 @@ function removeTxnFromPanel(id) {
 }
 
 async function deleteTxn(id) {
-  const txnToDelete = transactions.find(function(t) { return String(t.id) === String(id); });
-  let restoreInfo = null; // { loanId, loanDescription, amount } if this delete restored a loan balance
-
-  // If this is a logged loan payment, deleting it means that payment didn't happen,
-  // so restore the exact principal it applied back onto the loan's balance
-  if (txnToDelete && txnToDelete.category === 'loan_payment') {
-    const loan = fpFindLoanForPayment(txnToDelete, transactions);
-    if (loan) {
-      const restoreAmount = fpPrincipalToRestore(txnToDelete, loan);
-      const currentBal = parseFloat((loan.balance == null || loan.balance === '') ? loan.amount : loan.balance) || 0;
-      const restoredBal = currentBal + restoreAmount;
-      await sb.from('transactions').update({ balance: restoredBal }).eq('id', loan.id).eq('user_id', currentUser.id);
-      const loanIdx = transactions.findIndex(function(t) { return String(t.id) === String(loan.id); });
-      if (loanIdx > -1) transactions[loanIdx] = { ...transactions[loanIdx], balance: restoredBal };
-      restoreInfo = { loanId: loan.id, loanDescription: loan.description, amount: restoreAmount };
-    }
-  }
-
-  await sb.from('transactions').delete().eq('id', id).eq('user_id', currentUser.id);
-  transactions = transactions.filter(function(t) { return String(t.id) !== String(id); });
-  renderCalendar(); updateStats(); renderLoans(); renderBillsView(); renderSpendingRings(); renderExpensesView();
-  if (panelOpen) { renderPanelBody(); }
-  return restoreInfo;
+  return await fpAtomicMutation('delete', { id: String(id) }, 'delete:' + id);
 }
 
 async function saveUserSettings(s, balances) {
@@ -4148,10 +4246,17 @@ function selectLoanDeleteReason(idx, el) {
 
 async function confirmLoanDelete() {
   if (!_loanDeleteId || !_loanDeleteReason) return;
-  document.getElementById('loan-delete-overlay').style.display = 'none';
   const id = _loanDeleteId;
-  _loanDeleteId = null;
-  await deleteTxnWithUndo(id);
+  const userId = currentUser && currentUser.id;
+  const btn = document.getElementById('ld-confirm-btn');
+  if (btn) btn.disabled = true;
+  const saved = await deleteTxnWithUndo(id);
+  if (currentUser && currentUser.id === userId && _loanDeleteId === id) {
+    if (saved) {
+      document.getElementById('loan-delete-overlay').style.display = 'none';
+      _loanDeleteId = null;
+    } else if (btn) btn.disabled = false;
+  }
 }
 
 // ── LOAN EDIT ───────────────────────────────────────────────────
@@ -4598,6 +4703,7 @@ let _rpLoanId = null;
 let _rpIncludeMonthly = true; // whether the monthly payment is included in this transaction, or extra only
 
 function rpToggleMonthly() {
+  if (_rpHasPending) { showToast('Retry the pending payment before changing it.', 'error'); return; }
   _rpIncludeMonthly = !_rpIncludeMonthly;
   const check = document.getElementById('rp-monthly-check');
   const amtEl = document.getElementById('rp-due-amt');
@@ -4612,6 +4718,8 @@ function rpToggleMonthly() {
 function recordLoanPayment(loanId) {
   const loan = transactions.find(function(t) { return t.id === loanId; });
   if (!loan) return;
+  _rpDialogVersion++;
+  _rpHasPending = false;
   _rpLoanId = loanId;
   const minPay = parseFloat(loan.min_payment || loan.amount) || 0;
 
@@ -4624,7 +4732,7 @@ function recordLoanPayment(loanId) {
   document.getElementById('rp-title').textContent = loan.description + '. Payment';
   document.getElementById('rp-due-amt').textContent = '$' + fmt(minPay);
   const extraInput = document.getElementById('rp-extra');
-  if (extraInput) extraInput.value = '';
+  if (extraInput) { extraInput.value = ''; extraInput.disabled = false; }
   const confirmBtn = document.getElementById('rp-confirm-btn');
   if (confirmBtn) confirmBtn.disabled = false;
 
@@ -4652,6 +4760,18 @@ function recordLoanPayment(loanId) {
 
   // Smart default: already paid this month → uncheck the monthly component
   _rpIncludeMonthly = !hasPaidThisMonth;
+  _rpPendingDate = null;
+  try {
+    const pending = fpPendingOperation('record:' + loanId);
+    if (pending && pending.kind === 'record') {
+      _rpHasPending = true;
+      _rpIncludeMonthly = pending.payload.include_monthly;
+      if (extraInput) extraInput.disabled = true;
+      if (alreadyEl) { alreadyEl.style.display = 'block'; alreadyEl.textContent = 'This payment is awaiting confirmation. Retry to check whether it was saved. It will only be recorded once.'; }
+      _rpPendingDate = pending.payload.date;
+      if (extraInput) extraInput.value = pending.payload.extra;
+    }
+  } catch(e) { showToast('Pending payment could not be read. Please retry.', 'error'); return; }
   const check = document.getElementById('rp-monthly-check');
   const amtEl = document.getElementById('rp-due-amt');
   if (check) check.classList.toggle('on', _rpIncludeMonthly);
@@ -4703,7 +4823,11 @@ function updateRpBreakdown() {
   // Live button, exact total, disabled if there's nothing to actually pay
   const btn = document.getElementById('rp-confirm-btn');
   if (btn) {
-    if (totalPaid <= 0) {
+    if (_rpHasPending) {
+      btn.disabled = false;
+      btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; btn.style.cursor = 'pointer';
+      btn.textContent = 'Check payment';
+    } else if (totalPaid <= 0) {
       btn.disabled = true;
       btn.style.background = 'var(--surface3)'; btn.style.color = 'var(--text3)'; btn.style.cursor = 'not-allowed';
       btn.innerHTML = !_rpIncludeMonthly ? 'Enter an extra amount' : 'Nothing to pay yet';
@@ -4716,60 +4840,56 @@ function updateRpBreakdown() {
 }
 
 function closeRecordPayment() {
+  _rpDialogVersion++;
+  _rpHasPending = false;
+  _rpPendingDate = null;
   document.getElementById('record-payment-overlay').style.display = 'none';
   _rpLoanId = null;
 }
 
 async function confirmRecordPayment(includeExtra) {
   const loan = transactions.find(function(t) { return t.id === _rpLoanId; });
-  if (!loan) return;
-  const minPay = parseFloat(loan.min_payment || loan.amount) || 0;
-  const extra = parseFloat(document.getElementById('rp-extra') ? document.getElementById('rp-extra').value : '') || 0;
-  const isExtraOnly = !_rpIncludeMonthly;
-  if (isExtraOnly && extra <= 0) return; // nothing to record
-  const bal = parseFloat((loan.balance == null || loan.balance === '') ? loan.amount : loan.balance) || 0;
-  const origBal = parseFloat(loan.original_balance || bal) || bal;
-  const apr = parseFloat(loan.apr) || 0;
-  const monthlyRate = apr / 100 / 12;
-  const split = fpLoanSplit(bal, apr, minPay, extra, isExtraOnly);
-  // Record only what was actually owed: never log cash that exceeds balance + interest (payoff)
-  const regularAmt = isExtraOnly ? 0 : Math.min(minPay, bal + split.interest);
-  const extraAmt = split.extraPrincipal;
-  const totalPaid = regularAmt + extraAmt;
-  if (totalPaid <= 0) return;
-  const interest = split.interest;
-  const principal = split.principal;
-  const newBal = split.newBal;
-
-  const confirmBtn = document.getElementById('rp-confirm-btn');
-  if (confirmBtn) confirmBtn.disabled = true;
-
-  // If original_balance not yet in DB, persist it now so bar tracks correctly forever
-  const dbUpdates = { balance: newBal };
-  if (!loan.original_balance || parseFloat(loan.original_balance) === bal) {
-    dbUpdates.original_balance = origBal;
+  if (!loan || !currentUser || _fpMutationBusy) return;
+  const loanId = loan.id;
+  const userId = currentUser.id;
+  const dialogVersion = _rpDialogVersion;
+  const extraInput = document.getElementById('rp-extra');
+  const requestedExtra = Number(extraInput && extraInput.value || 0);
+  if (!Number.isFinite(requestedExtra) || requestedExtra < 0) {
+    showToast('Enter a valid extra payment amount.', 'error'); return;
   }
-  await sb.from('transactions').update(dbUpdates).eq('id', _rpLoanId).eq('user_id', currentUser.id);
-  const idx = transactions.findIndex(function(t) { return t.id === _rpLoanId; });
-  if (idx > -1) transactions[idx] = { ...transactions[idx], balance: newBal, original_balance: origBal };
-
-  // Log payment: monthly → loan's anchor date this month · extra-only → today
+  const isExtraOnly = !_rpIncludeMonthly;
+  if (isExtraOnly && requestedExtra <= 0) return;
+  const balance = Number(loan.balance == null || loan.balance === '' ? loan.amount : loan.balance) || 0;
+  let pending;
+  try { pending = fpPendingOperation('record:' + loanId); }
+  catch(e) { showToast('Pending payment could not be read. Please retry.', 'error'); return; }
+  if (balance <= 0 && !pending) return;
   const anchor = loan.anchor_date || loan.date || '';
   const anchorDay = anchor ? new Date(anchor + 'T12:00:00').getDate() : new Date().getDate();
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const logDay = isExtraOnly ? new Date().getDate() : Math.min(anchorDay, daysInMonth);
-  const clampedDay = Math.min(logDay, daysInMonth);
-  const dateStr = currentYear + '-' + String(currentMonth + 1).padStart(2, '0') + '-' + String(clampedDay).padStart(2, '0');
-
-  if (isExtraOnly) {
-    await saveTxn({ type:'expense', description: loan.description + ' extra payment', amount: extraAmt, date: dateStr, category:'loan_payment', recurring:false, frequency:null, anchor_date:null, principal_applied: split.extraPrincipal, loan_id: loan.id });
-  } else {
-    const minPayPrincipal = split.minPrincipal;
-    await saveTxn({ type:'expense', description: loan.description + ' payment', amount: regularAmt, date: dateStr, category:'loan_payment', recurring:false, frequency:null, anchor_date:null, principal_applied: minPayPrincipal, loan_id: loan.id });
-    if (extraAmt > 0) {
-      await saveTxn({ type:'expense', description: loan.description + ' extra payment', amount: extraAmt, date: dateStr, category:'loan_payment', recurring:false, frequency:null, anchor_date:null, principal_applied: split.extraPrincipal, loan_id: loan.id });
-    }
+  const dateStr = _rpPendingDate || currentYear + '-' + String(currentMonth + 1).padStart(2, '0') + '-' + String(Math.min(logDay, daysInMonth)).padStart(2, '0');
+  const confirmBtn = document.getElementById('rp-confirm-btn');
+  if (confirmBtn) confirmBtn.disabled = true;
+  const result = await fpAtomicMutation('record', {
+    loan_id: loanId, extra: requestedExtra, include_monthly: !isExtraOnly, date: dateStr
+  }, 'record:' + loanId);
+  if (!currentUser || currentUser.id !== userId || _rpLoanId !== loanId || dialogVersion !== _rpDialogVersion) return;
+  if (!result) {
+    try { _rpHasPending = !!fpPendingOperation('record:' + loanId); } catch(e) { _rpHasPending = true; }
+    if (extraInput) extraInput.disabled = _rpHasPending;
+    if (confirmBtn) confirmBtn.disabled = false;
+    return;
   }
+  if (result.replayed) { closeRecordPayment(); showToast('Payment was already saved'); return; }
+  const bal = Number(result.before_balance);
+  const origBal = Number(result.original_balance);
+  const newBal = Number(result.new_balance);
+  const totalPaid = Number(result.total_paid);
+  const extra = Number(result.extra_paid);
+  const minPay = Number(result.minimum_payment);
+  const monthlyRate = Number(result.apr) / 100 / 12;
 
   // Switch to animation stage
   document.getElementById('rp-input-stage').style.display = 'none';
@@ -4796,20 +4916,24 @@ async function confirmRecordPayment(includeExtra) {
     while (b > 0 && m < 600) { b = b * (1 + monthlyRate) - minPay; m++; }
     return m < 600 ? m : null;
   })();
-  const paymentWord = extra > 0 ? 'Paid $' + fmt(totalPaid) + ' total, $' + fmt(extra) + ' extra went straight to principal.' : 'Payment of $' + fmt(minPay) + ' confirmed.';
+  const paymentWord = extra > 0 ? 'Paid $' + fmt(totalPaid) + ' total, $' + fmt(extra) + ' extra went straight to principal.' : 'Payment of $' + fmt(totalPaid) + ' confirmed.';
   const progressWord = paidOffPct > 0 ? ' ' + paidOffPct + '% of this debt cleared.' : ' Keep it up.';
   const timeWord = monthsLeft ? ' ' + payoffTime(monthsLeft) + ' left at this rate.' : '';
   if (msgEl) msgEl.textContent = paymentWord + progressWord + timeWord;
 
+  const stillThisPayment = function() { return currentUser && currentUser.id === userId && _rpLoanId === loanId && dialogVersion === _rpDialogVersion; };
   // Trigger bar animation and balance countdown
   requestAnimationFrame(function() {
+    if (!stillThisPayment()) return;
     requestAnimationFrame(function() {
+      if (!stillThisPayment()) return;
       if (barEl) barEl.style.width = endPct + '%';
       const steps = 40;
       const stepTime = 1300 / steps;
       const balDiff = bal - newBal;
       let step = 0;
       const counter = setInterval(function() {
+        if (!stillThisPayment()) { clearInterval(counter); return; }
         step++;
         const eased = 1 - Math.pow(1 - step / steps, 3);
         const displayBal = Math.round(bal - balDiff * eased);
@@ -4821,6 +4945,7 @@ async function confirmRecordPayment(includeExtra) {
           clearInterval(counter);
           if (balEl) balEl.textContent = '$' + fmt(newBal);
           setTimeout(function() {
+            if (!stillThisPayment()) return;
             closeRecordPayment();
             renderLoans(); renderCalendar(); updateStats();
             if (panelOpen) renderPanelBody();
@@ -4830,8 +4955,6 @@ async function confirmRecordPayment(includeExtra) {
     });
   });
 }
-
-
 
 function payoffTime(months) {
   if (months >= 600) return 'never at this rate';

@@ -17,6 +17,7 @@
   const session = { access_token: 'x', user: { id: 'user-A', email: 'tester@example.com' } };
   window.supabase = { createClient() { return {
     from: builder,
+    rpc: async function(name,params) { if(name!=="fp_mutate_transaction")return {error:{message:"Unknown RPC"}};return window.__rpc(params); },
     auth: {
       async getSession() { return { data: { session } }; },
       onAuthStateChange(cb) { setTimeout(() => cb('INITIAL_SESSION', session), 0); return { data: { subscription: { unsubscribe() {} } } }; },
