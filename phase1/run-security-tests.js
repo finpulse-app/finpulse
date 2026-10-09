@@ -91,6 +91,16 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
     const c=make(['renderInsights','fmt','fpEscHtml'],{transactions:[{type:'expense',amount:10,description:payload,category:payload},{type:'income',amount:20,description:payload}]});
     c.renderInsights();for(const id of ['insights-expenses','insights-income']){assert(!c._els[id].innerHTML.includes(payload));assert(c._els[id].innerHTML.includes('&lt;img'));}assert.equal(c.transactions[0].description,payload);
   });
+  await test('monthly spending split includes calendar loan events and reconciles every outflow',()=>{
+    const dm={1:{expenses:[{type:'expense',amount:'1.25',recurring:false},{type:'expense',amount:10,category:'loan_payment'}],bills:[{type:'bill',amount:40,recurring:true}],loans:[{type:'loan',amount:999,min_payment:100}]},2:{expenses:[{type:'expense',amount:2.5,recurring:false}],bills:[],loans:[]}};
+    const c=make(['fpMonthlySpendingBreakdown'],{buildDayMap(y,m){assert.equal(y,2026);assert.equal(m,9);return dm}});
+    const r=c.fpMonthlySpendingBreakdown(2026,9);assert.equal(r.fixedTotal,150);assert.equal(r.varTotal,3.75);assert.equal(r.total,153.75);
+  });
+  for (const end of [-50,50]) await test('month-end estimate '+end+' avoids unsupported bank-balance claims',()=>{
+    const dm={};for(let d=1;d<=31;d++)dm[d]={income:[],expenses:[],bills:[],loans:[],balance:end};
+    const c=make(['updateStats','fmt'],{currentYear:2026,currentMonth:9,buildDayMap:()=>dm,getStartingBalanceForMonth:()=>end,fpAllocationEnabled:()=>false,renderSpendingRings(){},renderPriorityReport(){},updateBillBadge(){},detectStage(){return null},clearTimeout(){}});
+    c.updateStats();assert.equal(c._els.modal.textContent,'Month-end estimate');assert.equal(c._els['br-tag'].textContent,end<0?'Projected shortfall':'Estimate');assert(c._els['br-sub'].textContent.includes('Not a confirmed bank balance'));assert(!c._els['br-tag'].textContent.includes('owe'));if(end<0)assert(c._els['br-coach'].textContent.includes('Confirm your current bank balance'));
+  });
   await test('delete confirmation escapes the stored name',async()=>{
     const payload='<img src=x onerror="window.marker=1">';const c=make(['deleteExpenseFromEdit','fpEscHtml'],{_editExpenseTxnId:'expense',transactions:[{id:'expense',description:payload}]});
     await c.deleteExpenseFromEdit();assert(!c._els.modal.innerHTML.includes(payload));assert(c._els.modal.innerHTML.includes('&lt;img'));

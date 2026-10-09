@@ -2819,23 +2819,31 @@ function renderExpensesView() {
   if (varTotalEl) varTotalEl.textContent = '-$' + fmt(oneTimeTotal);
 }
 
+function fpMonthlySpendingBreakdown(year, month) {
+  const dayMap = buildDayMap(year, month);
+  let fixedTotal = 0, varTotal = 0;
+  Object.keys(dayMap).forEach(function(day) {
+    const dm = dayMap[day];
+    dm.expenses.concat(dm.bills, dm.loans).forEach(function(t) {
+      const amount = parseFloat(t.type === 'loan' ? (t.min_payment || t.amount) : t.amount);
+      if (t.type === 'loan' || t.recurring || t.category === 'loan_payment') fixedTotal += amount;
+      else varTotal += amount;
+    });
+  });
+  return { fixedTotal: fixedTotal, varTotal: varTotal, total: fixedTotal + varTotal };
+}
+
 function renderSpendingRings() {
   const el = document.getElementById('spending-rings');
   const meta = document.getElementById('spending-rings-meta');
   if (!el) return;
-  const allExp = transactions.filter(function(t) { return (t.type === 'expense' || t.type === 'bill') && t.type !== 'note'; });
-  if (allExp.length === 0) { el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:10px 0;">Add expenses to see your fixed vs variable split.</div>'; if (meta) meta.textContent = ''; return; }
+  // Use the selected calendar month, including every recurring occurrence and
+  // scheduled loan payment, with the calendar's existing settlement rules.
+  const breakdown = fpMonthlySpendingBreakdown(currentYear, currentMonth);
+  const fixedTotal = breakdown.fixedTotal, varTotal = breakdown.varTotal, total = breakdown.total;
+  if (meta) meta.textContent = '-$' + fmt(total) + ' this month';
 
-  // Same classification as the Expenses page: Fixed = recurring OR a recorded loan payment
-  // (the obligation is fixed even though each payment logs as a one-time transaction)
-  const fixedTxns = allExp.filter(function(t) { return t.recurring || t.category === 'loan_payment'; });
-  const varTxns = allExp.filter(function(t) { return !t.recurring && t.category !== 'loan_payment'; });
-  const fixedTotal = fixedTxns.reduce(function(s,t){ return s + parseFloat(t.amount); }, 0);
-  const varTotal = varTxns.reduce(function(s,t){ return s + parseFloat(t.amount); }, 0);
-  const total = fixedTotal + varTotal;
-  if (meta) meta.textContent = '-$' + fmt(total) + ' total';
-
-  if (total <= 0) { el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:10px 0;">Add expenses to see your fixed vs variable split.</div>'; return; }
+  if (total <= 0) { el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:10px 0;">No expenses or scheduled payments in this month.</div>'; return; }
 
   const fixedPct = Math.round((fixedTotal / total) * 100);
   const varPct = 100 - fixedPct;
@@ -3588,7 +3596,7 @@ function fpPriorityActions(snap) {
   const bstat = snap.balanceBasis.status;
   if (bstat === 'undated' || bstat === 'mismatch' || bstat === 'future') {
     actions.push({ id: 'balance-needed', code: 'balance_needed', level: 'p2',
-      text: '<strong>Confirm your bank balance.</strong> FinPulse needs the balance and the date it is from before it can check your upcoming bills against it. Tap the Starting Balance card on the calendar and enter it. Until then no cash projection is shown.' });
+      text: '<strong>Confirm your bank balance.</strong> FinPulse needs the balance and the date it is from before it can check your upcoming bills against it. Tap the Starting Balance card on the calendar and enter it. The calendar still shows estimates from your saved starting balance; those estimates do not confirm what is in your bank account now.' });
   } else if (bstat === 'stale') {
     actions.push({ id: 'balance-stale', code: 'balance_stale', level: 'p2',
       text: '<strong>Update your bank balance.</strong> The one FinPulse has is from ' + fpDateLabel(snap.balanceBasis.asOf) + ' (' + snap.balanceBasis.ageDays + ' days ago). Tap the Starting Balance card on the calendar to update it.' });
@@ -3867,10 +3875,10 @@ function updateStats() {
     };
     const day = new Date().getDate();
     let phraseSet, labelText, tagText, tagClass, amtClass;
-    if (!fpAllocationEnabled() && br >= 0) {
+    if (!fpAllocationEnabled()) {
       // v149 (audit H7): this number is the calendar's month-end estimate, not a confirmed balance or free money. No reassurance.
       phraseSet = ['From your calendar: starting balance plus scheduled items. Not a confirmed bank balance, and not money that is free to spend.'];
-      labelText = 'Month-end estimate'; tagText = 'Estimate'; tagClass = 'br-tag'; amtClass = 'br-amount';
+      labelText = 'Month-end estimate'; tagText = br < 0 ? 'Projected shortfall' : 'Estimate'; tagClass = br < 0 ? 'br-tag low' : 'br-tag'; amtClass = br < 0 ? 'br-amount low' : 'br-amount';
     }
     else if (br >= 2000) { phraseSet = phrases.great;  labelText = 'Breathing Room'; tagText = 'Looking great';       tagClass = 'br-tag good';  amtClass = 'br-amount good'; }
     else if (br >= 800)  { phraseSet = phrases.good;   labelText = 'Breathing Room'; tagText = 'Looking good';        tagClass = 'br-tag good';  amtClass = 'br-amount good'; }
@@ -3884,7 +3892,7 @@ function updateStats() {
     if (brSub) brSub.textContent = phraseSet[day % phraseSet.length];
     const coachEl = document.getElementById('br-coach');
     if (coachEl) {
-      if (br < 0) { coachEl.textContent = "You're $" + fmt(Math.abs(br)) + " short this month. Look at what's coming out this week and see if anything can wait."; coachEl.style.display = 'block'; }
+      if (br < 0) { coachEl.textContent = 'Scheduled items exceed the saved starting balance and income by $' + fmt(Math.abs(br)) + '. Confirm your current bank balance and whether scheduled items have been paid.'; coachEl.style.display = 'block'; }
       else coachEl.style.display = 'none';
     }
   }

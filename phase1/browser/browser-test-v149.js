@@ -625,6 +625,25 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>{showAuth();sb.auth.signInWithPassword=async()=>{throw Error('Injected offline sign-in')};});await page.click('#signin-btn');await page.waitForTimeout(100);
   ok('T22 thrown sign-in failure keeps form usable and displays error',!await page.isDisabled('#signin-btn') && await page.isVisible('#signin-error') && /offline/.test(await page.textContent('#signin-error')),'button stuck or error missing');
 
+  // ---- T23 selected-month spending reconciliation and estimate wording
+  seed();await load();await hideStage();
+  const ringsTotal=async()=>parseFloat((await page.textContent('#spending-rings-meta')).replace(/[^0-9.]/g,''));
+  const cashOut=async()=>parseFloat((await page.textContent('#stat-out')).replace(/[^0-9.]/g,''));
+  ok('T23 spending split includes scheduled loan payments even without expense records',await ringsTotal()===400 && await cashOut()===400,await page.textContent('#spending-rings-meta'));
+  db.transactions.push({id:'old-expense',user_id:'user-A',type:'expense',description:'Old month',amount:900,date:'2026-08-01',recurring:false},
+    {id:'oct-expense',user_id:'user-A',type:'expense',description:'October only',amount:20,date:'2026-10-09',recurring:false},
+    {id:'nov-expense',user_id:'user-A',type:'expense',description:'November only',amount:60,date:'2026-11-04',recurring:false},
+    {id:'weekly-expense',user_id:'user-A',type:'expense',description:'Weekly fixed',amount:10,date:'2026-10-01',anchor_date:'2026-10-01',frequency:'weekly',recurring:true});
+  await load();await hideStage();
+  ok('T23 October spending reconciles with cash out and excludes other months',await ringsTotal()===470 && await cashOut()===470,await page.textContent('#spending-rings-meta'));
+  ok('T23 October split counts all five weekly occurrences and scheduled loans',/\$450/.test(await page.textContent('#spending-rings')) && /\$20/.test(await page.textContent('#spending-rings')),await page.textContent('#spending-rings'));
+  await page.evaluate(()=>nextMonth());
+  ok('T23 November navigation recalculates both monthly totals',await ringsTotal()===500 && await cashOut()===500 && /November/.test(await page.textContent('#cal-heading')),await page.textContent('#spending-rings-meta'));
+  await page.evaluate(()=>prevMonth());
+  ok('T23 undated-balance warning acknowledges visible calendar estimates',/calendar still shows estimates/i.test(await page.textContent('#priority-report')) && !/no cash projection is shown/i.test(await page.textContent('#priority-report')),await page.textContent('#priority-report'));
+  await page.evaluate(()=>{userSettings.startingBalance=-5000;monthBalances['2026-10']=-5000;updateStats();});
+  ok('T23 negative estimate does not claim verified debt or bank cash',await page.textContent('.br-label')==='Month-end estimate' && await page.textContent('#br-tag')==='Projected shortfall' && /Not a confirmed bank balance/.test(await page.textContent('#br-sub')) && /Confirm your current bank balance/.test(await page.textContent('#br-coach')),await page.textContent('#breathing-room'));
+
   // ---- console / network
   const dbErrors = reqlog.filter(r => r.error);
   const realConsole = consoleErrors.filter(e => !/Failed to load resource|fonts|net::ERR|favicon/i.test(e));
