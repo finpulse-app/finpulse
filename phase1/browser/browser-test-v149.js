@@ -6,7 +6,7 @@ const FILE = path.resolve(process.argv[2] || '../../finpulse-v2-149.html');
 const TZID = process.env.TZ || 'UTC';
 const COLS = 'id,user_id,type,description,amount,date,category,recurring,frequency,anchor_date,apr,min_payment,balance,lender,created_at,original_balance,original_min_payment,principal_applied,loan_id'.split(',');
 const TYPES = ['income','expense','bill','loan','note'];
-let db, reqlog, seq, writeFault=null;
+let db, reqlog, seq, writeFault=null, readFault=null;
 const rpcBackend=require('./mock-rpc')({getDb:()=>db,setDb:v=>{db=v},log:r=>reqlog.push(r),nextId:()=> 'id-'+(++seq)});
 function seed() {
   seq = 0; reqlog = []; rpcBackend.reset(); writeFault=null;
@@ -19,6 +19,10 @@ function seed() {
 function dbop(s) {
   const entry = { op: s.op, table: s.table, payload: s.payload, filters: s.filters };
   reqlog.push(entry);
+  if (s.op === 'select' && s.table === 'user_settings' && readFault) {
+    if (readFault === 'once') readFault = null;
+    return {data:null,error:{code:'PGRST303',message:'Injected JWT claims rejection'}};
+  }
   if(s.table==='transactions' && s.op!=='select' && writeFault==='reject') { writeFault=null; return{data:null,error:{code:'23514',message:'Injected save failure'}}; }
   const rows = db[s.table]; if (!rows) return { data: null, error: { message: 'relation does not exist' } };
   const match = r => s.filters.every(([c,v,op]) => op==='in' ? v.includes(r[c]) : String(r[c])===String(v));
@@ -608,6 +612,18 @@ const loan = id => txns().find(t => t.id === id);
   await load();await hideStage();await page.click('#fp-pending-notice button');await wait(200);
   ok('T21 pending import recovery after reload uses original UUIDs without duplicates',txns().filter(t=>/^Import /.test(t.description)).length===2 && txns().filter(t=>/^Import /.test(t.description)).map(t=>t.id).sort().join(',')===importIDs && await page.evaluate(()=>transactions.filter(t=>/^Import /.test(t.description)).length)===2 && /Save confirmed/.test(await toast()),await toast());
   seed();await load();await hideStage();
+
+  // ---- T22 live-preview auth failure and recovery
+  readFault='once';await load();await hideStage();
+  ok('T22 transient JWT rejection retries account reads once and opens app',await page.isVisible('#app') && reqlog.filter(r=>r.op==='select'&&r.table==='user_settings').slice(-2).length===2,'account did not recover');
+  readFault='persistent';const beforeReads=reqlog.filter(r=>r.op==='select'&&r.table==='user_settings').length;
+  await page.goto('file://'+FILE);await page.waitForSelector('#auth-screen',{state:'visible',timeout:10000});
+  ok('T22 persistent JWT rejection stops after exactly two read attempts',reqlog.filter(r=>r.op==='select'&&r.table==='user_settings').length-beforeReads===2,'unbounded or missing retry');
+  ok('T22 failed account load restores usable sign-in button',!await page.isDisabled('#signin-btn') && await page.textContent('#signin-btn')==='Sign In',await toast());
+  readFault=null;await page.fill('#signin-email','tester@example.com');await page.fill('#signin-password','test-password');await page.click('#signin-btn');await page.waitForSelector('#app',{state:'visible',timeout:10000});await hideStage();
+  ok('T22 sign-in retry opens account after read failure',await page.isVisible('#app') && await page.evaluate(()=>currentUser.id)==='user-A','retry did not recover');
+  await page.evaluate(()=>{showAuth();sb.auth.signInWithPassword=async()=>{throw Error('Injected offline sign-in')};});await page.click('#signin-btn');await page.waitForTimeout(100);
+  ok('T22 thrown sign-in failure keeps form usable and displays error',!await page.isDisabled('#signin-btn') && await page.isVisible('#signin-error') && /offline/.test(await page.textContent('#signin-error')),'button stuck or error missing');
 
   // ---- console / network
   const dbErrors = reqlog.filter(r => r.error);

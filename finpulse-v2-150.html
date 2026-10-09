@@ -1692,6 +1692,10 @@ function showAuth() {
   document.getElementById('loading-screen').style.display = 'none';
   document.getElementById('auth-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
+  document.getElementById('signin-btn').disabled = false;
+  document.getElementById('signin-btn').textContent = 'Sign In';
+  document.getElementById('signup-btn').disabled = false;
+  document.getElementById('signup-btn').textContent = 'Create Free Account';
 }
 
 function toggleAuth(mode) {
@@ -1704,11 +1708,20 @@ async function signIn() {
   const password = document.getElementById('signin-password').value;
   const btn = document.getElementById('signin-btn');
   const err = document.getElementById('signin-error');
+  if (btn.disabled) return;
   err.style.display = 'none';
   btn.disabled = true; btn.textContent = 'Signing in...';
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) { err.textContent = error.message; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Sign In'; }
-  else { currentUser = data.user; showApp(data.user); }
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    if (!data || !data.session || !data.session.user) throw new Error('Sign in did not complete. Please try again.');
+    showApp(data.session.user);
+  } catch (e) {
+    err.textContent = e.message || 'Could not sign in. Please try again.';
+    err.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Sign In';
+  }
 }
 
 async function signUp() {
@@ -1718,14 +1731,22 @@ async function signUp() {
   const btn = document.getElementById('signup-btn');
   const err = document.getElementById('signup-error');
   const suc = document.getElementById('signup-success');
+  if (btn.disabled) return;
   err.style.display = 'none'; suc.style.display = 'none';
   if (!name || !email || !password) { err.textContent = 'Please fill in all fields.'; err.style.display = 'block'; return; }
   if (password.length < 6) { err.textContent = 'Password must be at least 6 characters.'; err.style.display = 'block'; return; }
   btn.disabled = true; btn.textContent = 'Creating account...';
-  const { data, error } = await sb.auth.signUp({ email, password, options: { data: { full_name: name } } });
-  if (error) { err.textContent = error.message; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Create Free Account'; }
-  else if (data.session && data.session.user) { showApp(data.session.user); }
-  else { suc.textContent = 'Check your email to confirm your account, then sign in.'; suc.style.display = 'block'; btn.disabled = false; btn.textContent = 'Create Free Account'; }
+  try {
+    const { data, error } = await sb.auth.signUp({ email, password, options: { data: { full_name: name } } });
+    if (error) throw error;
+    if (data && data.session && data.session.user) showApp(data.session.user);
+    else { suc.textContent = 'Check your email to confirm your account, then sign in.'; suc.style.display = 'block'; }
+  } catch (e) {
+    err.textContent = e.message || 'Could not create your account. Please try again.';
+    err.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Create Free Account';
+  }
 }
 
 async function signOut() {
@@ -1741,7 +1762,7 @@ sb.auth.onAuthStateChange((event, session) => {
   if (session && session.user) {
     currentUser = session.user;
     if (_activeUserId !== session.user.id) setTimeout(function() {
-      if (currentUser && currentUser.id === session.user.id) showApp(session.user);
+      if (currentUser && currentUser.id === session.user.id && _activeUserId !== session.user.id) showApp(session.user);
     }, 0);
   } else if (event === 'SIGNED_OUT' || event === 'INITIAL_SESSION') {
     currentUser = null;
@@ -1759,10 +1780,19 @@ async function loadUserData() {
   const stillCurrent = function() { return currentUser && currentUser.id === userId && loadVersion === _dataLoadVersion; };
   let settings, txns;
   try {
-    const [settingsResult, transactionResult] = await Promise.all([
+    const readAccount = function() { return Promise.all([
       sb.from('user_settings').select('*').eq('user_id', userId).single(),
       sb.from('transactions').select('*').eq('user_id', userId).order('date', { ascending: true })
-    ]);
+    ]); };
+    let [settingsResult, transactionResult] = await readAccount();
+    if (!stillCurrent()) return;
+    // A newly issued session can receive a transient JWT claims rejection.
+    // Retry these reads once; persistent failures still return to usable sign-in.
+    if ([settingsResult, transactionResult].some(function(result) { return result.error && result.error.code === 'PGRST303'; })) {
+      await new Promise(function(resolve) { setTimeout(resolve, 1000); });
+      if (!stillCurrent()) return;
+      [settingsResult, transactionResult] = await readAccount();
+    }
     if (!stillCurrent()) return;
     if (settingsResult.error && settingsResult.error.code !== 'PGRST116') throw settingsResult.error;
     if (transactionResult.error) throw transactionResult.error;

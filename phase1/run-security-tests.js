@@ -52,6 +52,40 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
     ['signup-name','signup-email','signup-password'].forEach(id=>{c.document.getElementById(id).value='valid-password'});
     await c.signUp();assert.equal(shown,authenticated);if(!authenticated)assert.equal(c._els['signup-success'].style.display,'block');
   });
+  for (const method of ['signIn','signUp']) for (const failure of ['returned','thrown']) await test(method+' '+failure+' failure restores submit button',async()=>{
+    const signup=method==='signUp',prefix=signup?'signup':'signin';let shown=false;
+    const authCall=async()=>{if(failure==='thrown')throw Error('offline');return{data:null,error:{message:'Rejected'}}};
+    const c=make([method],{showApp(){shown=true},sb:{auth:{[signup?'signUp':'signInWithPassword']:authCall}}});
+    for(const suffix of ['name','email','password'])c.document.getElementById(prefix+'-'+suffix).value='valid-password';
+    await c[method]();assert.equal(shown,false);assert.equal(c._els[prefix+'-btn'].disabled,false);assert.equal(c._els[prefix+'-error'].style.display,'block');
+  });
+  await test('signin without authenticated session keeps auth usable',async()=>{
+    let shown=false;const c=make(['signIn'],{showApp(){shown=true},sb:{auth:{signInWithPassword:async()=>({data:{user:{id:'A'}},error:null})}}});
+    await c.signIn();assert.equal(shown,false);assert.equal(c._els['signin-btn'].disabled,false);assert.equal(c._els['signin-error'].style.display,'block');
+  });
+  await test('signin ignores a second submit while first request is pending',async()=>{
+    let finish,calls=0,shown=0;const pending=new Promise(r=>finish=r);
+    const c=make(['signIn'],{showApp(){shown++},sb:{auth:{signInWithPassword:()=>{calls++;return pending}}}});
+    const first=c.signIn();await c.signIn();assert.equal(calls,1);finish({data:{session:{user:{id:'A'}}},error:null});await first;assert.equal(shown,1);assert.equal(c._els['signin-btn'].disabled,false);
+  });
+  await test('returning to auth restores both submit buttons',()=>{
+    const c=make(['showAuth']);for(const id of ['signin-btn','signup-btn'])c.document.getElementById(id).disabled=true;
+    c.showAuth();assert.equal(c._els['signin-btn'].disabled,false);assert.equal(c._els['signup-btn'].disabled,false);assert.equal(c._els['signin-btn'].textContent,'Sign In');
+  });
+  await test('deferred auth event does not duplicate sign-in account load',()=>{
+    let callback,deferred,shown=0;const c=make([],{_activeUserId:null,setTimeout(fn){deferred=fn},showApp(){shown++},sb:{auth:{onAuthStateChange(fn){callback=fn}}}});
+    vm.runInContext(html.slice(html.indexOf('sb.auth.onAuthStateChange('),html.indexOf('// ── DATA LAYER')),c);
+    callback('SIGNED_IN',{user:{id:'A'}});c._activeUserId='A';deferred();assert.equal(shown,0);
+    callback('SIGNED_IN',{user:{id:'B'}});deferred();assert.equal(shown,1);
+  });
+  for(const persistent of [false,true]) await test('JWT claims read rejection '+(persistent?'stops after one retry':'recovers once'),async()=>{
+    let reads=0;const c=make(['loadUserData','showAuth'],{setTimeout(fn){fn()},sb:{from:table=>({select(){return this},eq(){return this},single:async()=>{reads++;return persistent||reads===1?{data:null,error:{code:'PGRST303'}}:{data:null,error:{code:'PGRST116'}}},order:async()=>({data:[],error:null})})}});
+    await c.loadUserData();assert.equal(reads,2);assert.equal(c._messages.length,persistent?1:0);if(persistent)assert.equal(c._els['signin-btn'].disabled,false);else assert.equal(c._els.app.style.display,'block');
+  });
+  await test('account switch during JWT retry cannot read or populate old account',async()=>{
+    let reads=0,delayed,readyResolve;const ready=new Promise(r=>readyResolve=r);const c=make(['loadUserData'],{setTimeout(fn){delayed=fn;readyResolve()},sb:{from:()=>({select(){return this},eq(){return this},single:async()=>{reads++;return{error:{code:'PGRST303'}}},order:async()=>({data:[],error:null})})}});
+    const loading=c.loadUserData();await ready;c.currentUser={id:'B'};c.userSettings={startingBalance:7};delayed();await loading;assert.equal(reads,1);assert.equal(c.userSettings.startingBalance,7);assert.equal(c._messages.length,0);
+  });
   await test('Insights escapes stored description and category without changing data',()=>{
     const payload='<img src=x onerror="window.marker=1">';
     const c=make(['renderInsights','fmt','fpEscHtml'],{transactions:[{type:'expense',amount:10,description:payload,category:payload},{type:'income',amount:20,description:payload}]});
