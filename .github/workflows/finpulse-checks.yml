@@ -1,0 +1,22 @@
+name: FinPulse candidate checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        timezone: [America/New_York, UTC, America/Los_Angeles, Pacific/Auckland]
+    env:
+      TZ: ${{ matrix.timezone }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node phase1/run-security-tests.js finpulse-v2-150.html
+      - run: node phase1/run-current-formulas.js finpulse-v2-150.html
