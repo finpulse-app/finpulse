@@ -1949,9 +1949,8 @@ async function loadUserData() {
   updateStats();
   dUpdate();
   updateTopbarButtons();
-  if (userSettings.payAmount > 0 && shouldShowStageModal()) {
-    setTimeout(function() { if (stillCurrent()) showStageModal(); }, 800);
-  }
+  // Keep routine account loading focused on the calendar. Stage guidance remains
+  // available explicitly; it must not interrupt navigation with a delayed modal.
 }
 
 // New rows keep their UUIDs until the server confirms the entire batch. An
