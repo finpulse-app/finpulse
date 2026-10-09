@@ -91,5 +91,21 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
     c.document.getElementById('edit-balance-input').value='999';c.document.getElementById('edit-balance-date').value='2026-10-09';c.document.getElementById('edit-balance-overlay').style.display='flex';
     await c.saveEditBalance();assert.equal(c._els['edit-balance-overlay'].style.display,'flex');assert.equal(c._messages.length,0);
   });
+  for(const balance of [0, '0']) await test('paid-off loan '+typeof balance+' cannot create a new payment',async()=>{
+    const c=make(['confirmRecordPayment','fpLoanSplit'],{transactions:[{id:'loan',balance,amount:200,min_payment:200,apr:12}],_rpLoanId:'loan',_rpIncludeMonthly:true,sb:{from(){throw Error('paid-off loan attempted database write')}}});
+    await c.confirmRecordPayment();assert.equal(c._messages.length,0);assert.equal(c.transactions[0].balance,balance);
+  });
+  await test('deleting payment from paid-off loan restores only its principal',async()=>{
+    const calls=[];const sb={from(){const q={update(v){calls.push(v);return q},delete(){return q},eq(){return q},then(res){return Promise.resolve({error:null}).then(res)}};return q}};
+    const loan={id:'loan',type:'loan',balance:0,amount:200,description:'Car'};
+    const pay={id:'pay',type:'expense',category:'loan_payment',loan_id:'loan',principal_applied:80,amount:90};
+    const c=make(['deleteTxn','fpFindLoanForPayment','fpPrincipalToRestore'],{transactions:[loan,pay],sb,panelOpen:false,renderSpendingRings(){},renderExpensesView(){}});
+    const r=await c.deleteTxn('pay');assert.equal(r.amount,80);assert.equal(c.transactions[0].balance,80);assert.equal(calls[0].balance,80);
+  });
+  await test('undoing deletion keeps an explicit zero balance',async()=>{
+    let written;const sb={from(){const q={update(v){written=v;return q},eq(){return q},then(res){return Promise.resolve({error:null}).then(res)}};return q}};
+    const c=make(['undoLastDelete'],{transactions:[{id:'loan',balance:0,amount:200}],_lastDeleted:{id:'pay'},_lastDeletedRestoreInfo:{loanId:'loan',amount:80},sb,saveTxn:async()=>{},renderExpensesView(){},panelOpen:false});
+    await c.undoLastDelete();assert.equal(written.balance,0);assert.equal(c.transactions[0].balance,0);
+  });
   console.log('TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
 })();

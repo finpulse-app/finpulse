@@ -1484,7 +1484,7 @@ async function undoLastDelete() {
   if (_lastDeletedRestoreInfo) {
     const loan = transactions.find(function(t) { return String(t.id) === String(_lastDeletedRestoreInfo.loanId); });
     if (loan) {
-      const currentBal = parseFloat(loan.balance || loan.amount) || 0;
+      const currentBal = parseFloat((loan.balance == null || loan.balance === '') ? loan.amount : loan.balance) || 0;
       const revertedBal = Math.max(0, currentBal - _lastDeletedRestoreInfo.amount);
       await sb.from('transactions').update({ balance: revertedBal }).eq('id', loan.id).eq('user_id', currentUser.id);
       const loanIdx = transactions.findIndex(function(t) { return String(t.id) === String(loan.id); });
@@ -1763,7 +1763,7 @@ async function deleteTxn(id) {
     const loan = fpFindLoanForPayment(txnToDelete, transactions);
     if (loan) {
       const restoreAmount = fpPrincipalToRestore(txnToDelete, loan);
-      const currentBal = parseFloat(loan.balance || loan.amount) || 0;
+      const currentBal = parseFloat((loan.balance == null || loan.balance === '') ? loan.amount : loan.balance) || 0;
       const restoredBal = currentBal + restoreAmount;
       await sb.from('transactions').update({ balance: restoredBal }).eq('id', loan.id).eq('user_id', currentUser.id);
       const loanIdx = transactions.findIndex(function(t) { return String(t.id) === String(loan.id); });
@@ -2110,7 +2110,7 @@ function fpPrincipalToRestore(pay, loan) {
   if (/ extra payment$/.test(pay.description || '')) return amt; // extra-only payments are 100% principal
   // Legacy regular payment: estimate interest from the current balance and exclude it
   const rate = (parseFloat(loan && loan.apr) || 0) / 100 / 12;
-  const interest = (parseFloat(loan && (loan.balance || loan.amount)) || 0) * rate;
+  const interest = (parseFloat(loan && ((loan.balance == null || loan.balance === '') ? loan.amount : loan.balance)) || 0) * rate;
   return Math.max(0, amt - interest);
 }
 // Balance at the start of a future month: chained from this month's projected end, month by month
@@ -4670,7 +4670,7 @@ function updateRpBreakdown() {
   const el = document.getElementById('rp-breakdown');
   if (!el) return;
   const minPay = parseFloat(loan.min_payment || loan.amount) || 0;
-  const bal = parseFloat(loan.balance || loan.amount) || 0;
+  const bal = parseFloat((loan.balance == null || loan.balance === '') ? loan.amount : loan.balance) || 0;
   const apr = parseFloat(loan.apr) || 0;
 
   let totalPaid, interest, principal, headline;
@@ -4727,7 +4727,7 @@ async function confirmRecordPayment(includeExtra) {
   const extra = parseFloat(document.getElementById('rp-extra') ? document.getElementById('rp-extra').value : '') || 0;
   const isExtraOnly = !_rpIncludeMonthly;
   if (isExtraOnly && extra <= 0) return; // nothing to record
-  const bal = parseFloat(loan.balance || loan.amount) || 0;
+  const bal = parseFloat((loan.balance == null || loan.balance === '') ? loan.amount : loan.balance) || 0;
   const origBal = parseFloat(loan.original_balance || bal) || bal;
   const apr = parseFloat(loan.apr) || 0;
   const monthlyRate = apr / 100 / 12;

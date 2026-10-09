@@ -25,6 +25,8 @@ as `finpulse-v2-149.html`; v150 is a separate candidate. `index.html` is unchang
   MM/DD/YY. Invalid/unsupported rows use the existing unreadable-row summary.
 - Restore only the existing publicly published Supabase anon key in v150. v149
   remains redacted. No service-role keys or private financial data are included.
+- Preserve explicit zero loan balances when calculating a payment or reversing
+  payment deletion/undo. A paid-off loan cannot use its monthly amount as debt.
 - Add standard-library Node regression checks and GitHub Actions for four time
   zones. Adjust the supplied browser fake backend to return settings rows for
   `.select().single()` after writes and model signup sessions correctly; make its
@@ -32,11 +34,12 @@ as `finpulse-v2-149.html`; v150 is a separate candidate. `index.html` is unchang
 
 ## Verification
 
-26 new regression checks pass in America/New_York, UTC, America/Los_Angeles and
+30 new regression checks pass in America/New_York, UTC, America/Los_Angeles and
 Pacific/Auckland. They include fault injection, zero-row writes, valid/invalid
 signup sessions, HTML payload rendering, leap-year dates, empty new accounts,
 late account responses, clearing pending state, cache isolation, dated-balance
-failure and keeping failed edit dialogs open.
+failure and keeping failed edit dialogs open. Four additional checks cover numeric
+and text zero balances, deleting a payment from a paid-off loan and undo.
 
 The supplied formula suite is unchanged. Against v150 it reports the same result
 as v149 in all four time zones: 226 passes, 18 missing-v147 comparison failures,
@@ -48,9 +51,10 @@ The original five independent audit reproductions failed against v149 before
 implementation. Their failure scenarios are covered by the new regression suite.
 Full inline JavaScript and the adapted browser harness pass syntax checks.
 
-Browser tests remain unverified: local Chrome aborted during launch, before any
-browser assertion ran. No live Supabase mutation or two-account backend test was
-performed. Local tests use synthetic values and mocked responses.
+Browser tests run on GitHub-hosted Chromium in New York and Auckland time zones,
+with Playwright 1.58.2 and a fake backend. Their first run is pending; local Chrome
+aborted before any assertion ran. No live Supabase mutation or two-account backend
+test was performed. Local tests use synthetic values and mocked responses.
 
 ## Remaining release blockers
 
