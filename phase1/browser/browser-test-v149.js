@@ -12,6 +12,7 @@ function seed() {
   seq = 0; reqlog = []; rpcBackend.reset(); writeFault=null;
   const L = (id, d, bal, min, anchor) => ({ id, user_id: 'user-A', type: 'loan', description: d, amount: min, date: anchor, category: 'Other', recurring: true, frequency: 'monthly', anchor_date: anchor, apr: 12, min_payment: min, balance: bal, lender: 'Other', original_balance: bal, original_min_payment: min, principal_applied: null, loan_id: null, created_at: 'x' });
   db = {
+    financial_goals: [],
     bill_paid_marks: [],
     transactions: [L('loan-car', 'Test Car Loan', 5000, 200, '2026-10-10'), L('loan-small', 'Small Loan', 100, 200, '2026-10-20')],
     user_settings: [{ id: 's1', user_id: 'user-A', starting_balance: 500, payday: '2026-10-02', pay_frequency: 'biweekly', pay_amount: 1000, month_balances_json: null }]
@@ -29,7 +30,13 @@ function dbop(s) {
   const match = r => s.filters.every(([c,v,op]) => op==='in' ? v.includes(r[c]) : String(r[c])===String(v));
   const check = rec => { for (const k of Object.keys(rec)) if (!COLS.includes(k) && s.table === 'transactions') return 'Could not find the \'' + k + '\' column of \'transactions\' in the schema cache'; if (s.table === 'transactions' && rec.type !== undefined && !TYPES.includes(rec.type)) return 'violates check constraint "transactions_type_check"'; return null; };
   let out;
-  if (s.op === 'upsert' && s.table === 'bill_paid_marks') {
+  if(s.op==='upsert'&&s.table==='financial_goals') {
+    if(writeFault==='goal-reject'){writeFault=null;return{data:null,error:{message:'Injected goal failure'}};}
+    const p=s.payload;if(p.user_id!=='user-A')return{data:null,error:{message:'rls'}};
+    const old=rows.find(r=>r.id===p.id);if(old)Object.assign(old,p);else rows.push({...p});
+    if(writeFault==='goal-lost'){writeFault=null;throw Error('Lost goal confirmation');}
+    return{data:s.single?{...p}:[{...p}],error:null};
+  } else if (s.op === 'upsert' && s.table === 'bill_paid_marks') {
     const made=[];
     for(const p of s.payload) {
       if(p.user_id!=='user-A')return{data:null,error:{message:'rls'}};
@@ -769,7 +776,7 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>fpChangeInsightMonth(1));
   ok('T29 Insights month control excludes October expenses from November',/November/.test(await page.textContent('#view-insights')) && /-\$0 outflows/.test(await page.textContent('#insights-tip')),await page.textContent('#insights-tip'));
   await page.evaluate(()=>{currentMonth=9;showView('plan',null)});
-  ok('T29 Plan does not invent a payoff date or savings allocation',await page.textContent('#finish-date')==='Not estimated yet' && /projections/.test(await page.textContent('#view-plan')),await page.textContent('#view-plan'));
+  ok('T29 Plan does not invent a payoff date or savings allocation',await page.textContent('#finish-date')==='Set your first goal' && /projections/.test(await page.textContent('#view-plan')),await page.textContent('#view-plan'));
   seed();db.transactions[0].balance=0;await load();await page.evaluate(()=>showView('loans',null));
   ok('T29 explicit zero-balance loan remains paid off after reload',await page.evaluate(()=>fpLoanBalanceAmount(transactions.find(t=>t.id==='loan-car'))===0)&&/Paid off/.test(await page.textContent('#view-loans')),await page.textContent('#view-loans'));
   const settingsBefore=JSON.stringify(db.user_settings);
@@ -785,6 +792,35 @@ const loan = id => txns().find(t => t.id === id);
   await page.fill('#d-rate-input','');
   ok('T29 blank growth rate asks for an assumption',await page.textContent('#d-future')==='—'&&/Enter an assumed/.test(await page.textContent('#d-coach')),await page.textContent('#d-coach'));
   await page.fill('#d-rate-input','10');
+
+  // Goal creation, progress, archive and save recovery on synthetic data.
+  seed();await load();await page.evaluate(()=>showView('plan',null));await page.waitForTimeout(200);
+  await page.click('#goal-add-btn');await page.fill('#goal-name','Emergency fund');await page.fill('#goal-target','1000');await page.fill('#goal-saved','250.50');await page.fill('#goal-monthly','100');await page.fill('#goal-date','2027-06-01');
+  await page.click('#goal-save-btn');await page.waitForTimeout(300);
+  ok('T30 goal saves exact amounts',db.financial_goals.length===1&&db.financial_goals[0].saved_amount===250.5&&db.financial_goals[0].target_amount===1000,JSON.stringify(db.financial_goals));
+  ok('T30 progress and planned timeline match amounts',/25%/.test(await page.textContent('#milestones-list'))&&/8 months/.test(await page.textContent('#milestones-list')),await page.textContent('#milestones-list'));
+  const financialBefore=JSON.stringify(db.transactions),calendarBefore=await endBal();await load();await page.evaluate(()=>showView('plan',null));await page.waitForTimeout(200);
+  ok('T30 goal persists across reload',/Emergency fund/.test(await page.textContent('#milestones-list')),'missing goal');
+  await page.click('button:has-text("Edit progress")');await page.fill('#goal-saved','1000');await page.click('#goal-save-btn');await page.waitForTimeout(300);
+  ok('T30 edited progress reaches target',/Target reached/.test(await page.textContent('#milestones-list'))&&/100%/.test(await page.textContent('#milestones-list')),await page.textContent('#milestones-list'));
+  await page.click('button:text-is("Archive")');await page.waitForTimeout(300);
+  ok('T30 archive retains recoverable goal',db.financial_goals[0].archived===true&&/Archived goals/.test(await page.textContent('#milestones-list')),'archive failed');
+  await page.click('summary:has-text("Archived goals")');await page.click('button:text-is("Restore")');await page.waitForTimeout(300);
+  ok('T30 archived goal restores',db.financial_goals[0].archived===false,'restore failed');
+  await page.click('button:has-text("Edit progress")');await page.fill('#goal-saved','500');writeFault='goal-reject';await page.click('#goal-save-btn');await page.waitForTimeout(300);
+  ok('T30 failed save keeps inputs and previous progress',await page.isVisible('#goal-editor')&&await page.inputValue('#goal-saved')==='500'&&db.financial_goals[0].saved_amount===1000,'lost inputs');
+  await page.click('#goal-save-btn');await page.waitForTimeout(300);
+  await page.click('#goal-add-btn');await page.fill('#goal-name','Trip');await page.fill('#goal-target','200');writeFault='goal-lost';await page.click('#goal-save-btn');await page.waitForTimeout(300);
+  ok('T30 lost response retains same-goal retry',await page.isVisible('#goal-editor')&&db.financial_goals.length===2,'lost draft');
+  await page.click('#goal-save-btn');await page.waitForTimeout(300);
+  ok('T30 retry avoids duplicate goal',db.financial_goals.length===2&&!await page.isVisible('#goal-editor'),'duplicate goal');
+  ok('T30 goals do not change calendar cash or financial rows',financialBefore===JSON.stringify(db.transactions)&&near(await endBal(),calendarBefore),'cash changed');
+  await page.evaluate(()=>showView('calendar',null));await page.click('#calendar-agenda-btn');
+  ok('T30 agenda includes every October day and scheduled loan',await page.locator('#cal-agenda .agenda-day').count()===31&&/Test Car Loan/.test(await page.textContent('#cal-agenda')),'incomplete agenda');
+  await page.click('[aria-label="Open October 10"]');
+  ok('T30 agenda day opens editor',await page.isVisible('#bottom-sheet'),'editor missing');await page.evaluate(()=>closeBottomSheet());
+  await page.click('#calendar-month-btn');
+  ok('T30 month toggle restores calendar',await page.isVisible('#cal-grid')&&!await page.isVisible('#cal-agenda'),'toggle failed');
 
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {

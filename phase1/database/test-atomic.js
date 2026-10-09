@@ -23,6 +23,19 @@ async function test(name,fn){try{reset();await fn();pass++;console.log('PASS '+n
  sql(fs.readFileSync('database/atomic-loan-operations.sql','utf8'));
  sql(fs.readFileSync('database/bill-paid-marks.sql','utf8'));
  sql(fs.readFileSync('database/owner-policy-performance.sql','utf8'));
+ sql(fs.readFileSync('database/financial-goals.sql','utf8'));
+ await test('goals persist exact amounts with owner isolation',()=>{
+   const id=randomUUID();sql(`set role authenticated;set request.jwt.claim.sub=${lit(A)};insert into public.financial_goals(id,user_id,name,target_amount,saved_amount,monthly_amount) values(${lit(id)},${lit(A)},'Trip',1000,250.50,100);`);
+   assert.equal(sql(`set role authenticated;set request.jwt.claim.sub=${lit(A)};select saved_amount from public.financial_goals where id=${lit(id)};`),'250.50');
+   assert.equal(sql(`set role authenticated;set request.jwt.claim.sub=${lit(B)};select count(*) from public.financial_goals where id=${lit(id)};`),'0');
+   fail(()=>sql(`set role authenticated;set request.jwt.claim.sub=${lit(B)};insert into public.financial_goals(user_id,name,target_amount) values(${lit(A)},'Forged',500);`),/row-level security/);
+ });
+ await test('goal archive restores and invalid target is rejected',()=>{
+   const id=randomUUID();sql(`set role authenticated;set request.jwt.claim.sub=${lit(A)};insert into public.financial_goals(id,user_id,name,target_amount) values(${lit(id)},${lit(A)},'Fund',100);update public.financial_goals set archived=true where id=${lit(id)};update public.financial_goals set archived=false where id=${lit(id)};`);
+   assert.equal(sql(`select archived from public.financial_goals where id=${lit(id)};`),'f');
+   fail(()=>sql(`set role authenticated;set request.jwt.claim.sub=${lit(A)};update public.financial_goals set target_amount=0 where id=${lit(id)};`),/check constraint/);
+   fail(()=>sql('set role anon;select * from public.financial_goals;'),/permission denied/);
+ });
  await test('optimized settings policy preserves owner isolation and rejects forged owner',()=>{
    sql(`set role authenticated;set request.jwt.claim.sub=${lit(A)};insert into public.user_settings(user_id,starting_balance) values(${lit(A)},100);`);
    assert.equal(sql(`set role authenticated;set request.jwt.claim.sub=${lit(B)};select count(*) from public.user_settings;`),'0');

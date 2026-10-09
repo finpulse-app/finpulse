@@ -412,6 +412,24 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline:3px solid var(--accent);outline-offset:3px; }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:0.01ms!important;transition-duration:0.01ms!important;scroll-behavior:auto!important; } }
 @media (max-width:600px) { .form-input { font-size:16px; } }
+/* Product polish: comfortable spacing, quieter surfaces and usable controls. */
+.main{max-width:1600px;padding:30px 32px;}
+.nav-item{padding:10px 12px;margin-bottom:3px;}
+.topbar h2{font-size:28px;}.topbar p{line-height:1.6;}
+.card-title{font-size:16px;}.card-header{padding:16px 18px;}.card-body{padding:18px;}
+.btn{min-height:36px;}.cal-btn{width:32px;height:32px;}
+.goal-overview{background:var(--accent-light);border-color:#c3ddd1;}
+.eyebrow{font-size:11px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;}
+.goal-headline{font-family:'DM Serif Display',serif;font-size:34px;margin-bottom:8px;}
+#finish-sub,.goal-note{font-size:13px;line-height:1.6;color:var(--text2);}
+.goal-progress{height:7px;background:#d6e6dc;border-radius:20px;margin:20px 0 10px;overflow:hidden;}.goal-progress>div{height:100%;background:var(--accent);border-radius:20px;}
+.goal-summary{display:flex;justify-content:space-between;font-size:12px;color:var(--text2);}
+.goal-editor{margin-bottom:20px;}.goal-actions{display:flex;gap:10px;margin-top:18px;}.goal-actions .save-btn{width:auto;padding:12px 22px;}
+.goals-list{display:grid;gap:14px;margin-top:18px;}.goal-card-header{display:flex;justify-content:space-between;gap:12px;margin-bottom:12px;}.goal-title{font-size:16px;font-weight:600;overflow-wrap:anywhere;}.goal-numbers{font-size:14px;margin-top:10px;}.goal-actions .btn{font-size:12px;}
+.goal-empty{text-align:center;padding:32px 18px;}.goal-empty h3{font-family:'DM Serif Display',serif;font-size:23px;font-weight:400;margin-bottom:8px;}
+.agenda-day{display:block;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--border);padding:16px 0;cursor:pointer;color:var(--text);font:inherit;}.agenda-day:hover{background:var(--surface2);}.agenda-heading{display:flex;justify-content:space-between;gap:10px;font-size:13px;font-weight:600;margin-bottom:8px;}.agenda-row{display:flex;justify-content:space-between;gap:10px;font-size:12px;line-height:1.7;color:var(--text2);}.agenda-row span:first-child{overflow-wrap:anywhere;}.agenda-balance{font-size:12px;color:var(--text3);margin-top:8px;}
+.trial-bar{display:none;}
+@media(max-width:800px){.main{padding:18px 14px;}.topbar h2{font-size:25px;}.card-header{flex-wrap:wrap;gap:8px;}.goal-editor .form-row{grid-template-columns:1fr;}.goal-headline{font-size:28px;}.goal-actions{flex-wrap:wrap;}}
 </style>
 </head>
 <body>
@@ -594,11 +612,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <div style="display:grid;grid-template-columns:1fr 260px;gap:14px;align-items:start;">
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Expense Calendar</span>
+            <span class="card-title">Your calendar</span>
             <span class="card-meta" style="color:var(--text);font-weight:700;font-size:12.5px;">Click any day to add income, expenses, or bills</span>
           </div>
           <div class="card-body">
-            <div class="cal-grid" id="cal-grid"></div>
+            <div class="view-toggle" role="group" aria-label="Calendar display"><button class="view-toggle-btn active" id="calendar-month-btn" onclick="fpSetCalendarMode('month')" aria-pressed="true">Month</button><button class="view-toggle-btn" id="calendar-agenda-btn" onclick="fpSetCalendarMode('agenda')" aria-pressed="false">Agenda</button></div>
+            <div class="cal-grid" id="cal-grid"></div><div id="cal-agenda" style="display:none;"></div>
             <div class="ripple-bar" id="ripple-bar" style="display:none;">
               
               <span id="ripple-text"></span>
@@ -825,46 +844,21 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       </div>
     </div>
 
-    <!-- THE PLAN VIEW -->
     <div id="view-plan" style="display:none;">
-      <div class="topbar">
-        <div><h2>The Plan</h2><p>Review your calendar totals and set goals.</p></div>
-      </div>
-
-      <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,var(--surface) 0%,var(--accent-light) 100%);border:1px solid #c3ddd1;">
-        <div class="card-body" style="padding:24px;">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px;">
-            <div>
-              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--accent);margin-bottom:6px;">Your financial overview</div>
-              <div style="font-family:'DM Serif Display',serif;font-size:36px;color:var(--text);line-height:1.1;" id="finish-date">Calculating...</div>
-              <div style="font-size:13px;color:var(--text2);margin-top:6px;" id="finish-sub">Add your income and expenses to see your timeline.</div>
-            </div>
-            <div style="text-align:right;">
-              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text3);margin-bottom:6px;">Current Stage</div>
-              <div id="finish-stage-badge" style="font-size:13px;font-weight:700;padding:6px 14px;border-radius:99px;display:inline-block;cursor:pointer;" onclick="showStageModal()"></div>
-            </div>
-          </div>
-          <div style="margin-top:20px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-              <div style="font-size:11px;font-weight:600;color:var(--text2);">Savings progress is not tracked yet</div>
-              <div style="font-size:11px;font-weight:700;color:var(--accent);" id="finish-pct">0%</div>
-            </div>
-            <div style="height:8px;background:var(--border);border-radius:99px;overflow:hidden;">
-              <div id="finish-bar" style="height:100%;background:var(--accent);border-radius:99px;transition:width 0.6s ease;width:0%;"></div>
-            </div>
-          </div>
+      <div class="topbar"><div><h2>Your goals</h2><p>A clear target. A little progress at a time.</p></div><button class="btn btn-solid" id="goal-add-btn" onclick="fpOpenGoal()">+ Add goal</button></div>
+      <div class="card goal-overview"><div class="card-body"><div class="eyebrow">Saved toward your goals</div><div id="finish-date" class="goal-headline">Set your first goal</div><p id="finish-sub"></p><div class="goal-progress"><div id="finish-bar"></div></div><div class="goal-summary"><span id="finish-pct"></span><span id="finish-stage-badge"></span></div></div></div>
+      <p id="goal-status" role="status" style="margin:12px 0;color:var(--text2);font-size:13px;"></p>
+      <form class="card goal-editor" id="goal-editor" style="display:none;" onsubmit="event.preventDefault();fpSaveGoal()">
+        <div class="card-header"><span class="card-title" id="goal-editor-title">New goal</span></div><div class="card-body">
+          <div class="form-group"><label class="form-label" for="goal-name">What are you saving for?</label><input class="form-input" id="goal-name" maxlength="100" required placeholder="Emergency fund, a trip, a new home…"></div>
+          <div class="form-row"><div class="form-group"><label class="form-label" for="goal-target">Target amount ($)</label><input class="form-input" id="goal-target" type="number" step="0.01" min="0.01" required></div><div class="form-group"><label class="form-label" for="goal-saved">Already saved ($)</label><input class="form-input" id="goal-saved" type="number" step="0.01" min="0" value="0" required></div></div>
+          <div class="form-row"><div class="form-group"><label class="form-label" for="goal-monthly">Planned per month ($)</label><input class="form-input" id="goal-monthly" type="number" step="0.01" min="0" value="0" required></div><div class="form-group"><label class="form-label" for="goal-date">Target date (optional)</label><input class="form-input" id="goal-date" type="date"></div></div>
+          <p class="goal-note">You record these savings yourself. A goal does not transfer money or change your calendar balance.</p>
+          <div class="goal-actions"><button class="save-btn" id="goal-save-btn" type="submit">Save goal</button><button class="btn btn-outline" type="button" onclick="fpCloseGoal()">Cancel</button></div>
         </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Milestones</span>
-          <span class="card-meta">Goals to review</span>
-        </div>
-        <div class="card-body" id="milestones-list">
-          <div style="color:var(--text3);font-size:13px;text-align:center;padding:10px;">Add your income and expenses to see your milestones.</div>
-        </div>
-      </div>
+      </form>
+      <div id="milestones-list" class="goals-list"></div>
+      <div class="card" style="margin-top:20px;"><div class="card-header"><span class="card-title">This month's picture</span></div><div class="card-body" id="plan-calendar-summary"></div></div>
     </div>
 
     <!-- DREAMS VIEW -->
@@ -1340,6 +1334,8 @@ let _dataLoadVersion = 0;
 let _fpSettingsVersion = 0;
 let _fpSettingsBusy = false;
 let _fpSignOutBusy = false;
+let _fpGoals=[], _fpGoalsReady=false, _fpGoalBusy=false, _fpGoalDraftId=null;
+let _fpCalendarMode='month';
 let currentYear = new Date().getFullYear();
 let currentMonth = new Date().getMonth();
 let transactions = [];
@@ -1672,6 +1668,8 @@ function fpResetAccountState() {
   _dataLoadVersion++;
   _fpSettingsVersion++;
   _fpSettingsBusy = false;
+  _fpGoals=[];_fpGoalsReady=false;_fpGoalBusy=false;_fpGoalDraftId=null;
+  _fpCalendarMode="month";
   _fpMutationVersion++;
   _fpMutationBusy = false;
   _lastDeletedOperation = null;
@@ -1925,6 +1923,8 @@ async function loadUserData() {
     return t;
   });
 
+  await fpLoadGoals(false);
+  if (!stillCurrent()) return;
   await fpRefreshBillMarks(false);
   if (!stillCurrent()) return;
   // Check if we need to roll over last month's ending balance
@@ -2673,6 +2673,7 @@ function renderCalendar() {
     html += '<div class="' + cls + '" onclick="openDayPanel(' + d + ')"><div class="day-num">' + d + '</div>' + inner + '</div>';
   }
   grid.innerHTML = html;
+  fpRenderAgenda();
   updateRippleAlert(dayMap);
 }
 
@@ -4156,7 +4157,7 @@ function showView(v, btn) {
   if (v === 'loans') renderLoans();
   if (v === 'dreams') dUpdate();
   if (v === 'insights') renderInsights();
-  if (v === 'plan') renderPlan();
+  if (v === 'plan') { renderPlan();fpLoadGoals(); }
   if (v === 'expenses') { renderExpensesView(); }
   if (v === 'history') renderHistory();
 }
@@ -5435,25 +5436,118 @@ async function toggleBillPaid(billId) {
 
 
 // ── THE PLAN ────────────────────────────────────────────────────
+function fpGoalProgress(goal) {
+  const target=Number(goal.target_amount),saved=Number(goal.saved_amount),monthly=Number(goal.monthly_amount);
+  const remaining=Math.max(0,fpRound2(target-saved));
+  return {target,saved,remaining,percent:Math.min(100,Math.round(saved/target*100)),months:monthly>0?Math.ceil(remaining/monthly):null};
+}
+
+async function fpLoadGoals(render=true) {
+  if (!currentUser) return false;
+  const uid=currentUser.id,version=_dataLoadVersion,rows=[];
+  try {
+    for(let offset=0;;offset+=500) {
+      const r=await sb.from('financial_goals').select('*').eq('user_id',uid).order('id',{ascending:true}).range(offset,offset+499);
+      if(!currentUser||currentUser.id!==uid||version!==_dataLoadVersion)return false;
+      if(r.error)throw r.error;
+      rows.push(...(r.data||[]));if(!r.data||r.data.length<500)break;
+    }
+    _fpGoals=rows;_fpGoalsReady=true;if(render)renderPlan();return true;
+  } catch(e) {
+    if(currentUser&&currentUser.id===uid&&version===_dataLoadVersion){_fpGoalsReady=false;if(render)renderPlan();}
+    return false;
+  }
+}
+
+function fpOpenGoal(id) {
+  if(!_fpGoalsReady||_fpGoalBusy)return;
+  const goal=id?_fpGoals.find(g=>String(g.id)===String(id)):null;
+  if(id&&!goal)return;
+  _fpGoalDraftId=goal?goal.id:crypto.randomUUID();
+  document.getElementById('goal-editor-title').textContent=goal?'Edit goal':'New goal';
+  document.getElementById('goal-name').value=goal?goal.name:'';
+  document.getElementById('goal-target').value=goal?goal.target_amount:'';
+  document.getElementById('goal-saved').value=goal?goal.saved_amount:0;
+  document.getElementById('goal-monthly').value=goal?goal.monthly_amount:0;
+  document.getElementById('goal-date').value=goal&&goal.target_date?goal.target_date:'';
+  document.getElementById('goal-editor').style.display='block';
+  document.getElementById('goal-name').focus();
+  document.getElementById('goal-editor').scrollIntoView({block:'nearest'});
+}
+function fpCloseGoal() { if(_fpGoalBusy)return;document.getElementById('goal-editor').style.display='none';_fpGoalDraftId=null; }
+
+async function fpWriteGoal(record) {
+  if(!currentUser||_fpGoalBusy||!_fpGoalsReady)return false;
+  const uid=currentUser.id,version=_dataLoadVersion;
+  _fpGoalBusy=true;
+  const button=document.getElementById('goal-save-btn');button.disabled=true;button.textContent='Saving…';
+  try {
+    const r=await sb.from('financial_goals').upsert({...record,user_id:uid},{onConflict:'id'}).select('*').single();
+    if(!currentUser||currentUser.id!==uid||version!==_dataLoadVersion)return false;
+    if(r.error||!r.data||r.data.id!==record.id||r.data.user_id!==uid)throw Error('Unconfirmed goal save');
+    const index=_fpGoals.findIndex(g=>g.id===record.id);if(index<0)_fpGoals.push(r.data);else _fpGoals[index]=r.data;
+    renderPlan();return true;
+  } catch(e) {
+    if(currentUser&&currentUser.id===uid&&version===_dataLoadVersion)showToast('Could not confirm the goal save. Your inputs are kept; retry to check the same goal.','error');
+    return false;
+  } finally {
+    if(version===_dataLoadVersion){_fpGoalBusy=false;button.disabled=false;button.textContent='Save goal';}
+  }
+}
+
+async function fpSaveGoal() {
+  const name=document.getElementById('goal-name').value.trim(),targetRaw=document.getElementById('goal-target').value,savedRaw=document.getElementById('goal-saved').value,monthlyRaw=document.getElementById('goal-monthly').value;
+  const target=Number(targetRaw),saved=Number(savedRaw),monthly=Number(monthlyRaw),date=document.getElementById('goal-date').value;
+  if(!name||name.length>100||!targetRaw.trim()||!savedRaw.trim()||!monthlyRaw.trim()||![target,saved,monthly].every(Number.isFinite)||target<=0||saved<0||monthly<0||[target,saved,monthly].some(n=>n>=1e12)||date&&!fpParseIso(date)) { showToast('Add a name, a positive target and valid savings amounts.','error');return false; }
+  if(!_fpGoalDraftId)return false;
+  const old=_fpGoals.find(g=>g.id===_fpGoalDraftId);
+  const record={id:_fpGoalDraftId,name,target_amount:fpRound2(target),saved_amount:fpRound2(saved),monthly_amount:fpRound2(monthly),target_date:date||null,archived:old?old.archived:false};
+  if(!await fpWriteGoal(record))return false;
+  fpCloseGoal();showToast('Goal saved');return true;
+}
+
+async function fpArchiveGoal(id,archived) {
+  const g=_fpGoals.find(g=>g.id===id);if(!g)return false;
+  if(!await fpWriteGoal({...g,archived}))return false;
+  showToast(archived?'Goal archived. You can restore it below.':'Goal restored');return true;
+}
+
 function renderPlan() {
-  const dm=buildDayMap(currentYear,currentMonth), stageInfo=fpStageInfo(), stage=stageInfo.stage;
-  let income=0,outflows=0;
-  Object.keys(dm).forEach(function(day){const e=dm[day];e.income.forEach(function(t){income+=Number(t.amount)||0});e.expenses.concat(e.bills,e.loans).forEach(function(t){outflows+=fpAmountDue(t)});});
-  const debt=transactions.filter(function(t){return t.type==='loan'}).reduce(function(sum,t){return sum+fpLoanBalanceAmount(t)},0);
-  const month=new Date(currentYear,currentMonth,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
-  const badge=document.getElementById('finish-stage-badge');
-  if(badge){badge.textContent=stage==null?'Stage not set':'Stage '+stage;badge.style.background='var(--surface2)';badge.style.color='var(--text2)';}
-  document.getElementById('finish-date').textContent='Not estimated yet';
-  document.getElementById('finish-sub').textContent=stage==null?fpStageNullText(stageInfo.reason):'Savings balances and future payoff dates are not verified. These goals do not allocate money from your bank account.';
-  document.getElementById('finish-pct').textContent='';document.getElementById('finish-bar').style.width='0%';
-  const goals=[
-    ['Review your monthly cash flow',month+': $'+fmt(income)+' scheduled income and $'+fmt(outflows)+' calendar outflows. Net '+(income-outflows<0?'−':'+')+'$'+fmt(income-outflows)+'. These are projections, not confirmed savings.'],
-    ['Choose an expense buffer','Set a target from your essential expenses. FinPulse does not track a separate savings balance or mark this goal achieved from a calendar balance.'],
-    ['Review tracked debt','Remaining balances in your loan records: $'+fmt(debt)+'. Paid-off loans contribute $0. Rates and payment estimates should match your lender statement.'],
-    ['Build emergency savings','Choose a target appropriate to your expenses and circumstances. Progress and a completion date are not tracked yet.'],
-    ['Set a savings goal','Choose a monthly amount after reviewing your actual balance and obligations. No extra-payment or available-cash amount is recommended here.']
-  ];
-  document.getElementById('milestones-list').innerHTML=goals.map(function(g){return '<div style="padding:14px 0;border-bottom:1px solid var(--border);"><div style="font-size:14px;font-weight:600;margin-bottom:6px;">'+fpEscHtml(g[0])+'</div><div style="font-size:12.5px;color:var(--text2);line-height:1.6;">'+fpEscHtml(g[1])+'</div></div>';}).join('');
+  const goals=_fpGoals.filter(g=>!g.archived),archived=_fpGoals.filter(g=>g.archived);
+  let target=0,saved=0;goals.forEach(g=>{target+=Number(g.target_amount);saved+=Math.min(Number(g.saved_amount),Number(g.target_amount))});
+  const percent=target?Math.min(100,Math.round(saved/target*100)):0;
+  document.getElementById('finish-date').textContent=goals.length?'$'+fmt(saved)+' of $'+fmt(target):'Set your first goal';
+  document.getElementById('finish-sub').textContent=goals.length?'Your recorded savings. Update progress when you add or withdraw money.':'Choose what matters to you and track the amount you have saved.';
+  document.getElementById('finish-bar').style.width=percent+'%';document.getElementById('finish-pct').textContent=goals.length?percent+'% of your targets':'';
+  document.getElementById('finish-stage-badge').textContent=goals.length?goals.filter(g=>Number(g.saved_amount)>=Number(g.target_amount)).length+' goals reached':'';
+  document.getElementById('goal-add-btn').disabled=!_fpGoalsReady;
+  const status=document.getElementById('goal-status');status.innerHTML=_fpGoalsReady?'':'Goals could not load. <button class="btn btn-outline" onclick="fpLoadGoals()">Retry goals</button>';
+  function card(g) {
+    const p=fpGoalProgress(g);
+    const pace=p.remaining===0?'Target reached':p.months===null?'Add a monthly plan to estimate your timeline':p.months+' month'+(p.months===1?'':'s')+' at your planned $'+fmt(g.monthly_amount)+'/month';
+    return '<article class="card"><div class="card-body"><div class="goal-card-header"><div class="goal-title">'+fpEscHtml(g.name)+'</div><span class="br-tag good">'+(g.archived?'Archived':p.percent+'%')+'</span></div><div class="goal-progress"><div style="width:'+p.percent+'%"></div></div><div class="goal-numbers">$'+fmt(p.saved)+' saved <span style="color:var(--text3)">of $'+fmt(p.target)+'</span></div><p class="goal-note" style="margin-top:8px;">'+fpEscHtml(pace)+(g.target_date?' · Target '+fpEscHtml(fpDateLabel(g.target_date)):'')+'</p><div class="goal-actions"><button class="btn btn-outline" onclick="fpOpenGoal(\''+g.id+'\')">Edit progress</button><button class="btn btn-outline" onclick="fpArchiveGoal(\''+g.id+'\','+(!g.archived)+')">'+(g.archived?'Restore':'Archive')+'</button></div></div></article>';
+  }
+  document.getElementById('milestones-list').innerHTML=goals.length?goals.map(card).join(''):'<div class="card goal-empty"><h3>Make room for what matters.</h3><p class="goal-note">Start with an emergency fund, a trip, or a goal of your own.</p></div>';
+  if(archived.length)document.getElementById('milestones-list').innerHTML+='<details><summary style="padding:12px;cursor:pointer;">Archived goals ('+archived.length+')</summary><div class="goals-list">'+archived.map(card).join('')+'</div></details>';
+  const dm=buildDayMap(currentYear,currentMonth);let income=0,outflows=0;
+  Object.values(dm).forEach(e=>{e.income.forEach(t=>income+=Number(t.amount)||0);e.expenses.concat(e.bills,e.loans).forEach(t=>outflows+=fpAmountDue(t))});
+  document.getElementById('plan-calendar-summary').textContent=new Date(currentYear,currentMonth,1).toLocaleDateString('en-US',{month:'long',year:'numeric'})+': $'+fmt(income)+' income and $'+fmt(outflows)+' outflows. These are calendar projections; goal savings are tracked separately.';
+}
+
+function fpSetCalendarMode(mode) {
+  _fpCalendarMode=mode==='agenda'?'agenda':'month';fpRenderAgenda();
+}
+function fpRenderAgenda() {
+  const el=document.getElementById('cal-agenda');if(!el)return;
+  const agenda=_fpCalendarMode==='agenda';document.getElementById('cal-grid').style.display=agenda?'none':'grid';el.style.display=agenda?'block':'none';
+  ['month','agenda'].forEach(m=>{const b=document.getElementById('calendar-'+m+'-btn');b.classList.toggle('active',m===_fpCalendarMode);b.setAttribute('aria-pressed',String(m===_fpCalendarMode))});
+  if(!agenda)return;
+  const map=buildDayMap(currentYear,currentMonth);
+  el.innerHTML=Object.keys(map).map(day=>{
+    const e=map[day],date=new Date(currentYear,currentMonth,Number(day));
+    const rows=e.income.map(t=>({name:t.description||'Income',amount:Number(t.amount)||0,sign:'+'})).concat(e.expenses.concat(e.bills,e.loans).map(t=>({name:t.description,amount:fpAmountDue(t),sign:'−'})));
+    return '<button class="agenda-day" aria-label="Open '+date.toLocaleDateString('en-US',{month:'long',day:'numeric'})+'" onclick="openDayPanel('+Number(day)+')"><div class="agenda-heading"><span>'+date.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</span><span>'+rows.length+' item'+(rows.length===1?'':'s')+'</span></div>'+rows.map(t=>'<div class="agenda-row"><span>'+fpEscHtml(t.name)+'</span><span>'+t.sign+'$'+fmt(t.amount)+'</span></div>').join('')+'<div class="agenda-balance">Projected balance '+(e.balance<0?'−':'')+'$'+fmt(e.balance)+'</div></button>';
+  }).join('');
 }
 
 function renderInsights() {
