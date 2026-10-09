@@ -18,8 +18,11 @@ security configuration and public launch setup are deferred at the user's reques
   from spreadsheet formula interpretation. JSON includes transactions, settings,
   dated balances, goals, account bill status and device purchase notes. These are
   exports; a JSON restore workflow is not implemented in this pass.
+- Loans: enter the actual statement payment, including zero-interest loans.
+  Credit-card estimates remain editable. Changing an APR or balance preserves a
+  payment the user already entered.
 - Future Value: entered amounts preserve cents, support zero and reject malformed
-  input without displaying a stale numeric result.
+  input without displaying stale amounts, milestone values or chart data.
 - Navigation and design: clearer Goals navigation, active states for all view
   changes, return to the top when changing screens, keyboard card controls,
   comfortable spacing and responsive stacked goal forms.
@@ -31,7 +34,7 @@ security configuration and public launch setup are deferred at the user's reques
 
 The PR's latest checks contain the exact verified head and counts. Browser tests
 exercise the actual goal form, save/reload/edit/archive/restore, injected failures,
-lost confirmations, agenda day selection, search, downloads and calculator inputs.
+lost confirmations, agenda day selection, search, downloads, calculator inputs and statement-payment loan forms.
 Database tests run the financial-goals migration against disposable PostgreSQL.
 Real-account preview review is read-only; no sample goal or transaction is saved
 to the existing account. Test dependencies run on GitHub, with no local installs.

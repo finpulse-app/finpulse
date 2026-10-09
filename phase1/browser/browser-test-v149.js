@@ -837,9 +837,17 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>showView('dreams',null));await page.fill('#d-amt-input','12.50');await page.fill('#d-rate-input','0');
   ok('T31 scenario preserves cents in entered amount',await page.textContent('#d-future')==='$12.5','cents lost');
   await page.fill('#d-amt-input','12oops');
-  ok('T31 malformed scenario amount cannot show a stale result',await page.textContent('#d-future')==='—'&&/valid amount/.test(await page.textContent('#d-coach')),'stale result');
+  ok('T31 malformed scenario amount cannot show a stale result',await page.textContent('#d-future')==='—'&&await page.textContent('#d-milestones')===''&&/valid amount/.test(await page.textContent('#d-coach')),'stale result');
   await page.fill('#d-amt-input','0');
   ok('T31 zero scenario amount is supported',await page.textContent('#d-future')==='$0','zero rejected');await page.fill('#d-amt-input','5000');await page.fill('#d-rate-input','10');
+
+  await page.evaluate(()=>{showView('loans',null);openLoanModal();});await page.selectOption('#lm-cat','Car Loan');await page.fill('#lm-desc','Statement payment loan');await page.fill('#lm-balance','1200');await page.fill('#lm-apr','0');await page.fill('#lm-payment','125.50');
+  await page.fill('#lm-apr','9');
+  ok('T32 changing APR preserves entered statement payment',await page.inputValue('#lm-payment')==='125.50','payment overwritten');await page.fill('#lm-apr','0');await page.click('#lm-save-btn');await page.waitForTimeout(300);
+  const statementLoan=db.transactions.find(t=>t.description==='Statement payment loan');
+  ok('T32 zero APR loan saves the user-entered statement payment',statementLoan&&statementLoan.apr===0&&statementLoan.min_payment===125.5,'loan missing or estimate substituted');
+  await page.evaluate(id=>openLoanEdit(id),statementLoan.id);await page.fill('#le-balance','1000');await page.fill('#le-apr','5');
+  ok('T32 editing loan balance and APR keeps existing payment',Number(await page.inputValue('#le-payment'))===125.5,'edit overwrote payment');await page.keyboard.press('Escape');
 
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {

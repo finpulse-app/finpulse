@@ -768,7 +768,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label class="form-label" for="lm-cat">Type</label>
-            <select class="form-select" id="lm-cat">
+            <select class="form-select" id="lm-cat" onchange="calcLoanMinPayment()">
               <option>Credit Card</option><option>Personal Loan</option><option>Student Loan</option><option>Car Loan</option><option>Affirm</option><option>Klarna</option><option>Afterpay</option><option>Medical Debt</option><option>Other</option>
             </select>
           </div>
@@ -783,8 +783,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
             <input class="form-input" type="number" id="lm-apr" placeholder="e.g. 24.99" step="0.01" oninput="calcLoanMinPayment()">
           </div>
           <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label">Min payment ($) <span style="font-weight:400;color:var(--text3);font-size:10px;">auto-calculated</span></label>
-            <input class="form-input" type="number" id="lm-payment" placeholder="Auto" style="background:var(--surface2);" readonly>
+            <label class="form-label" for="lm-payment">Statement minimum ($)</label>
+            <input class="form-input" type="number" id="lm-payment" placeholder="Enter your statement amount" min="0.01" step="0.01" oninput="_fpManualLoanPayment=true"><p class="goal-note" style="font-size:11px;margin-top:4px;">A credit-card estimate can be edited. Use the payment from your statement.</p>
           </div>
         </div>
         <div style="margin-top:12px;">
@@ -1263,8 +1263,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
     <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:600;margin-bottom:16px;">Edit Loan</div>
     <div class="form-group"><label class="form-label" for="le-desc">Lender name</label><input class="form-input" id="le-desc" type="text"></div>
     <div class="form-row" style="margin-bottom:12px;">
-      <div><label class="form-label" for="le-balance">Balance owed ($)</label><input class="form-input" id="le-balance" type="number" step="0.01" oninput="calcLoanEditMin()"></div>
-      <div><label class="form-label" for="le-apr">APR (%)</label><input class="form-input" id="le-apr" type="number" step="0.01" oninput="calcLoanEditMin()"></div>
+      <div><label class="form-label" for="le-balance">Balance owed ($)</label><input class="form-input" id="le-balance" type="number" step="0.01"></div>
+      <div><label class="form-label" for="le-apr">APR (%)</label><input class="form-input" id="le-apr" type="number" step="0.01"></div>
     </div>
     <div class="form-group"><label class="form-label">Monthly payment ($) <span style="font-weight:400;color:var(--text3);font-size:10px;">edit if your statement differs</span></label><input class="form-input" id="le-payment" type="number" step="0.01"></div>
     <div style="display:flex;gap:8px;margin-top:4px;">
@@ -1341,6 +1341,7 @@ let _fpSignOutBusy = false;
 let _fpGoals=[], _fpGoalsReady=false, _fpGoalBusy=false, _fpGoalDraftId=null, _fpGoalVersion=0;
 let _fpCalendarMode='month';
 let _fpExpenseQuery='';
+let _fpManualLoanPayment=false;
 let currentYear = new Date().getFullYear();
 let currentMonth = new Date().getMonth();
 let transactions = [];
@@ -1674,7 +1675,8 @@ function fpResetAccountState() {
   _fpSettingsVersion++;
   _fpSettingsBusy = false;
   _fpGoals=[];_fpGoalsReady=false;_fpGoalBusy=false;_fpGoalDraftId=null;_fpGoalVersion++;
-  _fpCalendarMode="month";_fpExpenseQuery="";
+  _fpCalendarMode="month";_fpExpenseQuery="";_fpManualLoanPayment=false;
+  const loanForm=document.getElementById("loan-add-form");if(loanForm)loanForm.style.display="none";
   const search=document.getElementById("expense-search");if(search)search.value="";
   const goalEditor=document.getElementById("goal-editor");if(goalEditor)goalEditor.style.display="none";
   _fpMutationVersion++;
@@ -4600,6 +4602,7 @@ async function saveLoanEdit() {
 
 // ── LOAN MODAL (inline on loans page) ─────────────────────────
 function openLoanModal() {
+  _fpManualLoanPayment=false;
   // Reset fields
   const fields = ['lm-desc','lm-balance','lm-apr','lm-payment','lm-anchor'];
   fields.forEach(function(id) { const el = document.getElementById(id); if(el) el.value = ''; });
@@ -4633,9 +4636,10 @@ async function saveLoanFromModal() {
   if (!desc) { alert('Please enter a lender name.'); return; }
   if (isNaN(balance) || balance <= 0) { alert('Please enter the balance owed.'); return; }
 
-  // Auto-calculate if not filled (should always be filled via calcLoanMinPayment)
+  // Only use the optional credit-card estimate when no statement amount was entered.
   let finalPayment = payment;
   if (isNaN(finalPayment) || finalPayment <= 0) {
+    if(cat!=='Credit Card'){showToast('Enter the monthly payment from your loan statement.','error');return;}
     const apr2 = parseFloat(document.getElementById('lm-apr') ? document.getElementById('lm-apr').value : '') || 0;
     if (apr2 > 0) {
       const monthlyInterest = balance * (apr2 / 100 / 12);
@@ -6242,12 +6246,18 @@ function dSyncAmt(source) {
 function dFormatInput() {
   dSyncAmt('text');if(_fpDreamAmountValid)document.getElementById('d-amt-input').value=dFmt(dAmount);
 }
+function dClearResult(message) {
+  ['d-future','d-purchase'].forEach(function(id){const el=document.getElementById(id);if(el)el.textContent='—';});
+  const milestones=document.getElementById('d-milestones');if(milestones)milestones.textContent='';
+  if(dChart){dChart.data.labels=[];dChart.data.datasets.forEach(function(set){set.data=[];});dChart.update();}
+  document.getElementById('d-coach').textContent=message;
+}
 function dUpdate() {
-  if(!_fpDreamAmountValid){document.getElementById('d-future').textContent='—';document.getElementById('d-coach').textContent='Enter a valid amount between $0 and $1 billion, with up to two decimal places.';return;}
+  if(!_fpDreamAmountValid){dClearResult('Enter a valid amount between $0 and $1 billion, with up to two decimal places.');return;}
   const rateInput=document.getElementById('d-rate-input');
   if (rateInput) {
     const rate=Number(rateInput.value);
-    if (!rateInput.value.trim() || !Number.isFinite(rate) || rate < -100 || rate > 100) { document.getElementById('d-future').textContent='—';document.getElementById('d-coach').textContent='Enter an assumed annual rate between -100% and 100%.';return; }
+    if (!rateInput.value.trim() || !Number.isFinite(rate) || rate < -100 || rate > 100) { dClearResult('Enter an assumed annual rate between -100% and 100%.');return; }
     RATE=rate/100;
   }
   const yrEl = document.getElementById('d-yr-slider');
@@ -6799,6 +6809,9 @@ async function updateBrAiPhrase(endBal, stage, monthlyCashFlow, nextBillName, ne
 // ── AI PRIORITY LIST ───────────────────────────────────────────
 // ── MINIMUM PAYMENT AUTO-CALCULATOR ────────────────────────────
 function calcLoanMinPayment() {
+  if(_fpManualLoanPayment)return;
+  const category=document.getElementById('lm-cat');
+  if(category && category.value!=='Credit Card'){const field=document.getElementById('lm-payment');if(field)field.value='';return;}
   const balance = parseFloat(document.getElementById('lm-balance') ? document.getElementById('lm-balance').value : '') || 0;
   const apr = parseFloat(document.getElementById('lm-apr') ? document.getElementById('lm-apr').value : '') || 0;
   const payEl = document.getElementById('lm-payment');
