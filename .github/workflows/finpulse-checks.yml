@@ -1,0 +1,79 @@
+name: FinPulse candidate checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        timezone: [America/New_York, UTC, America/Los_Angeles, Pacific/Auckland]
+    env:
+      TZ: ${{ matrix.timezone }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node phase1/run-security-tests.js finpulse-v2-150.html
+      - run: node phase1/run-current-formulas.js finpulse-v2-150.html
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        timezone: [America/New_York, Pacific/Auckland]
+    env:
+      TZ: ${{ matrix.timezone }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser test dependencies on runner
+        run: npm install --no-save --package-lock=false playwright@1.58.2
+      - name: Install Chromium on runner
+        run: npx playwright install --with-deps chromium
+      - name: Run browser regression checks against fake backend
+        run: node phase1/browser/browser-test-v149.js finpulse-v2-150.html
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: public.ecr.aws/docker/library/postgres:17
+        env:
+          POSTGRES_PASSWORD: finpulse-ci-only
+          POSTGRES_DB: finpulse_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      FINPULSE_DISPOSABLE_DB: 'true'
+      FINPULSE_TEST_DATABASE_URL: postgresql://postgres:finpulse-ci-only@localhost:5432/finpulse_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: psql --version
+      - name: Test atomic operations on synthetic PostgreSQL database
+        run: node phase1/database/test-atomic.js
+  live-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check public Auth settings and anonymous read isolation
+        run: node phase1/check-live-api.js finpulse-v2-150.html
