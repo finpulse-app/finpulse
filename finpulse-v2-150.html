@@ -6313,7 +6313,7 @@ function dRenderCashImpact() {
     box.innerHTML='<strong>Start with your current balance.</strong><p class="goal-note">Add the amount and its date once, then FinPulse can show what this purchase changes.</p><button class="btn btn-outline" onclick="fpOpenPriority(\'balance\')">Update my balance</button>';return;
   }
   if(!impact.after){box.textContent='Your calendar does not have enough information for this comparison yet.';return;}
-  const money=function(n){return (n<0?'−$':'$')+fmt(Math.abs(n));};
+  const money=function(n){return (n<0?'−$':'$')+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});};
   const title=impact.status==='shortfall'?(impact.before.amount<0?'Your projection is already below zero.':'This would put your projection below zero.'):
     impact.status==='tight'?'This would leave a thin cushion.':impact.status==='incomplete'?'Here is the calendar impact.':'This fits the current projection.';
   const basis=impact.includesSpending?'Includes an estimate of everyday spending.':'Calendar items only. Everyday spending is not estimated yet.';
@@ -6378,7 +6378,8 @@ function dSyncAmt(source) {
   dUpdate();
 }
 function dFormatInput() {
-  dSyncAmt('text');if(_fpDreamAmountValid)document.getElementById('d-amt-input').value=dFmt(dAmount);
+  // Input events already update the calculation. Do not replace action buttons during pointer-down blur.
+  if(_fpDreamAmountValid)document.getElementById('d-amt-input').value=dFmt(dAmount);
 }
 function dClearResult(message) {
   ['d-future','d-purchase'].forEach(function(id){const el=document.getElementById(id);if(el)el.textContent='—';});
