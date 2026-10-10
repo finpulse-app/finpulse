@@ -913,6 +913,10 @@ const loan = id => txns().find(t => t.id === id);
   ok('T37 missing everyday-spending history cannot produce an affordability reassurance',/Everyday spending is not estimated yet/.test(await page.textContent('#d-cash-impact'))&&!/This fits/.test(await page.textContent('#d-cash-impact')),'missing-data reassurance');
   await page.fill('#d-amt-input','10');ok('T37 incomplete positive projection explains what still needs checking',/Here is the calendar impact/.test(await page.textContent('#d-cash-impact'))&&/details still need checking/.test(await page.textContent('#d-cash-impact')),'missing incomplete explanation');
 
+  await page.evaluate(()=>{userSettings=Object.assign({},userSettings,{payAmount:0});dCheckCash(false);});
+  ok('T37 incomplete income offers the relevant next step',await page.isVisible('#d-cash-impact button:text-is("Check income details")'),'wrong next action');await page.click('#d-cash-impact button:text-is("Check income details")');
+  ok('T37 income next step opens the editor without saving financial data',await page.isVisible('#edit-income-overlay')&&JSON.stringify(db)===purchaseRecords,'wrong destination or data changed');await page.keyboard.press('Escape');
+
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {
     await page.evaluate(v=>showView(v,null),view);

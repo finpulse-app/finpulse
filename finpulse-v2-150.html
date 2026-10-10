@@ -6303,6 +6303,12 @@ function dOpenPurchaseBalance() {
 function dCheckCash(afterPayday) {
   _fpPurchaseCheckActive=true;_fpPurchaseAfterPayday=!!afterPayday;_fpPurchaseSnapshotCache=null;dRenderCashImpact();
 }
+function fpPurchaseNextStep(blockers) {
+  if(blockers.some(function(code){return ['no_income','pay_schedule_unclear','no_next_payday','unconfirmed_income','income_inclusion_unknown'].includes(code);}))return {destination:'income',label:'Check income details',reason:'Check your income amount, dates and whether deposits are already included.'};
+  if(blockers.some(function(code){return ['overdue','unverified_obligation','partial_payment','payment_unmatched'].includes(code);}))return {destination:'bills',label:'Review bill status',reason:'Check which bills are still owed and which payments have already been recorded.'};
+  if(blockers.includes('loan_data_missing'))return {destination:'loans',label:'Check loan payments',reason:'Add the missing loan balance or statement payment.'};
+  return {destination:'expenses',label:'Review my spending',reason:blockers.length?'Add or check recent expenses so everyday spending can be included.':''};
+}
 function dRenderCashImpact() {
   const box=document.getElementById('d-cash-impact');if(!box)return;
   if(!_fpPurchaseCheckActive){box.innerHTML='<button class="btn btn-outline" onclick="dCheckCash(false)">Check this against my cash flow</button>';return;}
@@ -6320,7 +6326,8 @@ function dRenderCashImpact() {
   const title=impact.status==='shortfall'?(impact.before.amount<0?'Your projection is already below zero.':'This would put your projection below zero.'):
     impact.status==='tight'?'This would leave a thin cushion.':impact.status==='incomplete'?'Here is the calendar impact.':'This fits the current projection.';
   const basis=impact.includesSpending?'Includes an estimate of everyday spending.':'Calendar items only. Everyday spending is not estimated yet.';
-  const caveat=impact.blockers.length?' Some income, spending or payment details still need checking.':'';
+  const nextStep=fpPurchaseNextStep(impact.blockers);
+  const caveat=impact.blockers.length?' Some income, spending or payment details still need checking. '+nextStep.reason:'';
   const next=impact.firstNegative?'First projected shortfall: '+fpDateLabel(impact.firstNegative.date)+'.':'Compared with a $'+fmt(impact.buffer)+' starter cushion.';
   box.innerHTML='<strong>'+title+'</strong><div class="goal-note" style="margin-top:8px;">Lowest projected balance through '+fpDateLabel(impact.through)+'</div>'
     +'<div class="goal-numbers" style="margin:6px 0;">'+money(impact.before.amount)+' → '+money(impact.after.amount)+'</div>'
@@ -6329,7 +6336,7 @@ function dRenderCashImpact() {
     +'<p class="goal-note" style="margin-top:6px;">'+(impact.charges>1?impact.charges+' monthly purchases, '+money(impact.total)+' total during this check.':'Purchase date: '+fpDateLabel(impact.from)+'.')+'</p>'
     +'<div class="goal-actions" style="margin-top:10px;"><button class="btn btn-outline" onclick="dCheckCash(false)">Compare buying today</button>'
     +(snap.nextPayday?'<button class="btn btn-outline" onclick="dCheckCash(true)">Compare after payday</button>':'')
-    +'<button class="btn btn-outline" onclick="fpOpenPriority(\'expenses\')">Review my spending</button></div>';
+    +'<button class="btn btn-outline" onclick="fpOpenPriority(\''+nextStep.destination+'\')">'+nextStep.label+'</button></div>';
 }
 
 // ── DREAMS CALCULATOR ──────────────────────────────────────────
