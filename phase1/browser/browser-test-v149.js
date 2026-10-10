@@ -894,6 +894,8 @@ const loan = id => txns().find(t => t.id === id);
     const collapsed=await page.evaluate(v=>Array.from(document.querySelectorAll('#view-'+v+' .card')).filter(e=>e.getClientRects().length).map(e=>e.getBoundingClientRect().width).filter(w=>w<200),view);
     ok('T29 '+view+' cards remain readable at 312 pixels',collapsed.length===0,JSON.stringify(collapsed));
   }
+  await page.evaluate(()=>showView('dreams',null));
+  ok('T36 calculator cost controls fit a narrow screen',await page.evaluate(()=>document.getElementById('d-amt-input').getBoundingClientRect().right<=window.innerWidth&&document.getElementById('d-amt-input').getBoundingClientRect().left>=0),'cost control clipped');
   await page.setViewportSize({width:1280,height:900});
   const offline=await browser.newContext();
   await offline.route('**/cdn.jsdelivr.net/**',r=>r.fulfill({contentType:'application/javascript',body:''}));
