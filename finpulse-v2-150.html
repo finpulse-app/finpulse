@@ -6370,7 +6370,7 @@ function dUpdate() {
         {label:'Hypothetical growth',data:gd,borderColor:'#1a6b4a',backgroundColor:'rgba(26,107,74,0.07)',fill:true,tension:0.4,pointRadius:2,borderWidth:2},
         {label:'Amount left to grow after spending',data:fd,borderColor:'#c0392b',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1.5,borderDash:[5,4]}
       ]},
-      options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:20}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+': '+dFmt(ctx.parsed.y);}}}},scales:{x:{grid:{display:false},ticks:{font:{size:10},maxTicksLimit:8}},y:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{size:10},callback:function(v){return v>=1000000?'$'+(v/1000000).toFixed(1)+'M':v>=1000?'$'+Math.round(v/1000)+'k':'$'+v;}}}}}
+      options:{animation:false,responsive:true,maintainAspectRatio:false,layout:{padding:{top:20}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+': '+dFmt(ctx.parsed.y);}}}},scales:{x:{grid:{display:false},ticks:{font:{size:10},maxTicksLimit:8}},y:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{size:10},callback:function(v){return v>=1000000?'$'+(v/1000000).toFixed(1)+'M':v>=1000?'$'+Math.round(v/1000)+'k':'$'+v;}}}}}
     });
   }
 }
