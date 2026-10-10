@@ -86,3 +86,16 @@ calculator and confirmed saves refresh the comparison in place. Missing spending
 income or payment details keep the comparison explicitly incomplete. Waiting never
 hides an earlier shortfall. Comparisons themselves do not write finances, paid
 status, goals or purchase notes. Automatic allocation remains disabled.
+
+## Payment records and missed bills
+
+Loan payment entry shows an editable payment date, defaulting to today regardless
+of the calendar month being viewed. Pending retries retain their original date.
+Regular-payment defaults match the loan ID (or an exact legacy name), exclude
+extra-only payments, and share the calendar's settlement rules for early payments
+across month boundaries. A renamed loan still matches its recorded payments.
+
+Cash projections retain every open bill or loan occurrence within the existing
+45-day overdue review window. Paying the newest occurrence does not hide an older
+one. Amounts owed before the dated balance are deducted once, and separate overdue
+occurrences have distinct priority-action IDs.

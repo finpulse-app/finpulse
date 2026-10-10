@@ -932,6 +932,9 @@ const loan = id => txns().find(t => t.id === id);
   ok('T38 changing payment month recalculates paid status',await page.evaluate(()=>_rpIncludeMonthly===true),'paid status from wrong month');
   await page.evaluate(()=>closeRecordPayment());
 
+  await page.evaluate(()=>{transactions=transactions.map(t=>t.description==='Test Car Loan payment'?Object.assign({},t,{date:'2026-09-30'}):t);recordLoanPayment('loan-car');});
+  ok('T38 early payment across month boundary keeps regular payment unchecked',await page.evaluate(()=>_rpIncludeMonthly===false)&&/already recorded/.test(await page.textContent('#rp-already-paid')),'early payment was ignored');await page.evaluate(()=>closeRecordPayment());
+
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {
     await page.evaluate(v=>showView(v,null),view);

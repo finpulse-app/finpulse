@@ -5040,12 +5040,20 @@ function fpLoanMonthPayments(loan,date) {
   const minimum=Number(loan.min_payment||loan.amount)||0;
   return {total,regular,complete:minimum>0&&regular>=minimum-0.005};
 }
+function fpLoanPaymentStatus(loan,date) {
+  const status=fpLoanMonthPayments(loan,date),day=fpParseIso(date);if(!day)return status;
+  const from=fpIso(new Date(day.getFullYear(),day.getMonth(),1,12));
+  const to=fpIso(new Date(day.getFullYear(),day.getMonth()+1,0,12));
+  const dues=fpOccurrences(loan,from,to);
+  if(dues.length===1)status.complete=fpPaidTotal(loan,dues[0],to,transactions,null).settled;
+  return status;
+}
 function rpRefreshPaymentDate() {
   if(_rpHasPending)return;
   const loan=transactions.find(function(t){return t.id===_rpLoanId;});if(!loan)return;
-  const status=fpLoanMonthPayments(loan,document.getElementById('rp-date').value);
+  const status=fpLoanPaymentStatus(loan,document.getElementById('rp-date').value);
   _rpIncludeMonthly=!status.complete;
-  const el=document.getElementById('rp-already-paid');el.style.display=status.total>0?'block':'none';
+  const el=document.getElementById('rp-already-paid');el.style.display=status.complete||status.total>0?'block':'none';
   el.textContent=status.complete?'The regular payment is already recorded for this loan in the selected month. It is unchecked to help avoid recording it twice.':status.total>0?'Recorded for this loan in the selected month: $'+fmt(status.total)+'. The regular payment has not been fully recorded.':'';
   document.getElementById('rp-monthly-check').classList.toggle('on',_rpIncludeMonthly);
   const amt=document.getElementById('rp-due-amt');amt.style.opacity=_rpIncludeMonthly?'1':'0.4';amt.style.textDecoration=_rpIncludeMonthly?'none':'line-through';

@@ -711,6 +711,7 @@ t('v150 multiple missed bills before the dated balance are all reserved once',()
 t('v150 paying the latest bill does not hide an older missed occurrence',()=>{const tx=[bill('w','Weekly service',40,'2026-09-30',{frequency:'weekly'})];const s=NEW(OCT8,NOPAY,tx,100,'2026-10-08',{w:[{due:'2026-10-07',at:'2026-10-07'}]});return s.overdue.length===1&&s.overdue[0].dueDate==='2026-09-30'&&close(s.projectedToday,60)||JSON.stringify([s.overdue,s.projectedToday]);});
 t('v150 overdue priority actions have distinct IDs for each occurrence',()=>{const s=NEW(OCT8,NOPAY,[bill('w','Weekly service',40,'2026-09-30',{frequency:'weekly'})],100,'2026-10-08');const a=ACT(s).actions.filter(x=>x.code==='overdue_bill');return a.length===2&&new Set(a.map(x=>x.id)).size===2||JSON.stringify(a);});
 
+t('v150 early regular loan payment across a month boundary disables duplicate regular entry',()=>{setup(NOPAY,[CAR200('2026-10-10'),carPay('early',200,'2026-09-30')]);return run("fpLoanPaymentStatus(transactions[0],'2026-10-08').complete")===true||'early payment was ignored';});
 console.log('File: ' + file);
 if (missing.length) console.log('Functions not present in this build: ' + missing.join(', '));
 console.log(results.join('\n'));
