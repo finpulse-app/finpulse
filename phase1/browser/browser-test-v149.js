@@ -870,6 +870,17 @@ const loan = id => txns().find(t => t.id === id);
   ok('T34 due-bill priority offers a direct review action',await billShortcut.count()>0,'missing bill shortcut');await billShortcut.first().click();
   ok('T34 reviewing a priority bill opens Bills without changing paid status',await page.isVisible('#view-bills')&&db.transactions.length===priorityWrites,'shortcut saved money action');
 
+
+  seed();db.transactions=[];await load();await page.evaluate(()=>{showView('calendar',null);openBottomSheet(10);});await page.fill('#bs-ai-input','Annual insurance $1200');await page.click('button.recurring-toggle');await page.selectOption('#bs-frequency','yearly');
+  ok('T35 choosing repeat frequency preserves expense description',await page.inputValue('#bs-ai-input')==='Annual insurance $1200','text lost');await page.click('#bs-ai-send-btn');await page.waitForTimeout(300);
+  const annual=db.transactions.find(t=>t.description==='Annual Insurance');
+  ok('T35 annual expense saves full charge once per year',annual&&annual.amount===1200&&annual.frequency==='yearly'&&annual.anchor_date==='2026-10-10','annual converted to monthly');
+  ok('T35 annual cash flow shows due-month charge and none next month',await page.evaluate(()=>{const sum=(y,m)=>Object.values(buildDayMap(y,m)).reduce((n,d)=>n+d.expenses.concat(d.bills).reduce((a,t)=>a+Number(t.amount),0),0);return sum(2026,9)===1200&&sum(2026,10)===0;}),'annual repeated next month');
+  await page.evaluate(id=>{closeBottomSheet();openExpenseEdit(id);},annual.id);await page.selectOption('#ee-frequency','weekly');await page.click('#edit-expense-overlay button:text-is("Save Changes")');await page.waitForTimeout(300);
+  ok('T35 edited expense repeat schedule saves and recalculates calendar',db.transactions.find(t=>t.id===annual.id).frequency==='weekly'&&await page.evaluate(()=>[10,17,24,31].every(day=>buildDayMap(2026,9)[day].expenses.some(t=>t.description==='Annual Insurance'))),'schedule unchanged');
+  await page.evaluate(id=>openExpenseEdit(id),annual.id);await page.selectOption('#ee-frequency','once');await page.click('#edit-expense-overlay button:text-is("Save Changes")');await page.waitForTimeout(300);
+  ok('T35 stop repeating keeps the original expense and removes future occurrences',db.transactions.find(t=>t.id===annual.id).recurring===false&&db.transactions.find(t=>t.id===annual.id).anchor_date===null&&await page.evaluate(()=>buildDayMap(2026,9)[17].expenses.length===0),'repeat not removed');
+
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {
     await page.evaluate(v=>showView(v,null),view);

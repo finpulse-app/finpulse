@@ -1238,6 +1238,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <label class="form-label" for="ee-date">Date</label>
       <input class="form-input" id="ee-date" type="date" onkeydown="if(event.key==='Enter'){event.preventDefault();saveExpenseEdit();}">
     </div>
+      <div class="form-group"><label class="form-label" for="ee-frequency">Repeats</label><select class="form-select" id="ee-frequency"><option value="once">Does not repeat</option><option value="weekly">Every week</option><option value="biweekly">Every two weeks</option><option value="twicemonthly">Twice a month</option><option value="monthly">Every month</option><option value="yearly">Every year</option></select><p class="goal-note">The amount is charged each time, starting on the date above.</p></div>
     <div style="display:flex;gap:8px;margin-top:4px;">
       <button class="save-btn" style="flex:1;" onclick="saveExpenseEdit()">Save Changes</button>
       <button class="btn btn-outline" style="padding:12px 16px;" onclick="document.getElementById('edit-expense-overlay').style.display='none'">Cancel</button>
@@ -1377,6 +1378,8 @@ function openExpenseEdit(txnId) {
   document.getElementById('ee-desc').value = txn.description || '';
   document.getElementById('ee-amount').value = txn.amount || '';
   document.getElementById('ee-date').value = txn.date || txn.anchor_date || '';
+  document.getElementById('ee-frequency').value=txn.recurring?(txn.frequency||'monthly'):'once';
+  document.getElementById('ee-frequency').disabled=txn.category==='loan_payment';
   document.getElementById('edit-expense-overlay').style.display = 'flex';
   setTimeout(function(){
     const input = document.getElementById('ee-desc');
@@ -1403,7 +1406,9 @@ async function saveExpenseEdit() {
     return;
   }
   const upd = { description: desc, amount, date };
-  if (editingTxn && editingTxn.recurring && editingTxn.anchor_date) upd.anchor_date = date; // keep date and schedule start together
+  const frequency=document.getElementById('ee-frequency').value;
+  if(['once','weekly','biweekly','twicemonthly','monthly','yearly'].includes(frequency)){upd.recurring=frequency!=='once';upd.frequency=upd.recurring?frequency:null;upd.anchor_date=upd.recurring?date:null;if(editingTxn&&editingTxn.type==='bill'&&!upd.recurring)upd.type='expense';}
+  if (editingTxn && editingTxn.recurring && editingTxn.anchor_date && upd.recurring!==false) upd.anchor_date = date; // keep date and schedule start together
   if (!await fpUpdateTransaction(_editExpenseTxnId, upd)) return;
   document.getElementById('edit-expense-overlay').style.display = 'none';
   _editExpenseTxnId = null;
@@ -1701,7 +1706,7 @@ function fpResetAccountState() {
   bsPendingTxn = null;
   bsSelectedDay = null;
   bsSelectedCat = null;
-  bsRecurring = false;
+  bsRecurring = false;bsFrequency="monthly";
   currentWhatIfLoan = null;
   _rpLoanId = null;
   _rpIncludeMonthly = true;
@@ -4199,13 +4204,14 @@ function showView(v, btn) {
 let bsSelectedDay = null;
 let bsSelectedCat = null;
 let bsPendingTxn = null; // AI-parsed pending confirmation
-let bsRecurring = false; // whether the next save should be a recurring monthly charge
+let bsRecurring = false;
+let bsFrequency = "monthly"; // whether the next save should be a recurring monthly charge
 
 function openBottomSheet(day) {
   bsSelectedDay = day;
   bsSelectedCat = null;
   bsPendingTxn = null;
-  bsRecurring = false;
+  bsRecurring = false;bsFrequency="monthly";
   selectedDay = day;
   renderCalendar();
 
@@ -4237,7 +4243,7 @@ function closeBottomSheet() {
   bsSelectedDay = null;
   bsSelectedCat = null;
   bsPendingTxn = null;
-  bsRecurring = false;
+  bsRecurring = false;bsFrequency="monthly";
   selectedDay = null;
   renderCalendar();
 }
@@ -4307,11 +4313,12 @@ function renderBottomSheetBody() {
     + '</div>';
 
   // Recurring toggle — applies to whichever save path (AI text or category grid) runs next
-  html += '<div class="recurring-toggle" onclick="bsToggleRecurring()" style="margin-bottom:14px;">'
+  html += '<button type="button" class="recurring-toggle" aria-pressed="'+bsRecurring+'" onclick="bsToggleRecurring()" style="margin-bottom:14px;width:100%;text-align:left;">'
     + '<div class="toggle-check' + (bsRecurring ? ' on' : '') + '" id="bs-recurring-check">&#10003;</div>'
-    + '<div class="toggle-label">Recurring monthly charge</div>'
+    + '<div class="toggle-label">Repeats</div>'
     + '<div style="font-size:11px;color:var(--text3);margin-left:auto;">e.g. subscriptions, rent</div>'
-    + '</div>';
+    + '</button>';
+  if(bsRecurring)html+='<div class="form-group"><label class="form-label" for="bs-frequency">How often?</label><select class="form-select" id="bs-frequency" onchange="bsFrequency=this.value">'+[['weekly','Every week'],['biweekly','Every two weeks'],['monthly','Every month'],['yearly','Every year']].map(function(pair){return '<option value="'+pair[0]+'"'+(bsFrequency===pair[0]?' selected':'')+'>'+pair[1]+'</option>';}).join('')+'</select><p class="goal-note">Enter the full amount charged each time. Repeats from the selected calendar date.</p></div>';
 
   // Divider
   html += '<div class="bs-divider"><div class="bs-divider-line"></div><div class="bs-divider-text">or pick a category</div><div class="bs-divider-line"></div></div>';
@@ -4344,7 +4351,9 @@ function bsToggleRecurring() {
   // Preserve whatever the user already typed before re-rendering
   const inp = document.getElementById('bs-ai-input');
   const preservedText = inp ? inp.value : '';
+  const amount=document.getElementById('bs-cat-amount'),preservedAmount=amount?amount.value:'';
   renderBottomSheetBody();
+  const newAmount=document.getElementById('bs-cat-amount');if(newAmount)newAmount.value=preservedAmount;
   const newInp = document.getElementById('bs-ai-input');
   if (newInp) { newInp.value = preservedText; newInp.focus(); }
 }
@@ -4420,7 +4429,7 @@ async function bsAiSubmit() {
     date: dateStr,
     category: category,
     recurring: bsRecurring,
-    frequency: bsRecurring ? 'monthly' : null,
+    frequency: bsRecurring ? bsFrequency : null,
     anchor_date: bsRecurring ? dateStr : null
   };
 
@@ -4433,8 +4442,8 @@ async function bsAiSubmit() {
   } else {
     if (!await saveTxn(txnObj)) return;
     inp.value = '';
-    showToast(description + (bsRecurring ? ' · $' + fmt(amount) + '/mo added' : ' · $' + fmt(amount) + ' added'));
-    bsRecurring = false;
+    showToast(description + (bsRecurring ? ' · $' + fmt(amount) + ' '+bsFrequency+' added' : ' · $' + fmt(amount) + ' added'));
+    bsRecurring = false;bsFrequency="monthly";
     renderBottomSheetBody();
   }
 }
@@ -4485,7 +4494,7 @@ async function bsCatSave() {
     date: dateStr,
     category: savedCat,
     recurring: bsRecurring,
-    frequency: bsRecurring ? 'monthly' : null,
+    frequency: bsRecurring ? bsFrequency : null,
     anchor_date: bsRecurring ? dateStr : null
   };
 
@@ -4495,8 +4504,8 @@ async function bsCatSave() {
     if (!await saveTxn(txnObj)) return;
     bsSelectedCat = null;
     if (amtEl) amtEl.value = '';
-    showToast(desc + (bsRecurring ? ' · $' + fmt(amt) + '/mo added' : ' · $' + fmt(amt) + ' added'));
-    bsRecurring = false;
+    showToast(desc + (bsRecurring ? ' · $' + fmt(amt) + ' '+bsFrequency+' added' : ' · $' + fmt(amt) + ' added'));
+    bsRecurring = false;bsFrequency="monthly";
     renderBottomSheetBody();
   }
 }
@@ -6494,8 +6503,8 @@ async function saveItem(item, catId, key) {
   const clampedDay = Math.min(day, daysInMonth);
   const dateVal = currentYear + '-' + String(currentMonth+1).padStart(2,'0') + '-' + String(clampedDay).padStart(2,'0');
   const isRecurring = freq !== 'once';
-  const desc = freq === 'yearly' ? item + ' (yearly / $' + fmt(amt) + '/yr)' : item;
-  const amount = freq === 'yearly' ? Math.round(amt / 12 * 100) / 100 : amt;
+  const desc = item;
+  const amount = amt;
   const txn = {
     type: isRecurring ? 'bill' : 'expense',
     description: desc,
@@ -6503,7 +6512,7 @@ async function saveItem(item, catId, key) {
     date: dateVal,
     category: catId,
     recurring: isRecurring,
-    frequency: isRecurring ? (freq === 'yearly' ? 'monthly' : freq) : null,
+    frequency: isRecurring ? freq : null,
     anchor_date: isRecurring ? dateVal : null
   };
   if (!await saveTxn(txn)) return;

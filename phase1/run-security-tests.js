@@ -383,5 +383,11 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   await test('priority shortcuts route obligations and balance checks to working editors',()=>{
     const c=make(['fpPriorityShortcut']);assert.equal(c.fpPriorityShortcut('overdue_bill').destination,'bills');assert.equal(c.fpPriorityShortcut('due_loan').destination,'loans');assert.equal(c.fpPriorityShortcut('income_unconfirmed').destination,'balance');assert.equal(c.fpPriorityShortcut('on_track').destination,'plan');assert.equal(c.fpPriorityShortcut('unknown'),null);
   });
+  await test('annual category entry preserves the full amount and annual schedule',async()=>{
+    let saved;const c=make(['saveItem'],{currentYear:2026,currentMonth:9,selectedDay:10,saveTxn:async row=>{saved=row;return true;},alert(){throw Error('invalid')}});c.document.getElementById('iamt-Insurance').value='1200';c.document.getElementById('ifreq-Insurance').value='yearly';c.document.getElementById('iday-Insurance').value='10';c.document.getElementById('irow-Insurance').querySelector=()=>null;await c.saveItem('Insurance','home','Insurance');assert.equal(saved.amount,1200);assert.equal(saved.frequency,'yearly');assert.equal(saved.anchor_date,'2026-10-10');
+  });
+  await test('stopping a recurring bill keeps one actual expense rather than repeating it',async()=>{
+    let update;const c=make(['saveExpenseEdit'],{_editExpenseTxnId:'bill',transactions:[{id:'bill',type:'bill',recurring:true,frequency:'monthly',anchor_date:'2026-10-10'}],fpUpdateTransaction:async(id,row)=>{update=row;return true},renderExpensesView(){}});c.document.getElementById('ee-desc').value='Insurance';c.document.getElementById('ee-amount').value='1200';c.document.getElementById('ee-date').value='2026-10-10';c.document.getElementById('ee-frequency').value='once';await c.saveExpenseEdit();assert.equal(update.recurring,false);assert.equal(update.frequency,null);assert.equal(update.anchor_date,null);assert.equal(update.type,'expense');
+  });
   console.log('TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
 })();

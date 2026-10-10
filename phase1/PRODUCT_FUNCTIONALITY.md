@@ -58,3 +58,9 @@ A goal shortcut prepares a draft with zero recorded savings for review; it never
 automatically moves money or saves a goal. Priority buttons open the relevant
 balance editor, Bills, Loans, Expenses or Goals. Balance/income shortcuts return
 to the current month, even when reviewing an old calendar.
+
+Repeating expenses can be added weekly, every two weeks, monthly or yearly, using
+the full amount charged each time. The repeat control preserves typed text and
+amounts. Expense editing can change or stop the repeat schedule without deleting
+the original record. The legacy category form also preserves annual charges
+instead of converting them into monthly estimates.
