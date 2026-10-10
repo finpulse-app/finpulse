@@ -6293,9 +6293,9 @@ let _fpPurchaseAfterPayday=false;
 let _fpPurchaseSnapshotCache=null;
 function fpPurchaseSnapshot() {
   const today=fpIso(new Date()),uid=currentUser&&currentUser.id,c=_fpPurchaseSnapshotCache;
-  if(c&&c.today===today&&c.uid===uid&&c.tx===transactions&&c.settings===userSettings&&c.balances===monthBalances&&c.marks===_fpBillMarkRows&&c.version===_dataLoadVersion)return c.snap;
+  if(c&&c.today===today&&c.uid===uid&&c.tx===transactions&&c.settings===userSettings&&c.balances===monthBalances&&c.marks===_fpBillMarkRows&&c.version===_dataLoadVersion&&c.mutationVersion===_fpMutationVersion&&c.busy===_fpMutationBusy)return c.snap;
   const snap=fpPrioritySnapshot(new Date(),{paidMarks:fpReadPaidMarks()});
-  _fpPurchaseSnapshotCache={today,uid,tx:transactions,settings:userSettings,balances:monthBalances,marks:_fpBillMarkRows,version:_dataLoadVersion,snap};return snap;
+  _fpPurchaseSnapshotCache={today,uid,tx:transactions,settings:userSettings,balances:monthBalances,marks:_fpBillMarkRows,version:_dataLoadVersion,mutationVersion:_fpMutationVersion,busy:_fpMutationBusy,snap};return snap;
 }
 function dOpenPurchaseBalance() {
   const today=new Date();currentYear=today.getFullYear();currentMonth=today.getMonth();openEditBalance();
