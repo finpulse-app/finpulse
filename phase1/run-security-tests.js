@@ -389,5 +389,14 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   await test('stopping a recurring bill keeps one actual expense rather than repeating it',async()=>{
     let update;const c=make(['saveExpenseEdit'],{_editExpenseTxnId:'bill',transactions:[{id:'bill',type:'bill',recurring:true,frequency:'monthly',anchor_date:'2026-10-10'}],fpUpdateTransaction:async(id,row)=>{update=row;return true},renderExpensesView(){}});c.document.getElementById('ee-desc').value='Insurance';c.document.getElementById('ee-amount').value='1200';c.document.getElementById('ee-date').value='2026-10-10';c.document.getElementById('ee-frequency').value='once';await c.saveExpenseEdit();assert.equal(update.recurring,false);assert.equal(update.frequency,null);assert.equal(update.anchor_date,null);assert.equal(update.type,'expense');
   });
+  await test('blocked skipped-purchase storage preserves pending choice and reports failure',()=>{
+    const pending={description:'Coffee',amount:12.5};const c=make(['rippleSaveInstead','fpRecordSkippedPurchase','fpRound2'],{_ripplePending:pending,fpSavedPurchasesKey:()=> 'choices',fpIso:()=> '2026-10-01',updateSavedCard(){throw Error('must not claim saved')},localStorage:{setItem(){throw Error('full')}}});assert.equal(c.rippleSaveInstead(),false);assert.equal(c._ripplePending,pending);assert.equal(c.savedPurchases.length,0);assert.equal(c._messages[0][1],'error');
+  });
+  await test('skipped-purchase undo persists empty storage and leaves transactions untouched',()=>{
+    const c=make(['fpRecordSkippedPurchase','fpRound2'],{fpSavedPurchasesKey:()=> 'choices',fpIso:()=> '2026-10-01',updateSavedCard(){},fmt:n=>String(n),transactions:[{amount:20}]});assert.equal(c.fpRecordSkippedPurchase('Coffee',12.5),true);assert.equal(c.savedPurchases[0].amount,12.5);const undo=c._messages[0][3];assert.equal(undo(),true);assert.equal(c.savedPurchases.length,0);assert.equal(c._cache.choices,'[]');assert.equal(c.transactions.length,1);
+  });
+  await test('first-day skipped choice uses local calendar date in negative time zones',()=>{
+    const c=make(['getSavedTotal','fpParseIso'],{Date:class extends Date{constructor(...args){super(...(args.length?args:['2026-10-01T12:00:00-04:00']))}},savedPurchases:[{date:'2026-10-01',amount:12.5}]});assert.equal(c.getSavedTotal(),12.5);
+  });
   console.log('TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
 })();

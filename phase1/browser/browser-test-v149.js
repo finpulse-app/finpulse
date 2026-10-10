@@ -881,6 +881,13 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(id=>openExpenseEdit(id),annual.id);await page.selectOption('#ee-frequency','once');await page.click('#edit-expense-overlay button:text-is("Save Changes")');await page.waitForTimeout(300);
   ok('T35 stop repeating keeps the original expense and removes future occurrences',db.transactions.find(t=>t.id===annual.id).recurring===false&&db.transactions.find(t=>t.id===annual.id).anchor_date===null&&await page.evaluate(()=>buildDayMap(2026,9)[17].expenses.length===0),'repeat not removed');
 
+
+  await page.evaluate(()=>{closeBottomSheet();showView('dreams',null);});await page.click('#d-once-btn');await page.fill('#d-amt-input','12.50');await scenarioRate('10');const cashBefore=JSON.stringify(db.transactions);await page.click('#d-skip-btn');
+  ok('T36 one-click skip records a choice with cents without changing financial records',await page.evaluate(()=>savedPurchases.some(p=>p.amount===12.5))&&JSON.stringify(db.transactions)===cashBefore&&await page.isDisabled('#d-skip-btn'),'choice missing or balance altered');
+  const choicesBefore=await page.evaluate(()=>savedPurchases.length);await page.evaluate(()=>dSkipPurchase());
+  ok('T36 repeated skip click does not duplicate the same choice',await page.evaluate(()=>savedPurchases.length)===choicesBefore,'choice duplicated');await page.click('#toast button:text-is("Undo")');
+  ok('T36 Undo removes the choice from storage and re-enables the action',await page.evaluate(()=>savedPurchases.length===0&&JSON.parse(localStorage.getItem(fpSavedPurchasesKey())).length===0)&&!await page.isDisabled('#d-skip-btn'),'undo not persisted');
+
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {
     await page.evaluate(v=>showView(v,null),view);

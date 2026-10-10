@@ -907,7 +907,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
             <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:0;border-top:2px dashed var(--danger);display:inline-block;"></span>Left to grow after spending</span>
           </div>
           <div style="position:relative;width:100%;height:190px;margin-bottom:12px;"><canvas id="d-chart" role="img" aria-label="Investment growth chart"></canvas></div>
-          <div class="coach-box" id="d-coach" aria-live="polite"></div><p id="d-tradeoff" class="goal-note" style="margin-top:10px;"></p><button class="btn btn-outline" id="d-goal-btn" style="margin-top:10px;" onclick="dMakeGoal()">Put this toward a goal</button>
+          <div class="coach-box" id="d-coach" aria-live="polite"></div><p id="d-tradeoff" class="goal-note" style="margin-top:10px;"></p><button class="save-btn" id="d-skip-btn" style="margin-top:10px;" onclick="dSkipPurchase()">I'll skip this purchase</button><p class="goal-note" style="margin-top:6px;">Records your choice on this device. It does not add money to your balance.</p><button class="btn btn-outline" id="d-goal-btn" style="margin-top:10px;" onclick="dMakeGoal()">Put this toward a goal</button>
         </div>
       </div>
     </div>
@@ -1498,8 +1498,8 @@ function showToast(msg, type, actionLabel, actionFn, durationMs) {
       btn.textContent = actionLabel;
       btn.style.cssText = 'margin-left:10px;background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:6px;padding:3px 12px;font-family:Inter,sans-serif;font-size:12px;font-weight:700;cursor:pointer;';
       btn.onclick = function() {
-        actionFn();
-        el.classList.remove('show');
+        const outcome=actionFn();
+        if(outcome!==false)el.classList.remove('show');
       };
       msgEl.appendChild(btn);
     }
@@ -1684,7 +1684,7 @@ function fpResetAccountState() {
   _fpSettingsVersion++;
   _fpSettingsBusy = false;
   _fpGoals=[];_fpGoalsReady=false;_fpGoalBusy=false;_fpGoalDraftId=null;_fpGoalVersion++;
-  _fpCalendarMode="month";_fpExpenseQuery="";_fpManualLoanPayment=false;
+  _fpCalendarMode="month";_fpExpenseQuery="";_fpManualLoanPayment=false;_fpDreamSkippedSignature=null;
   const loanForm=document.getElementById("loan-add-form");if(loanForm)loanForm.style.display="none";
   const search=document.getElementById("expense-search");if(search)search.value="";
   const goalEditor=document.getElementById("goal-editor");if(goalEditor)goalEditor.style.display="none";
@@ -5058,7 +5058,7 @@ function recordLoanPayment(loanId) {
       if (t.description.indexOf(loan.description + ' ') !== 0) return false;
       const d = new Date(t.date + 'T12:00:00');
       const now = new Date();
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     });
     hasPaidThisMonth = paidThisMonth.length > 0;
     if (hasPaidThisMonth) {
@@ -6269,12 +6269,19 @@ let _fpDreamAmountValid=true;
 let dChart;
 let _fpDreamMode="once";
 let _fpDreamGoalBusy=false;
+let _fpDreamSkippedSignature=null;
 function dCompound(p, y) { return fpRound2(p * Math.pow(1 + RATE, y)); }
 function dFmt(n) { return '$' + n.toLocaleString('en-US',{maximumFractionDigits:2}); }
 function dScenario(amount, years) {
   if(_fpDreamMode!=='monthly')return dCompound(amount,years);
   const months=years*12, factor=Math.pow(1+RATE,1/12);
   return fpRound2(Math.abs(factor-1)<1e-12?amount*months:amount*(Math.pow(factor,months)-1)/(factor-1));
+}
+function dSkipPurchase() {
+  if(!_fpDreamAmountValid||dAmount<=0)return false;
+  const signature=_fpDreamMode+':'+dAmount;if(_fpDreamSkippedSignature===signature)return false;
+  if(!fpRecordSkippedPurchase(_fpDreamMode==='monthly'?"This month's purchase I chose to skip":'A purchase I chose to skip',dAmount,function(){if(_fpDreamSkippedSignature===signature)_fpDreamSkippedSignature=null;dUpdate();}))return false;
+  _fpDreamSkippedSignature=signature;dUpdate();return true;
 }
 function dSetMode(mode) { _fpDreamMode=mode==='monthly'?'monthly':'once';dUpdate(); }
 function dSetYears(years) { document.getElementById('d-yr-slider').value=years;dUpdate(); }
@@ -6311,7 +6318,7 @@ function dClearResult(message) {
   const milestones=document.getElementById('d-milestones');if(milestones)milestones.textContent='';
   if(dChart){dChart.data.labels=[];dChart.data.datasets.forEach(function(set){set.data=[];});dChart.update();}
   document.getElementById('d-coach').textContent=message;
-  document.getElementById('d-tradeoff').textContent='';document.getElementById('d-goal-btn').disabled=true;
+  document.getElementById('d-tradeoff').textContent='';document.getElementById('d-goal-btn').disabled=true;document.getElementById('d-skip-btn').disabled=true;
 }
 function dUpdate() {
   if(!_fpDreamAmountValid){dClearResult('Enter a valid amount between $0 and $1 billion, with up to two decimal places.');return;}
@@ -6327,6 +6334,7 @@ function dUpdate() {
   const future = dScenario(dAmount, years);
   const monthly=_fpDreamMode==='monthly',total=fpRound2(dAmount*(monthly?years*12:1));
   document.getElementById('d-goal-btn').disabled=dAmount<=0;
+  const alreadySkipped=_fpDreamSkippedSignature===_fpDreamMode+':'+dAmount;document.getElementById('d-skip-btn').disabled=dAmount<=0||alreadySkipped;document.getElementById('d-skip-btn').textContent=alreadySkipped?'Choice recorded':monthly?"I'll skip this month's purchase":"I'll skip this purchase";
   ['once','monthly'].forEach(function(mode){document.getElementById('d-'+mode+'-btn').setAttribute('aria-pressed',String(_fpDreamMode===mode));});
   document.getElementById('d-mode-note').textContent=monthly?'Compare this monthly habit with investing the same amount at the end of each month.':'Compare spending this amount once with keeping it invested.';
   function setEl(id, val) { const e = document.getElementById(id); if(e) e.textContent = val; }
@@ -6915,9 +6923,9 @@ let savedPurchases = []; // { description, amount, date }
 function getSavedTotal() {
   const now = new Date();
   return savedPurchases.filter(function(p) {
-    const d = new Date(p.date);
+    const d = fpParseIso(p.date);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  }).reduce(function(s, p) { return s + p.amount; }, 0);
+  }).reduce(function(s, p) { return s + (Number(p.amount)||0); }, 0);
 }
 
 function fv(amount, years) {
@@ -6933,7 +6941,7 @@ function updateSavedCard() {
   if (!card) return;
   const total = getSavedTotal();
   const count = savedPurchases.filter(function(p) {
-    const d = new Date(p.date), now = new Date();
+    const d = fpParseIso(p.date), now = new Date();
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   }).length;
   if (total <= 0) { card.style.display = 'none'; return; }
@@ -6943,8 +6951,23 @@ function updateSavedCard() {
   if (fv5El) fv5El.textContent = '$' + fmt(Math.round(fv(total, 5)));
   if (fv10El) fv10El.textContent = '$' + fmt(Math.round(fv(total, 10)));
 
-  // Persist to localStorage for session
-  try { localStorage.setItem(fpSavedPurchasesKey(), JSON.stringify(savedPurchases)); } catch(e) {}
+
+}
+
+function fpRecordSkippedPurchase(description,amount,onUndo) {
+  if(!currentUser||!Number.isFinite(amount)||amount<=0)return false;
+  const uid=currentUser.id,key=fpSavedPurchasesKey();
+  const note={id:crypto.randomUUID(),description,amount:fpRound2(amount),date:fpIso(new Date())};
+  const next=savedPurchases.concat([note]);
+  try{localStorage.setItem(key,JSON.stringify(next));}catch(e){showToast('Could not save your choice on this device. Your purchase is still here to retry.','error');return false;}
+  savedPurchases=next;updateSavedCard();
+  showToast('$'+fmt(note.amount)+' purchase skipped. Your bank balance is unchanged.','success','Undo',function undoChoice(){
+    if(!currentUser||currentUser.id!==uid)return false;
+    const remaining=savedPurchases.filter(function(p){return p.id!==note.id});
+    try{localStorage.setItem(key,JSON.stringify(remaining));}catch(e){showToast('Could not undo your choice. Try again.','error','Retry undo',undoChoice,7000);return false;}
+    savedPurchases=remaining;updateSavedCard();if(onUndo)onUndo();showToast('Choice removed');return true;
+  },7000);
+  return true;
 }
 
 function fpSavedPurchasesKey() {
@@ -7034,15 +7057,11 @@ async function rippleStillBuy() {
 }
 
 function rippleSaveInstead() {
-  if (!_ripplePending) return;
+  if (!_ripplePending) return false;
   const p = _ripplePending;
+  if(!fpRecordSkippedPurchase(p.description,p.amount))return false;
   document.getElementById('ripple-overlay').style.display = 'none';
-  // Log to saved purchases
-  savedPurchases.push({ description: p.description, amount: p.amount, date: new Date().toISOString().slice(0,10) });
-  _ripplePending = null;
-  updateSavedCard();
-  showToast('$' + fmt(p.amount) + ' not spent. If invested, it could grow to about $' + fmt(Math.round(fv(p.amount, 10))) + ' in 10 years.');
-  renderBottomSheetBody();
+  _ripplePending = null;renderBottomSheetBody();return true;
 }
 
 function rippleDismiss() {

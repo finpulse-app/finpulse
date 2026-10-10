@@ -64,3 +64,10 @@ the full amount charged each time. The repeat control preserves typed text and
 amounts. Expense editing can change or stop the repeat schedule without deleting
 the original record. The legacy category form also preserves annual charges
 instead of converting them into monthly estimates.
+
+The calculator's one-click skip action records an avoided purchase on the current
+device with Undo. It never changes a transaction, bank balance or saved-goal
+progress. For monthly habits it records only this month's choice. Repeated clicks
+do not duplicate the same calculator choice. Storage failures retain the pending
+purchase, and Undo persists removal of the final note. First-day totals parse the
+local date correctly in negative-offset time zones.
