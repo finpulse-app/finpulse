@@ -5712,7 +5712,7 @@ async function saveEditBalance() {
   if (!await fpApplyDatedBalance(bal, dateVal, null, fpPayAnswer('edit-balance'))) return;
   document.getElementById('edit-balance-overlay').style.display = 'none';
   showToast('Balance updated');
-  renderCalendar(); updateStats();
+  renderCalendar(); updateStats(); dRenderCashImpact();
 }
 
 function togglePriorityCheck(idx, pid) {
@@ -6297,6 +6297,9 @@ function fpPurchaseSnapshot() {
   const snap=fpPrioritySnapshot(new Date(),{paidMarks:fpReadPaidMarks()});
   _fpPurchaseSnapshotCache={today,uid,tx:transactions,settings:userSettings,balances:monthBalances,marks:_fpBillMarkRows,version:_dataLoadVersion,snap};return snap;
 }
+function dOpenPurchaseBalance() {
+  const today=new Date();currentYear=today.getFullYear();currentMonth=today.getMonth();openEditBalance();
+}
 function dCheckCash(afterPayday) {
   _fpPurchaseCheckActive=true;_fpPurchaseAfterPayday=!!afterPayday;_fpPurchaseSnapshotCache=null;dRenderCashImpact();
 }
@@ -6310,7 +6313,7 @@ function dRenderCashImpact() {
   const date=_fpPurchaseAfterPayday&&snap.nextPayday?snap.nextPayday.date:snap.asOf;
   const impact=fpPurchaseImpact(snap,dAmount,_fpDreamMode==='monthly',date);
   if(impact.status==='needs_balance'){
-    box.innerHTML='<strong>Start with your current balance.</strong><p class="goal-note">Add the amount and its date once, then FinPulse can show what this purchase changes.</p><button class="btn btn-outline" onclick="fpOpenPriority(\'balance\')">Update my balance</button>';return;
+    box.innerHTML='<strong>Start with your current balance.</strong><p class="goal-note">Add the amount and its date once, then FinPulse can show what this purchase changes.</p><button class="btn btn-outline" onclick="dOpenPurchaseBalance()">Update my balance</button>';return;
   }
   if(!impact.after){box.textContent='Your calendar does not have enough information for this comparison yet.';return;}
   const money=function(n){return (n<0?'−$':'$')+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});};

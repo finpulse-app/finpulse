@@ -71,3 +71,18 @@ progress. For monthly habits it records only this month's choice. Repeated click
 do not duplicate the same calculator choice. Storage failures retain the pending
 purchase, and Undo persists removal of the final note. First-day totals parse the
 local date correctly in negative-offset time zones.
+
+## Purchase cash-flow check
+
+Future Value can compare the same purchase against dated account cash flow in one
+click. It shows the lowest balance before and after, the first projected shortfall,
+and compares buying today with waiting until the next scheduled payday. Monthly
+mode counts purchases on their real dates, including short months. The calculation
+uses the existing calendar and an everyday-spending reserve when its history is
+usable. It is independent of the long-term investing assumption.
+
+An undated or stale balance asks for a current balance. Its editor opens over the
+calculator and confirmed saves refresh the comparison in place. Missing spending,
+income or payment details keep the comparison explicitly incomplete. Waiting never
+hides an earlier shortfall. Comparisons themselves do not write finances, paid
+status, goals or purchase notes. Automatic allocation remains disabled.
