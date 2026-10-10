@@ -37,6 +37,7 @@ function backend({writeError=null,readError=null,rows=true,throwWrite=false}={})
 let pass=0,fail=0;
 async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}catch(e){fail++;console.log('FAIL '+name+' -> '+e.message)}}
 (async()=>{
+  await test('payoff horizon does not call a fifty-year estimate impossible',()=>{const c=make(['payoffTime']);assert.equal(c.payoffTime(600),'50 years');assert.equal(c.payoffTime(999),'over 50 years at this rate');});
   await test('loan rate distinguishes confirmed zero from missing or invalid values',()=>{const c=make(['fpLoanRateKnown']);for(const apr of [null,undefined,'',' ', 'oops',-1])assert.equal(c.fpLoanRateKnown({apr}),false);for(const apr of [0,'0',12.99])assert.equal(c.fpLoanRateKnown({apr}),true);});
   await test('missing rate routes payoff comparison to loan details',()=>{let edited;const c=make(['fpLoanRateKnown','openWhatIf'],{transactions:[{id:'loan',apr:null}],openLoanEdit:id=>edited=id});c.openWhatIf('loan');assert.equal(edited,'loan');assert.equal(c._messages.length,1);});
   for(const [name,options] of [['returned error',{writeError:{message:'failed'}}],['thrown network error',{throwWrite:true}],['no returned row',{rows:false}],['read failure',{readError:{message:'failed',code:'503'}}]]) {

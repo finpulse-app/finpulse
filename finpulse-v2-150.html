@@ -4977,11 +4977,11 @@ function updateWhatIf() {
     if (monthlyRate > 0 && pay <= monthInt) return { months: 999, interest: Math.round(monthInt * 12), canPayOff: false };
     let b = bal, m = 0, interest = 0;
     while (b > 0 && m < 600) { const int = b * monthlyRate; interest += int; b = b + int - pay; m++; }
-    return { months: m >= 600 ? 999 : m, interest: Math.round(interest), canPayOff: m < 600 };
+    return { months: b > 0 ? 999 : m, interest: Math.round(interest), canPayOff: b <= 0 };
   }
   const minResult = calcPayoff(minPay);
   const newResult = calcPayoff(payment);
-  const saved = Math.max(0, minResult.interest - newResult.interest);
+  const saved = minResult.canPayOff && newResult.canPayOff ? Math.max(0, minResult.interest - newResult.interest) : 0;
   const faster = Math.max(0, minResult.months - newResult.months);
 
   const res = document.getElementById('whatif-result');
@@ -4997,7 +4997,7 @@ function updateWhatIf() {
     + (newResult.canPayOff
       ? '<div style="font-family:\'DM Serif Display\',serif;font-size:18px;color:' + (saved > 0 ? 'var(--accent)' : 'var(--danger)') + ';line-height:1.2;">$' + fmt(Math.round(bal + newResult.interest)) + '</div>'
         + (saved > 0 ? '<div style="font-size:10.5px;color:var(--accent);margin-top:4px;">Save $' + fmt(saved) + ' vs min ✓</div>' : '')
-      : '<div style="font-size:12px;color:var(--danger);margin-top:4px;">Balance grows, raise payment above $' + fmt(Math.ceil(bal * monthlyRate) + 1) + '</div>')
+      : '<div style="font-size:12px;color:var(--danger);margin-top:4px;">' + (payment <= bal * monthlyRate ? 'Payment does not cover monthly interest.' : 'No payoff within the 50-year estimate window.') + '</div>')
     + '</div></div>';
 }
 
@@ -5289,7 +5289,7 @@ async function confirmRecordPayment(includeExtra) {
 }
 
 function payoffTime(months) {
-  if (months >= 600) return 'never at this rate';
+  if (months > 600) return 'over 50 years at this rate';
   if (months < 1) return 'less than a month';
   if (months < 12) return months + ' month' + (months === 1 ? '' : 's');
   const yrs = Math.floor(months / 12);
@@ -5332,7 +5332,7 @@ function renderLoans() {
       if (monthlyRate > 0 && payment <= monthInt) return {months:999, interest:Math.round(monthInt * 12), canPayOff:false};
       let b = bal, m = 0, interest = 0;
       while (b > 0 && m < 600) { const int = b * monthlyRate; interest += int; b = b + int - payment; m++; }
-      return {months: m >= 600 ? 999 : m, interest: Math.round(interest), canPayOff: m < 600};
+      return {months: b > 0 ? 999 : m, interest: Math.round(interest), canPayOff: b <= 0};
     }
 
     const minResult = calcPayoff(minPay);

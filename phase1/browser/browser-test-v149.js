@@ -947,6 +947,11 @@ const loan = id => txns().find(t => t.id === id);
   ok('T40 missing APR does not present zero-interest payoff',await page.locator('.loan-card').filter({hasText:'Test Car Loan'}).textContent().then(t=>/Add rate/.test(t)&&/Add interest rate/.test(t)&&!/0%/.test(t)),'invented zero rate');
   await page.evaluate(()=>{transactions.find(t=>t.id==='loan-car').apr=0;renderLoans()});
   ok('T40 confirmed zero APR retains payoff estimate',await page.locator('.loan-card').filter({hasText:'Test Car Loan'}).textContent().then(t=>/0%/.test(t)&&!/Add interest rate/.test(t)),'zero APR blocked');
+  await page.evaluate(()=>{Object.assign(transactions.find(t=>t.id==='loan-car'),{balance:600,min_payment:1,original_min_payment:1,amount:1,apr:0});renderLoans();openWhatIf('loan-car')});
+  ok('T41 fifty-year payoff is calculated in cards and comparison',/50 years/.test(await page.textContent('#whatif-result'))&&await page.locator('.loan-card').filter({hasText:'Test Car Loan'}).textContent().then(t=>/50 years/.test(t)&&!/No payoff/.test(t)),'boundary misclassified');
+  await page.evaluate(()=>{closeWhatIf();transactions.find(t=>t.id==='loan-car').balance=601;renderLoans();openWhatIf('loan-car')});
+  ok('T41 finite horizon does not claim zero-interest debt grows',/50-year estimate window/.test(await page.textContent('#whatif-result'))&&!/Balance grows/.test(await page.textContent('#whatif-result')),'false growth claim');
+  await page.evaluate(()=>closeWhatIf());
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {
     await page.evaluate(v=>showView(v,null),view);
