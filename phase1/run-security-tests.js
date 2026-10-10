@@ -398,5 +398,36 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   await test('first-day skipped choice uses local calendar date in negative time zones',()=>{
     const c=make(['getSavedTotal','fpParseIso'],{Date:class extends Date{constructor(...args){super(...(args.length?args:['2026-10-01T12:00:00-04:00']))}},savedPurchases:[{date:'2026-10-01',amount:12.5}]});assert.equal(c.getSavedTotal(),12.5);
   });
+  const purchaseFns=['fpPurchaseImpact','fpRound2','fpDaysBetween','fpParseIso','fpOccurrences','fpObligationStart','fpEffectiveAnchorIso','fpIso','fpPad2','getRecurringDates'];
+  const purchaseSnap=(timeline,extra={})=>Object.assign({asOf:timeline[0].date,horizonEnd:timeline[timeline.length-1].date,balanceBasis:{status:'ok'},spending:{reliable:true,reserveRate:0},cash:{blockers:[]},buffer:500,timeline},extra);
+  await test('purchase check finds a pre-payday shortfall even when the month ends positive',()=>{
+    const c=make(purchaseFns),snap=purchaseSnap([{date:'2026-10-08',balance:400},{date:'2026-10-10',balance:100},{date:'2026-10-16',balance:2100},{date:'2026-10-31',balance:1800}]);
+    const a=c.fpPurchaseImpact(snap,150,false);assert.equal(a.status,'shortfall');assert.equal(a.after.amount,-50);assert.equal(a.firstNegative.date,'2026-10-10');assert.equal(a.before.amount,100);
+    const later=c.fpPurchaseImpact(snap,150,false,'2026-10-16');assert.equal(later.after.amount,100);assert.equal(later.firstNegative,null);assert.equal(later.status,'tight');
+  });
+  await test('waiting until payday cannot hide a shortfall that already exists',()=>{
+    const c=make(purchaseFns),a=c.fpPurchaseImpact(purchaseSnap([{date:'2026-10-08',balance:-20},{date:'2026-10-16',balance:1200}]),100,false,'2026-10-16');assert.equal(a.status,'shortfall');assert.equal(a.firstNegative.date,'2026-10-08');assert.equal(a.before.amount,-20);assert.equal(a.after.amount,-20);
+  });
+  await test('purchase impact reserves everyday spending cumulatively and preserves cents',()=>{
+    const c=make(purchaseFns),a=c.fpPurchaseImpact(purchaseSnap([{date:'2026-10-08',balance:1000},{date:'2026-10-18',balance:1000}],{spending:{reliable:true,reserveRate:12.5}}),12.75,false);assert.equal(a.before.amount,875);assert.equal(a.after.amount,862.25);assert.equal(a.total,12.75);assert.equal(a.includesSpending,true);
+  });
+  await test('monthly purchase dates clamp month ends without drifting the original day',()=>{
+    const c=make(purchaseFns),a=c.fpPurchaseImpact(purchaseSnap([{date:'2027-01-31',balance:1000},{date:'2027-02-27',balance:1000},{date:'2027-02-28',balance:1000},{date:'2027-03-30',balance:1000},{date:'2027-03-31',balance:1000}]),100,true);assert.equal(a.charges,3);assert.equal(a.total,300);assert.equal(a.series[1].after,900);assert.equal(a.series[2].after,800);assert.equal(a.series[3].after,800);assert.equal(a.series[4].after,700);
+  });
+  await test('stale or undated balances cannot produce purchase reassurance',()=>{
+    const c=make(purchaseFns);for(const status of ['unknown','stale']){const a=c.fpPurchaseImpact(purchaseSnap([{date:'2026-10-08',balance:5000}],{balanceBasis:{status}}),100,false);assert.equal(a.status,'needs_balance');assert.equal(a.after,undefined);}
+  });
+  await test('missing spending, uncertain income and missing loan payments retain incomplete status',()=>{
+    const c=make(purchaseFns);for(const patch of [{spending:{reliable:false,reserveRate:null}},{cash:{blockers:['income_inclusion_unknown']}},{cash:{blockers:['loan_data_missing']}}]){const a=c.fpPurchaseImpact(purchaseSnap([{date:'2026-10-08',balance:5000}],patch),100,false);assert.equal(a.status,'incomplete');assert.ok(a.blockers.length);}
+  });
+  await test('truncated purchase timeline cannot claim a complete horizon',()=>{
+    const c=make(purchaseFns),a=c.fpPurchaseImpact(purchaseSnap([{date:'2026-10-08',balance:5000}],{horizonEnd:'2026-10-31'}),100,false);assert.equal(a.status,'unavailable');
+  });
+  await test('purchase comparisons are read-only and reject invalid amounts and dates',()=>{
+    const c=make(purchaseFns),snap=purchaseSnap([{date:'2026-10-08',balance:5000},{date:'2026-10-31',balance:5000}]),saved=JSON.stringify(snap);for(const n of [0,-1,NaN,Infinity])assert.equal(c.fpPurchaseImpact(snap,n,false).status,'invalid');assert.equal(c.fpPurchaseImpact(snap,100,false,'2026-09-01').status,'invalid_date');c.fpPurchaseImpact(snap,100,true);assert.equal(JSON.stringify(snap),saved);assert.equal(c.transactions.length,0);assert.equal(c._fpGoals.length,0);assert.equal(Object.keys(c._cache).length,0);
+  });
+  await test('purchase snapshot cache refreshes after account, balance, data or paid-status changes',()=>{
+    let calls=0;const c=make(['fpPurchaseSnapshot'],{_fpPurchaseSnapshotCache:null,fpIso:()=> '2026-10-08',fpReadPaidMarks:()=>({}),fpPrioritySnapshot:()=>({n:++calls})});assert.equal(c.fpPurchaseSnapshot().n,1);assert.equal(c.fpPurchaseSnapshot().n,1);c.monthBalances={};assert.equal(c.fpPurchaseSnapshot().n,2);c.transactions=[];assert.equal(c.fpPurchaseSnapshot().n,3);c._fpBillMarkRows=[];assert.equal(c.fpPurchaseSnapshot().n,4);c._dataLoadVersion++;assert.equal(c.fpPurchaseSnapshot().n,5);c.currentUser={id:'B'};assert.equal(c.fpPurchaseSnapshot().n,6);
+  });
   console.log('TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
 })();

@@ -879,6 +879,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
             <input type="range" min="100" max="100000" step="100" value="5000" id="d-amt-slider" oninput="dSyncAmt('slider')">
             <input type="text" class="dreams-input" id="d-amt-input" value="$5,000" oninput="dSyncAmt('text')" onblur="dFormatInput()">
           </div>
+          <div id="d-cash-impact" class="coach-box" style="margin-bottom:12px;" aria-live="polite"></div>
           <div class="slider-row" style="margin-bottom:14px;">
             <label for="d-yr-slider">Years</label>
             <input type="range" min="1" max="50" step="1" value="5" id="d-yr-slider" oninput="dUpdate()">
@@ -1684,7 +1685,7 @@ function fpResetAccountState() {
   _fpSettingsVersion++;
   _fpSettingsBusy = false;
   _fpGoals=[];_fpGoalsReady=false;_fpGoalBusy=false;_fpGoalDraftId=null;_fpGoalVersion++;
-  _fpCalendarMode="month";_fpExpenseQuery="";_fpManualLoanPayment=false;_fpDreamSkippedSignature=null;
+  _fpCalendarMode="month";_fpExpenseQuery="";_fpManualLoanPayment=false;_fpDreamSkippedSignature=null;_fpPurchaseCheckActive=false;_fpPurchaseAfterPayday=false;_fpPurchaseSnapshotCache=null;
   const loanForm=document.getElementById("loan-add-form");if(loanForm)loanForm.style.display="none";
   const search=document.getElementById("expense-search");if(search)search.value="";
   const goalEditor=document.getElementById("goal-editor");if(goalEditor)goalEditor.style.display="none";
@@ -6262,6 +6263,72 @@ function pickGoal(el, goal) {
   document.getElementById('card-recs').innerHTML = cardRecs[goal].map(r => '<div class="rec-card"><div class="rec-name">' + fpEscHtml(r.n) + '</div><div class="rec-perk">' + fpEscHtml(r.p) + '</div><a class="rec-apply" href="' + r.url + '" target="_blank" rel="noopener noreferrer">Visit issuer &rarr;</a></div>').join('');
 }
 
+function fpPurchaseImpact(snap,amount,monthly,purchaseDate) {
+  if(!Number.isFinite(amount)||amount<=0)return {status:'invalid'};
+  if(!snap||!snap.balanceBasis||snap.balanceBasis.status!=='ok')return {status:'needs_balance'};
+  const from=purchaseDate||snap.asOf;
+  if(from<snap.asOf||from>snap.horizonEnd)return {status:'invalid_date'};
+  const dates=monthly?fpOccurrences({recurring:true,frequency:'monthly',date:from,anchor_date:from},from,snap.horizonEnd):[from];
+  const rate=snap.spending.reliable?snap.spending.reserveRate:0;
+  let before=null,after=null,firstNegative=null,charges=0;
+  const series=[];
+  (snap.timeline||[]).forEach(function(row){
+    if(row.date<snap.asOf||row.date>snap.horizonEnd||!Number.isFinite(row.balance))return;
+    const count=dates.filter(function(date){return date<=row.date;}).length;
+    const baseline=fpRound2(row.balance-rate*fpDaysBetween(fpParseIso(snap.asOf),fpParseIso(row.date)));
+    const result=fpRound2(baseline-count*amount);
+    if(!before||baseline<before.amount)before={amount:baseline,date:row.date};
+    if(!after||result<after.amount)after={amount:result,date:row.date};
+    if(result<0&&!firstNegative)firstNegative={amount:result,date:row.date};
+    charges=Math.max(charges,count);series.push({date:row.date,before:baseline,after:result});
+  });
+  if(!after||!charges||!series.some(function(row){return row.date===snap.horizonEnd;}))return {status:'unavailable'};
+  const blockers=(snap.cash.blockers||[]).filter(function(code){return !['shortfall','apr_missing'].includes(code);});
+  if(!snap.spending.reliable&&blockers.indexOf('spending_unknown')===-1)blockers.push('spending_unknown');
+  const status=after.amount<0?'shortfall':blockers.length?'incomplete':after.amount<snap.buffer?'tight':'projection';
+  return {status,before,after,firstNegative,charges,total:fpRound2(charges*amount),series,includesSpending:snap.spending.reliable,blockers,from,through:snap.horizonEnd,buffer:snap.buffer};
+}
+let _fpPurchaseCheckActive=false;
+let _fpPurchaseAfterPayday=false;
+let _fpPurchaseSnapshotCache=null;
+function fpPurchaseSnapshot() {
+  const today=fpIso(new Date()),uid=currentUser&&currentUser.id,c=_fpPurchaseSnapshotCache;
+  if(c&&c.today===today&&c.uid===uid&&c.tx===transactions&&c.settings===userSettings&&c.balances===monthBalances&&c.marks===_fpBillMarkRows&&c.version===_dataLoadVersion)return c.snap;
+  const snap=fpPrioritySnapshot(new Date(),{paidMarks:fpReadPaidMarks()});
+  _fpPurchaseSnapshotCache={today,uid,tx:transactions,settings:userSettings,balances:monthBalances,marks:_fpBillMarkRows,version:_dataLoadVersion,snap};return snap;
+}
+function dCheckCash(afterPayday) {
+  _fpPurchaseCheckActive=true;_fpPurchaseAfterPayday=!!afterPayday;_fpPurchaseSnapshotCache=null;dRenderCashImpact();
+}
+function dRenderCashImpact() {
+  const box=document.getElementById('d-cash-impact');if(!box)return;
+  if(!_fpPurchaseCheckActive){box.innerHTML='<button class="btn btn-outline" onclick="dCheckCash(false)">Check this against my cash flow</button>';return;}
+  if(!_fpDreamAmountValid||dAmount<=0){box.textContent='Enter a purchase cost above $0 to check its impact.';return;}
+  if(!currentUser){box.textContent='Your account needs to load before checking your cash flow.';return;}
+  if(!_fpBillMarksReady){box.innerHTML='<p>Refresh your bill status first so paid bills are counted correctly.</p><button class="btn btn-outline" onclick="showView(\'bills\',null)">Review Bills</button>';return;}
+  const snap=fpPurchaseSnapshot();
+  const date=_fpPurchaseAfterPayday&&snap.nextPayday?snap.nextPayday.date:snap.asOf;
+  const impact=fpPurchaseImpact(snap,dAmount,_fpDreamMode==='monthly',date);
+  if(impact.status==='needs_balance'){
+    box.innerHTML='<strong>Start with your current balance.</strong><p class="goal-note">Add the amount and its date once, then FinPulse can show what this purchase changes.</p><button class="btn btn-outline" onclick="fpOpenPriority(\'balance\')">Update my balance</button>';return;
+  }
+  if(!impact.after){box.textContent='Your calendar does not have enough information for this comparison yet.';return;}
+  const money=function(n){return (n<0?'−$':'$')+fmt(Math.abs(n));};
+  const title=impact.status==='shortfall'?(impact.before.amount<0?'Your projection is already below zero.':'This would put your projection below zero.'):
+    impact.status==='tight'?'This would leave a thin cushion.':impact.status==='incomplete'?'Here is the calendar impact.':'This fits the current projection.';
+  const basis=impact.includesSpending?'Includes an estimate of everyday spending.':'Calendar items only. Everyday spending is not estimated yet.';
+  const caveat=impact.blockers.length?' Some income, spending or payment details still need checking.':'';
+  const next=impact.firstNegative?'First projected shortfall: '+fpDateLabel(impact.firstNegative.date)+'.':'Compared with a $'+fmt(impact.buffer)+' starter cushion.';
+  box.innerHTML='<strong>'+title+'</strong><div class="goal-note" style="margin-top:8px;">Lowest projected balance through '+fpDateLabel(impact.through)+'</div>'
+    +'<div class="goal-numbers" style="margin:6px 0;">'+money(impact.before.amount)+' → '+money(impact.after.amount)+'</div>'
+    +'<p class="goal-note">Before: '+fpDateLabel(impact.before.date)+' · After: '+fpDateLabel(impact.after.date)+'.</p>'
+    +'<p class="goal-note">'+next+' '+basis+caveat+' These are estimates from your dated balance and calendar.</p>'
+    +'<p class="goal-note" style="margin-top:6px;">'+(impact.charges>1?impact.charges+' monthly purchases, '+money(impact.total)+' total during this check.':'Purchase date: '+fpDateLabel(impact.from)+'.')+'</p>'
+    +'<div class="goal-actions" style="margin-top:10px;"><button class="btn btn-outline" onclick="dCheckCash(false)">Compare buying today</button>'
+    +(snap.nextPayday?'<button class="btn btn-outline" onclick="dCheckCash(true)">Compare after payday</button>':'')
+    +'<button class="btn btn-outline" onclick="fpOpenPriority(\'expenses\')">Review my spending</button></div>';
+}
+
 // ── DREAMS CALCULATOR ──────────────────────────────────────────
 let RATE = 0.10;
 let dAmount = 5000;
@@ -6321,6 +6388,7 @@ function dClearResult(message) {
   document.getElementById('d-tradeoff').textContent='';document.getElementById('d-goal-btn').disabled=true;document.getElementById('d-skip-btn').disabled=true;
 }
 function dUpdate() {
+  dRenderCashImpact();
   if(!_fpDreamAmountValid){dClearResult('Enter a valid amount between $0 and $1 billion, with up to two decimal places.');return;}
   const rateInput=document.getElementById('d-rate-input');
   if (rateInput) {

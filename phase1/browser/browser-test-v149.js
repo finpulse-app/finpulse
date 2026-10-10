@@ -888,6 +888,29 @@ const loan = id => txns().find(t => t.id === id);
   ok('T36 repeated skip click does not duplicate the same choice',await page.evaluate(()=>savedPurchases.length)===choicesBefore,'choice duplicated');await page.click('#toast button:text-is("Undo")');
   ok('T36 Undo removes the choice from storage and re-enables the action',await page.evaluate(()=>savedPurchases.length===0&&JSON.parse(localStorage.getItem(fpSavedPurchasesKey())).length===0)&&!await page.isDisabled('#d-skip-btn'),'undo not persisted');
 
+  seed();await load();await hideStage();await page.evaluate(()=>showView('dreams',null));await page.fill('#d-amt-input','350');await page.click('#d-cash-impact button');
+  ok('T37 undated account asks for current balance instead of purchase reassurance',/Start with your current balance/.test(await page.textContent('#d-cash-impact'))&&await page.isVisible('#d-cash-impact button:text-is("Update my balance")'),'missing balance gate');
+  await page.evaluate(()=>{currentYear=2025;currentMonth=0;});await page.click('#d-cash-impact button:text-is("Update my balance")');
+  ok('T37 balance shortcut opens the current month without saving a balance',await page.isVisible('#edit-balance-overlay')&&await page.evaluate(()=>currentYear===2026&&currentMonth===9)&&db.user_settings[0].starting_balance===500,'wrong month or balance saved');await page.keyboard.press('Escape');
+  seed();db.transactions=['2026-09-23','2026-09-25','2026-09-27','2026-09-29','2026-10-01','2026-10-03','2026-10-05','2026-10-07'].map((date,i)=>({id:'history-'+i,user_id:'user-A',type:'expense',description:'Groceries',amount:10,date,category:'food',recurring:false}));
+  db.transactions.push({id:'upcoming',user_id:'user-A',type:'expense',description:'Planned purchase',amount:100,date:'2026-10-10',category:'Other',recurring:false});
+  db.user_settings[0].starting_balance=400;db.user_settings[0].month_balances_json=JSON.stringify({__dated_balance:{v:2,amount:400,asOf:'2026-10-08',monthStart:400,paycheck:null}});
+  await load();await hideStage();await page.evaluate(()=>{currentYear=2025;currentMonth=0;showView('dreams',null);});await page.click('#d-once-btn');await page.fill('#d-amt-input','350');const purchaseRecords=JSON.stringify(db);const purchaseWrites=reqlog.filter(r=>r.op!=='select').length;await page.click('#d-cash-impact button');
+  ok('T37 positive month still warns about the purchase shortfall before payday',/This would put your projection below zero/.test(await page.textContent('#d-cash-impact'))&&/Oct 10/.test(await page.textContent('#d-cash-impact')),'missing timing warning');
+  ok('T37 cash comparison uses today despite viewing an older calendar',await page.evaluate(()=>fpPurchaseSnapshot().asOf==='2026-10-08'),'used viewed month');
+  ok('T37 displayed cash comparison includes everyday spending and exact amounts',/275\.00 → −\$75\.00/.test(await page.textContent('#d-cash-impact'))&&/Includes an estimate of everyday spending/.test(await page.textContent('#d-cash-impact')),await page.textContent('#d-cash-impact'));
+  await page.click('#d-cash-impact button:text-is("Compare after payday")');
+  ok('T37 waiting until payday avoids the new shortfall but retains the thin-cushion warning',/thin cushion/.test(await page.textContent('#d-cash-impact'))&&!/First projected shortfall/.test(await page.textContent('#d-cash-impact'))&&/Purchase date: Fri, Oct 16/.test(await page.textContent('#d-cash-impact')),await page.textContent('#d-cash-impact'));
+  await page.click('#d-cash-impact button:text-is("Compare buying today")');await page.click('#d-monthly-btn');
+  ok('T37 monthly cash check counts every purchase in the calendar horizon',/2 monthly purchases, \$700\.00 total/.test(await page.textContent('#d-cash-impact')),await page.textContent('#d-cash-impact'));
+  const cashMessage=await page.textContent('#d-cash-impact');await scenarioRate('');
+  ok('T37 cash-flow comparison stays usable independently of the investment growth assumption',await page.textContent('#d-cash-impact')===cashMessage,'growth input changed cash check');await scenarioRate('10');
+  await page.fill('#d-amt-input','bad');ok('T37 invalid cost clears cash-flow reassurance',/Enter a purchase cost above/.test(await page.textContent('#d-cash-impact'))&&!/→/.test(await page.textContent('#d-cash-impact')),'stale amounts remain');await page.fill('#d-amt-input','350');
+  ok('T37 purchase comparisons never write transactions, settings or goals',JSON.stringify(db)===purchaseRecords&&reqlog.filter(r=>r.op!=='select').length===purchaseWrites,'comparison changed saved finances');
+  await page.evaluate(()=>{transactions=transactions.filter(t=>t.id==='upcoming');dCheckCash(false);});
+  ok('T37 missing everyday-spending history cannot produce an affordability reassurance',/Everyday spending is not estimated yet/.test(await page.textContent('#d-cash-impact'))&&!/This fits/.test(await page.textContent('#d-cash-impact')),'missing-data reassurance');
+  await page.fill('#d-amt-input','10');ok('T37 incomplete positive projection explains what still needs checking',/Here is the calendar impact/.test(await page.textContent('#d-cash-impact'))&&/details still need checking/.test(await page.textContent('#d-cash-impact')),'missing incomplete explanation');
+
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {
     await page.evaluate(v=>showView(v,null),view);
