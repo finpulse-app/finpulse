@@ -4759,9 +4759,14 @@ function renderSnowballSteps() {
 let currentWhatIfLoan = null;
 let endBalGlobal = 0;
 
+function fpLoanRateKnown(loan) {
+  return loan.apr !== null && loan.apr !== undefined && String(loan.apr).trim() !== '' && Number.isFinite(Number(loan.apr)) && Number(loan.apr) >= 0;
+}
+
 function openWhatIf(loanId) {
   const loan = transactions.find(function(t) { return t.id === loanId; });
   if (!loan) return;
+  if (!fpLoanRateKnown(loan)) { showToast('Add the interest rate from your statement to estimate payoff time.', 'error');openLoanEdit(loan.id);return; }
   currentWhatIfLoan = loan;
   const bal = parseFloat(loan.balance) || 0;
   const apr = parseFloat(loan.apr) || 0;
@@ -5313,6 +5318,7 @@ function renderLoans() {
   container.innerHTML = sorted.map(function(l, idx) {
     const bal = fpLoanBalanceAmount(l) || 0;
     if (bal === 0) return '<div class="loan-card"><div class="loan-title">' + fpEscHtml(l.description) + '</div><div style="font-size:24px;color:var(--accent);margin:12px 0;">$0 balance · Paid off</div><button class="btn btn-outline" onclick="openLoanEdit(\''+l.id+'\')">Edit loan</button><button class="btn btn-outline" onclick="openLoanDeleteConfirm(\''+l.id+'\')">Remove loan</button></div>';
+    const rateKnown = fpLoanRateKnown(l);
     const apr = parseFloat(l.apr) || 0;
     const minPay = parseFloat(l.min_payment || l.amount) || 0;
     const monthlyRate = apr / 100 / 12;
@@ -5373,7 +5379,7 @@ function renderLoans() {
       + '<button onclick="openLoanEdit(\'' + l.id + '\')" style="font-size:10px;font-weight:600;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 8px;cursor:pointer;font-family:Inter,sans-serif;">Edit</button>'
       + '<button class="txn-delete" onclick="openLoanDeleteConfirm(\'' + l.id + '\')" style="font-size:13px;">&#10005;</button></div></div>'
       + minNote
-      + '<div class="loan-stats"><div class="loan-stat"><div class="loan-stat-label">You owe</div><div class="loan-stat-val danger">$' + fmt(bal) + '</div></div><div class="loan-stat"><div class="loan-stat-label">Interest rate</div><div class="loan-stat-val">' + apr + '%</div></div><div class="loan-stat"><div class="loan-stat-label">Monthly payment</div><div class="loan-stat-val">$' + fmt(minPay) + '</div></div></div>'
+      + '<div class="loan-stats"><div class="loan-stat"><div class="loan-stat-label">You owe</div><div class="loan-stat-val danger">$' + fmt(bal) + '</div></div><div class="loan-stat"><div class="loan-stat-label">Interest rate</div><div class="loan-stat-val">' + (rateKnown ? apr + '%' : 'Add rate') + '</div></div><div class="loan-stat"><div class="loan-stat-label">Monthly payment</div><div class="loan-stat-val">$' + fmt(minPay) + '</div></div></div>'
       + '<div class="loan-proj" style="margin-bottom:10px;"><div class="loan-proj-title">At your current payment of $' + fmt(minPay) + '/month</div>'
       + '<div style="margin:10px 0 6px;"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:5px;"><span>Debt remaining</span><span style="color:var(--danger);font-weight:600;">$' + fmt(bal) + ' owed</span></div>'
       + '<div style="height:8px;background:var(--surface3);border-radius:99px;overflow:hidden;">'
@@ -5381,11 +5387,11 @@ function renderLoans() {
       + '</div>'
       + '<div style="font-size:11px;color:var(--text3);margin-top:4px;">' + (l._originalBalanceEstimated ? 'Original balance not recorded; payoff progress is unavailable.' : paidPct > 0 ? paidPct + '% paid off, $' + fmt(origBal - bal) + ' cleared so far' : 'Start making payments to see progress here') + '</div></div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">'
-      + '<div style="background:var(--danger-light);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--danger);margin-bottom:4px;">Time to pay off</div><div style="font-family:\'DM Serif Display\',serif;font-size:16px;color:var(--danger);">' + payoffTime(minResult.months) + '</div></div>'
+      + '<div style="background:var(--danger-light);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--danger);margin-bottom:4px;">Time to pay off</div><div style="font-family:\'DM Serif Display\',serif;font-size:16px;color:var(--danger);">' + (rateKnown ? payoffTime(minResult.months) : 'Add interest rate') + '</div></div>'
       + '<div style="background:var(--danger-light);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--danger);margin-bottom:4px;">You\'ll actually pay in total</div>'
-      + (minResult.canPayOff
+      + (!rateKnown ? '<div style="font-size:13px;color:var(--text2);">Add your statement APR to estimate total interest.</div>' : minResult.canPayOff
         ? '<div style="font-family:\'DM Serif Display\',serif;font-size:16px;color:var(--danger);">$' + fmt(Math.round(bal + minResult.interest)) + '</div><div style="font-size:10px;color:var(--danger);margin-top:3px;">for a $' + fmt(bal) + ' loan, $' + fmt(minResult.interest) + ' is interest</div>'
-        : '<div style="font-family:\'DM Serif Display\',serif;font-size:15px;color:var(--danger);">Balance grows forever</div><div style="font-size:10px;color:var(--danger);margin-top:3px;">Your $' + fmt(minPay) + '/mo doesn\'t cover $' + fmt(Math.round(bal * monthlyRate)) + '/mo interest. Increase payment.</div>')
+        : '<div style="font-family:\'DM Serif Display\',serif;font-size:15px;color:var(--danger);">No payoff within 50 years</div><div style="font-size:10px;color:var(--danger);margin-top:3px;">' + (minPay <= bal * monthlyRate ? 'Your payment does not cover monthly interest.' : 'This payment takes longer than the 50-year estimate window.') + '</div>')
       + '</div></div></div>'
       + whatIfBtn
       + '</div>';
