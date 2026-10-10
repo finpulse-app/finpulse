@@ -1173,6 +1173,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 
     <!-- INPUT STAGE -->
     <div id="rp-input-stage">
+<div class="form-group"><label class="form-label" for="rp-date">Payment date</label><input class="form-input" id="rp-date" type="date" onchange="rpRefreshPaymentDate()"><p class="goal-note">Use the date of the payment you are recording.</p></div>
       <!-- Already-paid-this-month guard (shown by JS) -->
       <div id="rp-already-paid" style="display:none;background:var(--warning-light);border:1px solid #e9d5aa;border-left:3px solid var(--warning);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:#7a5c1e;line-height:1.5;"></div>
 
@@ -1180,7 +1181,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;">
         <div class="recurring-toggle" onclick="rpToggleMonthly()" id="rp-monthly-toggle" style="cursor:pointer;margin-bottom:14px;">
           <div class="toggle-check on" id="rp-monthly-check">&#10003;</div>
-          <div class="toggle-label">Include this month's payment</div>
+          <div class="toggle-label">Include the regular payment</div>
           <div style="font-family:'DM Serif Display',serif;font-size:18px;color:var(--text);margin-left:auto;" id="rp-due-amt">$0</div>
         </div>
         <div style="border-top:1px solid var(--border);padding-top:12px;">
@@ -3380,7 +3381,7 @@ function fpPrioritySnapshot(asOf, opts) {
   }
   function paidSoFar(o, dueIso) { return fpPaidTotal(o.t, dueIso, asOfIso, txns, o.kind === 'loan' ? null : paidMarks).total; }
 
-  // overdue: the most recent due date before today, still unpaid (or only part paid). Recurring expenses (subscriptions) are not
+  // overdue: each open due date in the lookback window, including partial payments. Recurring expenses (subscriptions) are not
   // flagged overdue: FinPulse cannot tell whether they auto-pay.
   // v149 (audit M8): when that due date is before the item was added to FinPulse, it is "unverified" instead of dropped: FinPulse
   // cannot tell whether it was paid, so it is counted as still owed until the user marks it paid.
@@ -3391,7 +3392,7 @@ function fpPrioritySnapshot(asOf, opts) {
     if (o.kind === 'recurring' || o.amount <= 0) return;
     const all = fpOccurrences(o.t, oFrom, oTo);
     if (!all.length) return;
-    const due = all[all.length - 1];
+    all.forEach(function(due) {
     if (isPaid(o, due)) return;
     const part = paidSoFar(o, due);
     const created = fpCreatedIso(o.t);
@@ -3399,6 +3400,7 @@ function fpPrioritySnapshot(asOf, opts) {
     if (created && due < created) { unverified.push(row); return; }
     if (part > 0.005) partialPending++;
     overdue.push(row);
+    });
   });
   overdue.sort(function(a, b) { return b.daysLate - a.daysLate; });
 
@@ -3643,10 +3645,10 @@ function fpPriorityActions(snap) {
   snap.overdue.forEach(function(o) {
     const late = o.daysLate + ' day' + (o.daysLate === 1 ? '' : 's');
     if (o.kind === 'loan') {
-      actions.push({ id: 'overdue-loan-' + fpPriorityId(o.id), code: 'overdue_loan', level: 'p1',
+      actions.push({ id: 'overdue-loan-' + fpPriorityId(o.id) + '-' + o.dueDate, code: 'overdue_loan', level: 'p1',
         text: 'Your <strong>' + E(o.description) + ' payment of $' + fmt(o.amount) + '</strong>' + (o.paidSoFar > 0 ? ' (the rest after $' + fmt(o.paidSoFar) + ' already paid)' : '') + ' was due on ' + fpDateLabel(o.dueDate) + ', it\'s <strong>' + late + ' overdue</strong>. Make this payment now, or record it under Loans if you already paid.' });
     } else {
-      actions.push({ id: 'overdue-bill-' + fpPriorityId(o.id), code: 'overdue_bill', level: 'p1',
+      actions.push({ id: 'overdue-bill-' + fpPriorityId(o.id) + '-' + o.dueDate, code: 'overdue_bill', level: 'p1',
         text: '<strong>' + E(o.description) + ' ($' + fmt(o.amount) + ')</strong>' + (o.paidSoFar > 0 ? ' (the rest after $' + fmt(o.paidSoFar) + ' already paid)' : '') + ' was due on ' + fpDateLabel(o.dueDate) + ', it\'s <strong>' + late + ' overdue</strong>. Pay it now if you haven\'t. If you already did, mark it paid in Bills (saved to your account).' });
     }
   });
@@ -5028,6 +5030,28 @@ function rpToggleMonthly() {
   updateRpBreakdown();
 }
 
+function fpLoanMonthPayments(loan,date) {
+  const rows=transactions.filter(function(p){
+    if(p.type!=='expense'||p.category!=='loan_payment'||String(p.date).slice(0,7)!==String(date).slice(0,7))return false;
+    return p.loan_id?String(p.loan_id)===String(loan.id):(p.description===loan.description+' payment'||p.description===loan.description+' extra payment');
+  });
+  const total=rows.reduce(function(sum,p){return sum+(Number(p.amount)||0);},0);
+  const regular=rows.filter(function(p){return !/ extra payment$/.test(p.description||'');}).reduce(function(sum,p){return sum+(Number(p.amount)||0);},0);
+  const minimum=Number(loan.min_payment||loan.amount)||0;
+  return {total,regular,complete:minimum>0&&regular>=minimum-0.005};
+}
+function rpRefreshPaymentDate() {
+  if(_rpHasPending)return;
+  const loan=transactions.find(function(t){return t.id===_rpLoanId;});if(!loan)return;
+  const status=fpLoanMonthPayments(loan,document.getElementById('rp-date').value);
+  _rpIncludeMonthly=!status.complete;
+  const el=document.getElementById('rp-already-paid');el.style.display=status.total>0?'block':'none';
+  el.textContent=status.complete?'The regular payment is already recorded for this loan in the selected month. It is unchecked to help avoid recording it twice.':status.total>0?'Recorded for this loan in the selected month: $'+fmt(status.total)+'. The regular payment has not been fully recorded.':'';
+  document.getElementById('rp-monthly-check').classList.toggle('on',_rpIncludeMonthly);
+  const amt=document.getElementById('rp-due-amt');amt.style.opacity=_rpIncludeMonthly?'1':'0.4';amt.style.textDecoration=_rpIncludeMonthly?'none':'line-through';
+  updateRpBreakdown();
+}
+
 function recordLoanPayment(loanId) {
   const loan = transactions.find(function(t) { return t.id === loanId; });
   if (!loan) return;
@@ -5049,30 +5073,10 @@ function recordLoanPayment(loanId) {
   const confirmBtn = document.getElementById('rp-confirm-btn');
   if (confirmBtn) confirmBtn.disabled = false;
 
-  // Already-paid-this-month guard, with a transparent running total so people
-  // can see exactly what they've paid so far, since interest can eat a big chunk of it
-  let hasPaidThisMonth = false;
   const alreadyEl = document.getElementById('rp-already-paid');
-  if (alreadyEl) {
-    const paidThisMonth = transactions.filter(function(t) {
-      if (t.category !== 'loan_payment' || t.type !== 'expense') return false;
-      if (t.description.indexOf(loan.description + ' ') !== 0) return false;
-      const d = new Date(t.date + 'T12:00:00');
-      const now = new Date();
-      return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    });
-    hasPaidThisMonth = paidThisMonth.length > 0;
-    if (hasPaidThisMonth) {
-      const paidTotal = paidThisMonth.reduce(function(s, t) { return s + parseFloat(t.amount); }, 0);
-      alreadyEl.style.display = 'block';
-      alreadyEl.innerHTML = '✓ You\'ve already paid <strong>$' + fmt(paidTotal) + '</strong> toward ' + fpEscHtml(loan.description) + ' this month, so we\'ve unchecked the monthly payment below. Recheck it only if you really mean to pay it twice.';
-    } else {
-      alreadyEl.style.display = 'none';
-    }
-  }
-
-  // Smart default: already paid this month → uncheck the monthly component
-  _rpIncludeMonthly = !hasPaidThisMonth;
+  const dateInput = document.getElementById('rp-date');
+  dateInput.value=fpIso(new Date());dateInput.disabled=false;
+  _rpIncludeMonthly=true;
   _rpPendingDate = null;
   try {
     const pending = fpPendingOperation('record:' + loanId);
@@ -5092,6 +5096,7 @@ function recordLoanPayment(loanId) {
     amtEl.style.opacity = _rpIncludeMonthly ? '1' : '0.4';
     amtEl.style.textDecoration = _rpIncludeMonthly ? 'none' : 'line-through';
   }
+  if(_rpHasPending){dateInput.value=_rpPendingDate;dateInput.disabled=true;}else rpRefreshPaymentDate();
   updateRpBreakdown();
   document.getElementById('record-payment-overlay').style.display = 'flex';
 }
@@ -5178,11 +5183,9 @@ async function confirmRecordPayment(includeExtra) {
   try { pending = fpPendingOperation('record:' + loanId); }
   catch(e) { showToast('Pending payment could not be read. Please retry.', 'error'); return; }
   if (balance <= 0 && !pending) return;
-  const anchor = loan.anchor_date || loan.date || '';
-  const anchorDay = anchor ? new Date(anchor + 'T12:00:00').getDate() : new Date().getDate();
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  const logDay = isExtraOnly ? new Date().getDate() : Math.min(anchorDay, daysInMonth);
-  const dateStr = _rpPendingDate || currentYear + '-' + String(currentMonth + 1).padStart(2, '0') + '-' + String(Math.min(logDay, daysInMonth)).padStart(2, '0');
+  const dateStr = (pending&&pending.payload.date) || _rpPendingDate || document.getElementById('rp-date').value;
+  const parsedDate=fpParseIso(dateStr);
+  if(!parsedDate||fpIso(parsedDate)!==dateStr){showToast('Choose a valid payment date.','error');return;}
   const confirmBtn = document.getElementById('rp-confirm-btn');
   if (confirmBtn) confirmBtn.disabled = true;
   const result = await fpAtomicMutation('record', {
@@ -5192,6 +5195,7 @@ async function confirmRecordPayment(includeExtra) {
   if (!result) {
     try { _rpHasPending = !!fpPendingOperation('record:' + loanId); } catch(e) { _rpHasPending = true; }
     if (extraInput) extraInput.disabled = _rpHasPending;
+    document.getElementById('rp-date').disabled=_rpHasPending;
     if (confirmBtn) confirmBtn.disabled = false;
     return;
   }

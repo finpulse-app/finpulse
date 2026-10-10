@@ -104,6 +104,7 @@ const loan = id => txns().find(t => t.id === id);
   await page.waitForTimeout(300);
   await page.evaluate(() => recordLoanPayment('loan-car'));
   await page.waitForTimeout(200);
+  await page.fill('#rp-date','2026-10-10');
   ok('T2 payment modal shows interest/principal breakdown', /Interest/.test(await page.textContent('#rp-breakdown')), 'no breakdown');
   await page.click('#rp-confirm-btn');
   await page.waitForTimeout(2500);
@@ -917,6 +918,19 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>{userSettings=Object.assign({},userSettings,{payAmount:0});dCheckCash(false);});
   ok('T37 incomplete income offers the relevant next step',await page.isVisible('#d-cash-impact button:text-is("Check income details")'),'wrong next action');await page.click('#d-cash-impact button:text-is("Check income details")');
   ok('T37 income next step opens the editor without saving financial data',await page.isVisible('#edit-income-overlay')&&JSON.stringify(db)===purchaseRecords,'wrong destination or data changed');await page.keyboard.press('Escape');
+
+
+  seed();db.transactions.push({id:'other-payment',user_id:'user-A',type:'expense',category:'loan_payment',description:'Test Car Loan 2 payment',loan_id:'different-loan',amount:200,date:'2026-10-08'},{id:'only-extra',user_id:'user-A',type:'expense',category:'loan_payment',description:'Test Car Loan extra payment',loan_id:'loan-car',amount:20,principal_applied:20,date:'2026-10-08'});
+  await load();await hideStage();await page.evaluate(()=>{currentYear=2025;currentMonth=0;showView('loans',null);recordLoanPayment('loan-car');});
+  ok('T38 payment date defaults to today while viewing another calendar month',await page.inputValue('#rp-date')==='2026-10-08','date inherited viewed month');
+  ok('T38 extra-only and similarly named payments do not turn off the regular payment',await page.evaluate(()=>_rpIncludeMonthly===true)&&/regular payment has not been fully recorded/.test(await page.textContent('#rp-already-paid')),'incorrect paid default');
+  await page.fill('#rp-date','2026-10-07');await page.click('#rp-extra');await page.click('#rp-confirm-btn');await page.waitForTimeout(2500);
+  ok('T38 explicit payment date is saved to the correct loan',db.transactions.some(t=>t.loan_id==='loan-car'&&t.description==='Test Car Loan payment'&&t.date==='2026-10-07'&&t.amount===200),'wrong saved date or loan');
+  await page.evaluate(()=>{closeRecordPayment();recordLoanPayment('loan-car');});
+  ok('T38 reopening a recorded regular payment prevents an accidental duplicate',await page.evaluate(()=>_rpIncludeMonthly===false),'regular still selected');
+  await page.fill('#rp-date','2026-09-15');await page.click('#rp-extra');
+  ok('T38 changing payment month recalculates paid status',await page.evaluate(()=>_rpIncludeMonthly===true),'paid status from wrong month');
+  await page.evaluate(()=>closeRecordPayment());
 
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {

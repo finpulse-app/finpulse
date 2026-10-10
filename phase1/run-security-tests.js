@@ -23,7 +23,7 @@ function make(names, extra={}) {
     fpPendingOperation:()=>null,fpRenderTransactionState(){},fpUpdatePendingNotice(){},panelOpen:false,
     showToast:(...m)=>messages.push(m),renderCalendar(){},renderLoans(){},renderBillsView(){},updateStats(){},dUpdate(){},updateTopbarButtons(){},openSetup(){},loadSavedPurchases(){},shouldShowStageModal(){return false},checkMonthRollover:async()=>{},
     _els:els,_cache:cache,_messages:messages},extra));
-  ['fpLoanBalanceAmount','fpIsPaycheckRecord'].concat(names).forEach(n=>vm.runInContext(grab(n),c)); return c;
+  ['fpLoanBalanceAmount','fpIsPaycheckRecord','fpPad2','fpIso','fpParseIso'].concat(names).forEach(n=>vm.runInContext(grab(n),c)); return c;
 }
 function backend({writeError=null,readError=null,rows=true,throwWrite=false}={}) {
   let written=null;
@@ -246,7 +246,7 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   });
   await test('failed payment stays open and re-enables confirmation without animation',async()=>{
     const c=make(['confirmRecordPayment'],{currentYear:2026,currentMonth:9,_rpLoanId:'loan',_rpIncludeMonthly:true,transactions:[{id:'loan',balance:5000,amount:200,anchor_date:'2026-10-10'}],fpAtomicMutation:async()=>null});
-    c.document.getElementById('rp-input-stage').style.display='block';await c.confirmRecordPayment();assert.equal(c._els['rp-input-stage'].style.display,'block');assert.equal(c._els['rp-confirm-btn'].disabled,false);assert.equal(c._messages.length,0);
+    c.document.getElementById('rp-input-stage').style.display='block';c.document.getElementById('rp-date').value='2026-10-08';await c.confirmRecordPayment();assert.equal(c._els['rp-input-stage'].style.display,'block');assert.equal(c._els['rp-confirm-btn'].disabled,false);assert.equal(c._messages.length,0);
   });
   await test('failed deletion does not replace undo state or show success',async()=>{
     const c=make(['deleteTxnWithUndo'],{deleteTxn:async()=>null,_lastDeleted:{id:'previous'},_lastDeletedOperation:'previous-op'});assert.equal(await c.deleteTxnWithUndo('row'),false);assert.equal(c._lastDeleted.id,'previous');assert.equal(c._lastDeletedOperation,'previous-op');assert.equal(c._messages.length,0);
@@ -428,6 +428,22 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   });
   await test('purchase snapshot cache refreshes after account, balance, data or paid-status changes',()=>{
     let calls=0;const c=make(['fpPurchaseSnapshot'],{_fpPurchaseSnapshotCache:null,fpIso:()=> '2026-10-08',fpReadPaidMarks:()=>({}),fpPrioritySnapshot:()=>({n:++calls})});assert.equal(c.fpPurchaseSnapshot().n,1);assert.equal(c.fpPurchaseSnapshot().n,1);c.monthBalances={};assert.equal(c.fpPurchaseSnapshot().n,2);c.transactions=[];assert.equal(c.fpPurchaseSnapshot().n,3);c._fpBillMarkRows=[];assert.equal(c.fpPurchaseSnapshot().n,4);c._dataLoadVersion++;assert.equal(c.fpPurchaseSnapshot().n,5);c.currentUser={id:'B'};assert.equal(c.fpPurchaseSnapshot().n,6);c._fpMutationVersion++;c._fpMutationBusy=true;assert.equal(c.fpPurchaseSnapshot().n,7);c.transactions.push({amount:100});c._fpMutationBusy=false;assert.equal(c.fpPurchaseSnapshot().n,8);assert.equal(c.fpPurchaseSnapshot().n,8);
+  });
+
+  await test('loan payment defaults ignore extra-only and similarly named loan payments',()=>{
+    const loan={id:'A',description:'Car',amount:200};const c=make(['fpLoanMonthPayments'],{transactions:[{type:'expense',category:'loan_payment',description:'Car 2 payment',loan_id:'B',amount:200,date:'2026-10-08'},{type:'expense',category:'loan_payment',description:'Car extra payment',loan_id:'A',amount:50,date:'2026-10-08'}]});let r=c.fpLoanMonthPayments(loan,'2026-10-08');assert.equal(r.total,50);assert.equal(r.regular,0);assert.equal(r.complete,false);c.transactions.push({type:'expense',category:'loan_payment',description:'Old name payment',loan_id:'A',amount:200,date:'2026-10-08'});r=c.fpLoanMonthPayments(loan,'2026-10-08');assert.equal(r.regular,200);assert.equal(r.complete,true);assert.equal(c.fpLoanMonthPayments(loan,'2026-09-08').complete,false);
+  });
+  await test('legacy payment matching is exact and partial regular payment is not complete',()=>{
+    const loan={id:'A',description:'Car',amount:200};const c=make(['fpLoanMonthPayments'],{transactions:[{type:'expense',category:'loan_payment',description:'Car 2 payment',amount:200,date:'2026-10-08'},{type:'expense',category:'loan_payment',description:'Car payment',amount:50,date:'2026-10-08'}]});const r=c.fpLoanMonthPayments(loan,'2026-10-08');assert.equal(r.total,50);assert.equal(r.complete,false);
+  });
+  await test('recorded loan payment uses the explicit date instead of the viewed calendar month',async()=>{
+    let payload;const c=make(['confirmRecordPayment'],{currentYear:2025,currentMonth:0,_rpLoanId:'loan',_rpIncludeMonthly:true,transactions:[{id:'loan',balance:5000,amount:200,anchor_date:'2026-10-10'}],fpAtomicMutation:async(k,p)=>{payload=p;return null;}});c.document.getElementById('rp-date').value='2026-10-08';await c.confirmRecordPayment();assert.equal(payload.date,'2026-10-08');
+  });
+  await test('invalid calendar payment dates cannot save a financial record',async()=>{
+    let calls=0;const c=make(['confirmRecordPayment'],{_rpLoanId:'loan',_rpIncludeMonthly:true,transactions:[{id:'loan',balance:5000,amount:200}],fpAtomicMutation:async()=>{calls++;}});for(const date of ['', '2026-02-31']){c.document.getElementById('rp-date').value=date;await c.confirmRecordPayment();}assert.equal(calls,0);assert.equal(c._messages.length,2);
+  });
+  await test('pending payment retry retains the original date even if the field changes',async()=>{
+    let payload;const c=make(['confirmRecordPayment'],{_rpLoanId:'loan',_rpIncludeMonthly:true,transactions:[{id:'loan',balance:5000,amount:200}],fpPendingOperation:()=>({payload:{date:'2026-10-07'}}),fpAtomicMutation:async(k,p)=>{payload=p;return null;}});c.document.getElementById('rp-date').value='2026-10-08';await c.confirmRecordPayment();assert.equal(payload.date,'2026-10-07');assert.equal(c._els['rp-date'].disabled,true);
   });
   console.log('TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
 })();

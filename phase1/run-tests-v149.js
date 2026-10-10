@@ -235,7 +235,7 @@ t('wp: dropping an over-committed loan to its true minimum is offered only when 
 // ---- overdue rules
 const overdueIds = (tx, marks, ymd) => SNAP(ymd || OCT8, WPS, tx, marks || {}).overdue.map(o => o.id + ':' + o.daysLate).join(',');
 t('wp: monthly bill due Oct 3 and unpaid is 5 days overdue on Oct 8', () => overdueIds([bill('b1', 'Gas Bill', 90, '2026-10-03')]) === 'b1:5' || overdueIds([bill('b1', 'Gas Bill', 90, '2026-10-03')]));
-t('wp: weekly bill (Wednesdays from Sep 30): latest due date Oct 7 -> 1 day overdue', () => overdueIds([bill('w', 'Weekly', 40, '2026-09-30', { frequency: 'weekly' })]) === 'w:1' || overdueIds([bill('w', 'Weekly', 40, '2026-09-30', { frequency: 'weekly' })]));
+t('wp: weekly bill retains both missed Sep 30 and Oct 7 occurrences', () => overdueIds([bill('w', 'Weekly', 40, '2026-09-30', { frequency: 'weekly' })]) === 'w:8,w:1' || overdueIds([bill('w', 'Weekly', 40, '2026-09-30', { frequency: 'weekly' })]));
 t('wp: biweekly bill from Oct 1: Oct 1 is 7 days overdue (next due Oct 15), biweekly from Sep 30: Sep 30 is 8 days overdue', () => overdueIds([bill('b', 'Bi', 40, '2026-10-01', { frequency: 'biweekly' })]) === 'b:7' && overdueIds([bill('c', 'Bi2', 40, '2026-09-30', { frequency: 'biweekly' })]) === 'c:8' || overdueIds([bill('b', 'Bi', 40, '2026-10-01', { frequency: 'biweekly' })]) + '|' + overdueIds([bill('c', 'Bi2', 40, '2026-09-30', { frequency: 'biweekly' })]));
 t('wp: a bill due today or later is not overdue; an anchor in the future is not overdue', () => overdueIds([bill('t', 'DueToday', 90, '2026-10-08'), bill('f', 'Future', 90, '2026-10-20'), bill('g', 'FutureMonth', 90, '2026-11-03')]) === '' || overdueIds([bill('t', 'DueToday', 90, '2026-10-08'), bill('f', 'Future', 90, '2026-10-20')]));
 t('wp: a bill created AFTER its anchor day is not overdue just because of the anchor (created Oct 8, anchor Oct 3)', () => overdueIds([bill('n', 'New Bill', 90, '2026-10-03', { created_at: '2026-10-08T15:00:00Z' })]) === '' || overdueIds([bill('n', 'New Bill', 90, '2026-10-03', { created_at: '2026-10-08T15:00:00Z' })]));
@@ -705,6 +705,11 @@ t('v149-M9 a yearly bill 50 days ahead is inside the look-ahead (at least 60 day
 
 // ---- L2 (deferred): documented, not fixed --------------------------------------------------------------------------
 skip('v149-L2 twice-monthly paydays moved to the nearest business day', 'deferred: not fixed in v149, see V149_FIX_REPORT.md');
+
+
+t('v150 multiple missed bills before the dated balance are all reserved once',()=>{const tx=[bill('w','Weekly service',40,'2026-09-30',{frequency:'weekly'})];const s=NEW(OCT8,NOPAY,tx,100,'2026-10-08');return s.overdue.length===2&&close(s.owedBeforeBalance,80)&&close(s.projectedToday,20)||JSON.stringify([s.overdue,s.owedBeforeBalance,s.projectedToday]);});
+t('v150 paying the latest bill does not hide an older missed occurrence',()=>{const tx=[bill('w','Weekly service',40,'2026-09-30',{frequency:'weekly'})];const s=NEW(OCT8,NOPAY,tx,100,'2026-10-08',{w:[{due:'2026-10-07',at:'2026-10-07'}]});return s.overdue.length===1&&s.overdue[0].dueDate==='2026-09-30'&&close(s.projectedToday,60)||JSON.stringify([s.overdue,s.projectedToday]);});
+t('v150 overdue priority actions have distinct IDs for each occurrence',()=>{const s=NEW(OCT8,NOPAY,[bill('w','Weekly service',40,'2026-09-30',{frequency:'weekly'})],100,'2026-10-08');const a=ACT(s).actions.filter(x=>x.code==='overdue_bill');return a.length===2&&new Set(a.map(x=>x.id)).size===2||JSON.stringify(a);});
 
 console.log('File: ' + file);
 if (missing.length) console.log('Functions not present in this build: ' + missing.join(', '));
