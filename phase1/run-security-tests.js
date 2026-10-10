@@ -367,6 +367,21 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   await test('goal timeline uses remaining cents and has no estimate without monthly plan',()=>{
     const c=make(['fpGoalProgress','fpRound2']);assert.equal(c.fpGoalProgress({target_amount:1000,saved_amount:250.5,monthly_amount:100}).months,8);assert.equal(c.fpGoalProgress({target_amount:1000,saved_amount:0,monthly_amount:0}).months,null);
   });
+  await test('goal stays below 100 percent until the last cent is saved',()=>{
+    const c=make(['fpGoalProgress','fpRound2']);assert.equal(c.fpGoalProgress({target_amount:1000,saved_amount:999.99,monthly_amount:0}).percent,99);assert.equal(c.fpGoalProgress({target_amount:1000,saved_amount:1000,monthly_amount:0}).months,0);
+  });
+  await test('goal months use exact cents at contribution boundaries',()=>{
+    const c=make(['fpGoalProgress','fpRound2']);for(let n=1;n<500;n++){const p=c.fpGoalProgress({target_amount:n*7/100,saved_amount:0,monthly_amount:.07});assert.equal(p.months,n);}
+  });
+  for(const amount of ['0.001','1.234','1e3'])await test('goal rejects invalid currency '+amount,async()=>{
+    let wrote=false;const c=make(['fpSaveGoal'],{fpWriteGoal:async()=>{wrote=true},_fpGoalDraftId:'goal'});for(const [id,v] of [['goal-name','Fund'],['goal-target',amount],['goal-saved','0'],['goal-monthly','0']])c.document.getElementById(id).value=v;assert.equal(await c.fpSaveGoal(),false);assert.equal(wrote,false);
+  });
+  for(const [amount,date] of [['2.345','2026-10-10'],['2junk','2026-10-10'],['2','2026-02-31']])await test('expense rejects invalid amount or date '+amount+' '+date,async()=>{
+    let wrote=false;const c=make(['saveExpenseEdit'],{_editExpenseTxnId:'e',fpUpdateTransaction:async()=>{wrote=true}});for(const [id,v] of [['ee-desc','Coffee'],['ee-amount',amount],['ee-date',date]])c.document.getElementById(id).value=v;await c.saveExpenseEdit();assert.equal(wrote,false);assert.equal(c._messages.length,1);
+  });
+  await test('rejected loan payment edit keeps the entire record unchanged',async()=>{
+    let wrote=false;const c=make(['saveExpenseEdit'],{_editExpenseTxnId:'p',transactions:[{id:'p',category:'loan_payment',description:'Car payment',amount:200}],fpUpdateTransaction:async()=>{wrote=true}});for(const [id,v] of [['ee-desc','Car payment'],['ee-amount','201'],['ee-date','2026-10-11']])c.document.getElementById(id).value=v;await c.saveExpenseEdit();assert.equal(wrote,false);assert.equal(c._editExpenseTxnId,'p');
+  });
   await test('invalid goal target never reaches storage',async()=>{
     let wrote=false;const c=make(['fpSaveGoal'],{fpWriteGoal:async()=>{wrote=true},_fpGoalDraftId:'goal'});for(const [id,v] of [['goal-name','Fund'],['goal-target','0'],['goal-saved','0'],['goal-monthly','0']])c.document.getElementById(id).value=v;assert.equal(await c.fpSaveGoal(),false);assert.equal(wrote,false);
   });

@@ -935,6 +935,14 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>{transactions=transactions.map(t=>t.description==='Test Car Loan payment'?Object.assign({},t,{date:'2026-09-30'}):t);recordLoanPayment('loan-car');});
   ok('T38 early payment across month boundary keeps regular payment unchecked',await page.evaluate(()=>_rpIncludeMonthly===false)&&/already recorded/.test(await page.textContent('#rp-already-paid')),'early payment was ignored');await page.evaluate(()=>closeRecordPayment());
 
+  // Completion boundaries and focus after a debt is paid off.
+  seed();await load();await page.evaluate(()=>showView('plan',null));
+  await page.click('#goal-add-btn');await page.fill('#goal-name','Almost there');await page.fill('#goal-target','1000');await page.fill('#goal-saved','999.99');await page.fill('#goal-monthly','0');await page.fill('#goal-date','2028-06-01');await page.click('#goal-save-btn');await page.waitForTimeout(300);
+  ok('T39 unfinished goal and combined progress stay below 100 percent',/99%/.test(await page.textContent('#milestones-list'))&&/99%/.test(await page.textContent('#finish-pct')),'rounded completion');
+  ok('T39 goal shows remaining cents and target year',/0.01 to go/.test(await page.textContent('#milestones-list'))&&/2028/.test(await page.textContent('#milestones-list')),'missing remaining amount or year');
+  await page.evaluate(()=>{const small=transactions.find(t=>t.id==='loan-small');if(!small)throw Error('Missing small loan');small.balance=0;small.amount=0;small.current_balance=0;renderLoans();showView('loans',null)});
+  ok('T39 paid-off loan does not take focus from remaining debt',await page.locator('.loan-card').filter({hasText:'Test Car Loan'}).textContent().then(t=>/Focus here/.test(t)),'focus disappeared');
+
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {
     await page.evaluate(v=>showView(v,null),view);
