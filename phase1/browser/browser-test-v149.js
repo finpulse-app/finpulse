@@ -952,6 +952,24 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>{closeWhatIf();transactions.find(t=>t.id==='loan-car').balance=601;renderLoans();openWhatIf('loan-car')});
   ok('T41 finite horizon does not claim zero-interest debt grows',/50-year estimate window/.test(await page.textContent('#whatif-result'))&&!/Balance grows/.test(await page.textContent('#whatif-result')),'false growth claim');
   await page.evaluate(()=>closeWhatIf());
+  seed();await load();await page.evaluate(()=>showView('plan',null));
+  await page.click('#goal-add-btn');await page.fill('#goal-name','Emergency fund');await page.fill('#goal-target','1000');await page.fill('#goal-saved','250.50');await page.fill('#goal-monthly','100');await page.fill('#goal-date','2027-06-01');await page.click('#goal-save-btn');await page.waitForTimeout(300);
+  ok('T42 goal explains the deposits required by its target date',/107.08\/month/.test(await page.textContent('#milestones-list'))&&/7 monthly deposits/.test(await page.textContent('#milestones-list')),'missing deadline plan');
+  await page.click('button:text-is("Plan $107.08/month")');
+  ok('T42 one click prepares the monthly plan without saving it',await page.inputValue('#goal-monthly')==='107.08'&&db.financial_goals[0].monthly_amount===100,'auto-saved or wrong draft');
+  await page.click('#goal-save-btn');await page.waitForTimeout(300);
+  ok('T42 confirmed monthly plan covers the deadline',db.financial_goals[0].monthly_amount===107.08&&/monthly plan covers this target/.test(await page.textContent('#milestones-list')),'plan did not persist');
+  await page.click('button:has-text("Edit progress")');
+  ok('T42 editing progress focuses recorded savings',await page.evaluate(()=>document.activeElement.id==='goal-saved'),'focus missed progress');await page.evaluate(()=>fpCloseGoal());
+  await page.evaluate(()=>{showView('calendar',null);openBottomSheet(8)});
+  await page.fill('#bs-ai-input','Rent $1,200');await page.click('#bs-ai-send-btn');await page.waitForTimeout(300);
+  ok('T43 quick rent entry saves the full grouped amount',db.transactions.some(t=>t.description==='Rent'&&t.amount===1200),'grouped amount was truncated');
+  await page.fill('#bs-ai-input','7-eleven $6.50');await page.click('#bs-ai-send-btn');await page.waitForTimeout(300);
+  ok('T43 merchant number stays in the name and never becomes the amount',db.transactions.some(t=>t.description==='7-eleven'&&t.amount===6.5),'wrong merchant amount');
+  const beforeInvalid=db.transactions.length;await page.fill('#bs-ai-input','Coffee $6.555');await page.click('#bs-ai-send-btn');await page.waitForTimeout(100);
+  ok('T43 invalid precision keeps entry text and creates no record',db.transactions.length===beforeInvalid&&await page.inputValue('#bs-ai-input')==='Coffee $6.555','invalid amount saved');
+  await page.evaluate(()=>closeBottomSheet());
+
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {
     await page.evaluate(v=>showView(v,null),view);

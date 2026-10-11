@@ -1,9 +1,19 @@
 # FinPulse product functionality pass
 
-This pass prioritizes the app's appearance and working everyday features. Login,
+This pass prioritizes working everyday features. Login,
 security configuration and public launch setup are deferred at the user's request.
 
 ## Working additions
+
+- Quick expense entry recognizes the full amount in `Rent $1,200`, preserves
+  merchant numbers such as `7-eleven $6.50`, and rejects ambiguous prices or
+  fractional cents while keeping the entered text. Category and item entry use
+  the same exact currency validation.
+- Goal deadlines show the monthly amount needed and the number of deposits,
+  assuming the first deposit is one month from today with month-end clamping.
+  A shortcut prepares that monthly amount in the editor; saving remains explicit.
+  Past and near deadlines ask for an updated target or the remaining amount
+  instead of inventing monthly deposits. Editing progress focuses saved savings.
 
 - Goals: create a target, record saved progress, set an optional monthly plan/date,
   edit it, archive it and restore it. Goals are account-owned and load across devices.

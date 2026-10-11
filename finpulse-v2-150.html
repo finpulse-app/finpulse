@@ -4342,7 +4342,7 @@ function renderBottomSheetBody() {
     const selCat = cats.find(function(c){ return c.id === bsSelectedCat; });
     html += '<div class="bs-amount-row">'
       + '<div style="font-size:13px;color:var(--text2);font-weight:500;flex-shrink:0;display:flex;align-items:center;gap:6px;">' + (selCat?catIconSvg(selCat.id,16):'') + ' Amount</div>'
-      + '<input class="bs-amount-input" type="number" id="bs-cat-amount" placeholder="0.00" onkeydown="if(event.key===\'Enter\')bsCatSave()">'
+      + '<input class="bs-amount-input" type="number" id="bs-cat-amount" min="0.01" step="0.01" placeholder="0.00" onkeydown="if(event.key===\'Enter\')bsCatSave()">'
       + '<button class="bs-save-btn" onclick="bsCatSave()">Save</button>'
       + '</div>';
     setTimeout(function(){ const a = document.getElementById('bs-cat-amount'); if(a) a.focus(); }, 50);
@@ -4375,6 +4375,30 @@ function bsClearPending() {
   setTimeout(function(){ const inp = document.getElementById('bs-ai-input'); if(inp) inp.focus(); }, 50);
 }
 
+function fpParseMoney(raw,allowZero=false) {
+  const text=String(raw==null?'':raw).trim().replace(/^\$\s*/, '');
+  if(!/^(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?|\.\d{1,2})$/.test(text))return null;
+  const amount=Number(text.replace(/,/g,''));
+  return Number.isFinite(amount)&&amount<1e12&&(allowZero?amount>=0:amount>0)?amount:null;
+}
+function fpParseQuickExpense(raw) {
+  const text=String(raw||'').trim();if(!text)return null;
+  let token,index;
+  if(text.includes('$')) {
+    const dollars=Array.from(text.matchAll(/\$\s*[^\s]+/g));
+    if(dollars.length!==1||text.split('$').length!==2)return null;
+    token=dollars[0][0];index=dollars[0].index;
+  } else {
+    const numbers=Array.from(text.matchAll(/(?:^|\s)([+-]?(?:\d[\d,.]*|\.\d+)(?:[eE][+-]?\d+)?)(?=\s|$)/g));
+    if(numbers.length!==1)return null;
+    token=numbers[0][1];index=numbers[0].index+numbers[0][0].indexOf(token);
+    if(index!==0&&index+token.length!==text.length)return null;
+  }
+  const amount=fpParseMoney(token);if(amount===null)return null;
+  const description=(text.slice(0,index)+' '+text.slice(index+token.length)).replace(/\s+/g,' ').trim();
+  return description?{amount,description}:null;
+}
+
 async function bsAiSubmit() {
   const inp = document.getElementById('bs-ai-input');
   const btn = document.getElementById('bs-ai-send-btn');
@@ -4382,10 +4406,11 @@ async function bsAiSubmit() {
   const raw = inp.value.trim();
   if (!raw) return;
 
-  const amtMatch = raw.match(/\$?(\d+(?:\.\d{1,2})?)/);
-  const amount = amtMatch ? parseFloat(amtMatch[1]) : null;
+  const parsed = fpParseQuickExpense(raw);
+  const amount = parsed ? parsed.amount : null;
 
-  if (!amount || amount <= 0) {
+  if (!parsed) {
+    showToast('Use one amount, like Coffee $6 or Rent $1,200. Keep cents to two decimal places.', 'error');
     inp.style.borderColor = 'var(--danger)';
     setTimeout(function(){ inp.style.borderColor = ''; }, 1500);
     return;
@@ -4396,7 +4421,7 @@ async function bsAiSubmit() {
   // Smart local categorizer as primary (instant, no API needed)
   const lower = raw.toLowerCase();
   let category = 'other';
-  let description = raw.replace(/\$?\d+(?:\.\d{1,2})?/g,'').trim().replace(/\s+/g,' ').trim() || raw;
+  let description = parsed.description;
 
   const rules = [
     { cat:'food', words:['coffee','drink','drinks','beer','wine','alcohol','liquor','spirits','cocktail','restaurant','food','lunch','dinner','breakfast','cafe','starbucks','dunkin','mcdonald','burger','pizza','sushi','taco','burrito','smoothie','juice','boba','tea','snack','snacks','grocery','groceries','takeout','delivery','doordash','ubereats','grubhub','chipotle','subway','wendys','chick-fil','popeyes','kfc','dominos','panera','shake shack','salad','noodle','ramen','poke','bagel','deli','bakery','cookie','dessert','ice cream','gelato','bar ','brunch','buffet','diner','pub ','wings','sandwich','wrap','soda','energy drink','vending','whole foods','trader joe','safeway','kroger','publix','aldi','sprouts','instacart','fresh direct','gopuff','wawa','7-eleven','convenience store','meal','eating','appetizer','entree','drinks out','happy hour','nightclub'] },
@@ -4482,8 +4507,9 @@ async function bsConfirmSave() {
 
 async function bsCatSave() {
   const amtEl = document.getElementById('bs-cat-amount');
-  const amt = parseFloat(amtEl ? amtEl.value : '');
-  if (!amt || amt <= 0 || !bsSelectedCat) return;
+  const amt = fpParseMoney(amtEl ? amtEl.value : '');
+  if (amt === null) {showToast('Enter a positive amount with up to two decimal places.', 'error');return;}
+  if (!bsSelectedCat) return;
   const cats = {food:'Food & Drink',transport:'Transport',shopping:'Shopping',health:'Health',home:'Home',streaming:'Streaming',music:'Music',personal:'Personal care',pets:'Pets',other:'Expense'};
   const day = bsSelectedDay || new Date().getDate();
   selectedDay = day;
@@ -5536,6 +5562,27 @@ function fpGoalProgress(goal) {
   return {target,saved,remaining,percent,months:remainingCents===0?0:monthlyCents>0?Math.ceil(remainingCents/monthlyCents):null};
 }
 
+function fpGoalSchedule(goal,asOf) {
+  const progress=fpGoalProgress(goal),date=fpParseIso(goal.target_date);
+  if(progress.remaining===0)return {status:'reached'};
+  if(!date||fpIso(date)!==goal.target_date)return {status:'no_date'};
+  const today=new Date(asOf.getFullYear(),asOf.getMonth(),asOf.getDate(),12);
+  if(date<today)return {status:'overdue'};
+  let months=(date.getFullYear()-today.getFullYear())*12+date.getMonth()-today.getMonth();
+  const depositDay=Math.min(today.getDate(),new Date(date.getFullYear(),date.getMonth()+1,0).getDate());
+  if(date.getDate()<depositDay)months--;
+  if(months<1)return {status:'soon',months:0};
+  const needed=Math.ceil(Math.round(progress.remaining*100)/months)/100;
+  const firstMonth=new Date(today.getFullYear(),today.getMonth()+1,1,12);
+  const firstDate=new Date(firstMonth.getFullYear(),firstMonth.getMonth(),Math.min(today.getDate(),new Date(firstMonth.getFullYear(),firstMonth.getMonth()+1,0).getDate()),12);
+  return {status:Math.round(Number(goal.monthly_amount)*100)*months>=Math.round(progress.remaining*100)?'on_track':'needs_plan',months,needed,firstDate:fpIso(firstDate)};
+}
+function fpUseGoalPace(id) {
+  const goal=_fpGoals.find(g=>g.id===id);if(!goal||_fpGoalBusy)return;
+  const plan=fpGoalSchedule(goal,new Date());if(!plan.needed)return;
+  fpOpenGoal(id);document.getElementById('goal-monthly').value=plan.needed.toFixed(2);document.getElementById('goal-monthly').focus();
+}
+
 async function fpLoadGoals(render=true) {
   if (!currentUser) return false;
   const uid=currentUser.id,version=_dataLoadVersion,goalVersion=++_fpGoalVersion,rows=[];
@@ -5565,7 +5612,7 @@ function fpOpenGoal(id) {
   document.getElementById('goal-monthly').value=goal?goal.monthly_amount:0;
   document.getElementById('goal-date').value=goal&&goal.target_date?goal.target_date:'';
   document.getElementById('goal-editor').style.display='block';
-  document.getElementById('goal-name').focus();
+  document.getElementById(goal?'goal-saved':'goal-name').focus();
   document.getElementById('goal-editor').scrollIntoView({block:'nearest'});
 }
 function fpCloseGoal() { if(_fpGoalBusy)return;document.getElementById('goal-editor').style.display='none';_fpGoalDraftId=null; }
@@ -5618,9 +5665,11 @@ function renderPlan() {
   document.getElementById('goal-add-btn').disabled=!_fpGoalsReady;
   const status=document.getElementById('goal-status');status.innerHTML=_fpGoalsReady?'':'Goals could not load. <button class="btn btn-outline" onclick="fpLoadGoals()">Retry goals</button>';
   function card(g) {
-    const p=fpGoalProgress(g);
+    const p=fpGoalProgress(g),schedule=fpGoalSchedule(g,new Date());
+    const deadlineNote=schedule.status==='overdue'?'Your target date has passed. Update the date or the amount saved.':schedule.status==='soon'?'Your target is less than one monthly deposit away. You still need $'+fmt(p.remaining)+'.':schedule.needed?(schedule.status==='on_track'?'Your monthly plan covers this target. ':'Plan $'+fmt(schedule.needed)+'/month to reach this target. ')+schedule.months+' monthly deposits, starting '+fpParseIso(schedule.firstDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'.':'';
+    const paceAction=!g.archived&&schedule.status==='needs_plan'?'<button class="btn btn-outline" onclick="fpUseGoalPace(\''+g.id+'\')">Plan $'+fmt(schedule.needed)+'/month</button>':'';
     const pace=p.remaining===0?'Target reached':p.months===null?'Add a monthly plan to estimate your timeline':p.months+' month'+(p.months===1?'':'s')+' at your planned $'+fmt(g.monthly_amount)+'/month';
-    return '<article class="card"><div class="card-body"><div class="goal-card-header"><div class="goal-title">'+fpEscHtml(g.name)+'</div><span class="br-tag good">'+(g.archived?'Archived':p.percent+'%')+'</span></div><div class="goal-progress"><div style="width:'+p.percent+'%"></div></div><div class="goal-numbers">$'+fmt(p.saved)+' saved <span style="color:var(--text3)">of $'+fmt(p.target)+'</span></div><p class="goal-note" style="margin-top:8px;">'+fpEscHtml(pace)+(p.remaining>0?' · $'+fmt(p.remaining)+' to go':'')+(g.target_date?' · Target '+fpEscHtml(fpParseIso(g.target_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})):'')+'</p><div class="goal-actions"><button class="btn btn-outline" onclick="fpOpenGoal(\''+g.id+'\')">Edit progress</button><button class="btn btn-outline" onclick="fpArchiveGoal(\''+g.id+'\','+(!g.archived)+')">'+(g.archived?'Restore':'Archive')+'</button></div></div></article>';
+    return '<article class="card"><div class="card-body"><div class="goal-card-header"><div class="goal-title">'+fpEscHtml(g.name)+'</div><span class="br-tag good">'+(g.archived?'Archived':p.percent+'%')+'</span></div><div class="goal-progress"><div style="width:'+p.percent+'%"></div></div><div class="goal-numbers">$'+fmt(p.saved)+' saved <span style="color:var(--text3)">of $'+fmt(p.target)+'</span></div><p class="goal-note" style="margin-top:8px;">'+fpEscHtml(pace)+(p.remaining>0?' · $'+fmt(p.remaining)+' to go':'')+(g.target_date?' · Target '+fpEscHtml(fpParseIso(g.target_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})):'')+'</p>'+(deadlineNote?'<p class="goal-note" style="margin:8px 0;">'+fpEscHtml(deadlineNote)+'</p>':'')+'<div class="goal-actions">'+paceAction+'<button class="btn btn-outline" onclick="fpOpenGoal(\''+g.id+'\')">Edit progress</button><button class="btn btn-outline" onclick="fpArchiveGoal(\''+g.id+'\','+(!g.archived)+')">'+(g.archived?'Restore':'Archive')+'</button></div></div></article>';
   }
   document.getElementById('milestones-list').innerHTML=goals.length?goals.map(card).join(''):'<div class="card goal-empty"><h3>Make room for what matters.</h3><p class="goal-note">Start with an emergency fund, a trip, or a goal of your own.</p></div>';
   if(archived.length)document.getElementById('milestones-list').innerHTML+='<details><summary style="padding:12px;cursor:pointer;">Archived goals ('+archived.length+')</summary><div class="goals-list">'+archived.map(card).join('')+'</div></details>';
@@ -6605,10 +6654,10 @@ function openItem(item, catId) {
 }
 
 async function saveItem(item, catId, key) {
-  const amt = parseFloat(document.getElementById('iamt-' + key) ? document.getElementById('iamt-' + key).value : '');
+  const amt = fpParseMoney(document.getElementById('iamt-' + key) ? document.getElementById('iamt-' + key).value : '');
   const freq = document.getElementById('ifreq-' + key) ? document.getElementById('ifreq-' + key).value : 'once';
   const day = parseInt(document.getElementById('iday-' + key) ? document.getElementById('iday-' + key).value : '') || selectedDay || new Date().getDate();
-  if (!amt || amt <= 0) { alert('Please enter an amount.'); return; }
+  if (amt === null) { showToast('Enter a positive amount with up to two decimal places.', 'error'); return; }
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const clampedDay = Math.min(day, daysInMonth);
   const dateVal = currentYear + '-' + String(currentMonth+1).padStart(2,'0') + '-' + String(clampedDay).padStart(2,'0');
