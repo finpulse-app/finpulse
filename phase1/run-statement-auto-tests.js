@@ -33,4 +33,10 @@ test('multiple purchase APRs are explicitly ambiguous',()=>assert.equal(c.fpStat
 test('another issuer in a purchase does not rename the card',()=>assert.equal(c.fpStatementIdentity('Chase credit card\nAccount ending in 1234\n09/20/2026 American Express Travel 50.00','statement.pdf').issuer,'Chase'));
 test('merchant checking wording cannot become an account header',()=>assert.equal(c.fpStatementIdentity('Date,Description,Amount\n2026-09-20,Checking supplies,20.00','unknown.csv').kind,null));
 test('payroll CSV with a card-payment row stays a bank import',()=>assert.equal(c.fpDetectStatementCSV('Date,Description,Amount\n2026-09-01,Payroll,1000\n2026-09-25,Chase credit card payment,-50','bank.csv').mode,'bank'));
+test('opening and closing range uses the closing date',()=>assert.equal(c.fpStatementCardDetails('Chase credit card\nOpening/Closing Date 08/03/26 - 09/02/26','card.pdf').asOf,'2026-09-02'));
+test('transaction year follows closing date instead of opening date',()=>{const detail=c.fpStatementCardDetails('Chase credit card\nOpening/Closing Date 12/03/25 - 01/02/26','card.pdf');const r=c.fpParseStatementPDF({card:detail,pages:[[{text:'01/01 Coffee 5.00',items:[]}]]},'card');assert.equal(r.rows[0].date,'2026-01-01');});
+test('billing-cycle dates before the label are recognized',()=>assert.equal(c.fpStatementCardDetails('Capital One credit card\nAugust 3, 2026 - September 2, 2026 | 30 days in Billing Cycle','card.pdf').asOf,'2026-09-02'));
+test('metadata cannot silently truncate fractional cents',()=>assert.equal(c.fpStatementCardDetails('Credit card\nNew Balance $35.005','card.pdf').balance,null));
+test('negative statement balance is a credit rather than debt owed',()=>{const d=c.fpStatementCardDetails('Credit card\nNew Balance -$25.00','card.pdf');assert.equal(d.balance,0);assert.equal(d.creditBalance,25);});
+test('CR statement balance is a credit rather than debt owed',()=>{const d=c.fpStatementCardDetails('Credit card\nNew Balance $25.00 CR','card.pdf');assert.equal(d.balance,0);assert.equal(d.creditBalance,25);});
 console.log('STATEMENT AUTO TOTAL pass='+passed+' fail=0');

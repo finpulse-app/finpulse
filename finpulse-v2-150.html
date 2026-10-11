@@ -6270,8 +6270,20 @@ function fpStatementDate(text) {
 }
 function fpStatementCardDetails(text,name) {
   const id=fpStatementIdentity(text,name), lines=String(text||'').split(/\r?\n/);
-  const amountFor=function(pattern){for(let i=0;i<lines.length;i++){const m=lines[i].match(pattern);if(!m)continue;const tail=lines[i].slice(m.index+m[0].length)+' '+(lines[i+1]||'');const a=tail.match(/^\s*[:\-]?\s*(\(?-?\$?\s*\d[\d,]*\.\d{2}\)?)/);if(a){const n=fpImportAmount(a[1].replace(/\s/g,''));if(n!==null&&n>=0)return n;}}return null;};
-  const dateFor=function(pattern){for(let i=0;i<lines.length;i++){const m=lines[i].match(pattern);if(!m)continue;const tail=lines[i].slice(m.index+m[0].length)+' '+(lines[i+1]||'');const d=tail.match(/\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2}|(?:Jan\w*|Feb\w*|Mar\w*|Apr\w*|May|Jun\w*|Jul\w*|Aug\w*|Sep\w*|Oct\w*|Nov\w*|Dec\w*)\.?\s+\d{1,2},?\s+\d{4}/i);if(d)return fpStatementDate(d[0]);}return null;};
+  const amountFor=function(pattern,signed){for(let i=0;i<lines.length;i++){const m=lines[i].match(pattern);if(!m)continue;const tail=lines[i].slice(m.index+m[0].length)+' '+(lines[i+1]||'');const a=tail.match(/^\s*:?\s*(\(?-?\$?\s*\d[\d,]*\.\d{2}\)?)(?!\d)/);if(a){let n=fpImportAmount(a[1].replace(/\s/g,''));if(n!==null){if(/^\s*(?:CR|credit)\b/i.test(tail.slice(a[0].length)))n=-Math.abs(n);if(signed||n>=0)return n;}}}return null;};
+  const dateFor=function(pattern,period){
+    const matches=value=>Array.from(value.matchAll(/\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2}|(?:Jan\w*|Feb\w*|Mar\w*|Apr\w*|May|Jun\w*|Jul\w*|Aug\w*|Sep\w*|Oct\w*|Nov\w*|Dec\w*)\.?\s+\d{1,2},?\s+\d{4}/gi));
+    for(let i=0;i<lines.length;i++){
+      const m=lines[i].match(pattern);if(!m)continue;
+      let tail=lines[i].slice(m.index+m[0].length), dates=matches(tail);
+      if(!dates.length&&period&&/billing\s*(?:cycle|period)|statement\s*period/i.test(lines[i])){tail=lines[i];dates=matches(tail);}
+      if(!dates.length){tail=lines[i+1]||'';dates=matches(tail);}
+      if(!dates.length)continue;
+      let choice=dates[0];
+      if(period&&dates.length>1){const gap=tail.slice(dates[0].index+dates[0][0].length,dates[1].index);if(/^\s*(?:[-–—]|to|through)\s*$/i.test(gap)||/opening\s*\/\s*closing/i.test(lines[i]))choice=dates[1];}
+      const result=fpStatementDate(choice[0]);if(result)return result;
+    }return null;
+  };
   const rates=[];let rateTable=false;
   lines.forEach(l=>{
     if(/annual percentage rate|interest charge calculation|interest rates? and interest charges/i.test(l))rateTable=true;
@@ -6280,7 +6292,8 @@ function fpStatementCardDetails(text,name) {
     }
   });
   const apr=rates.length&&rates.every(r=>r===rates[0])?rates[0]:null;
-  return Object.assign(id,{name:(id.issuer||'Credit card')+(id.last4?' ending '+id.last4:''),balance:amountFor(/(?:new balance(?: total)?|statement balance|total balance)/i),minimum:amountFor(/(?:minimum payment due|minimum amount due|minimum payment)/i),due:dateFor(/payment due date|due date|payment due/i),asOf:dateFor(/statement closing date|closing date|statement date|period ending/i),apr,aprAmbiguous:rates.length>1&&apr===null});
+  const signedBalance=amountFor(/(?:new balance(?: total)?|statement balance|total balance)/i,true);
+  return Object.assign(id,{name:(id.issuer||'Credit card')+(id.last4?' ending '+id.last4:''),balance:signedBalance===null?null:Math.max(0,signedBalance),creditBalance:signedBalance!==null&&signedBalance<0?Math.abs(signedBalance):0,minimum:amountFor(/(?:minimum payment due|minimum amount due|minimum payment)/i),due:dateFor(/payment due date|due date|payment due/i),asOf:dateFor(/statement closing date|closing date|statement date|period ending|billing\s*(?:cycle|period)|statement\s*period/i,true),apr,aprAmbiguous:rates.length>1&&apr===null});
 }
 function fpDetectStatementCSV(text,name) {
   const originalText=text,parsed=parseCsvText(text);
@@ -6420,8 +6433,8 @@ function fpRenderDetectedCard() {
   if(!currentUser||currentUser.id!==_fpStatementOwner)return;
   if(!_fpCardReview.length){fpReviewRecurringBills(_fpCardImported);return;}
   const c=_fpCardReview[0],box=document.getElementById('import-preview');document.getElementById('import-upload-section').style.display='none';box.style.display='block';
-  const field=(id,label,value,type='text')=>'<label class="form-label" for="'+id+'" style="margin-top:10px;">'+label+'</label><input class="form-input" id="'+id+'" type="'+type+'" value="'+fpEscHtml(value==null?'':value)+'">';
-  box.innerHTML='<h3 style="font-size:17px;margin:0 0 8px;">'+(c.existingId?'Update this card?':'Add this card to your plan?')+'</h3><p style="font-size:12px;line-height:1.5;">'+fpEscHtml(c.fileName)+'<br>'+(!_fpCardImported.length?'No transactions were imported. You can still add or update the card details below.<br>':'')+(c.balance===null?'This export has purchases, but no card balance. Fill in the missing statement details once.':c.existingId?'This statement shows a different balance. Check it against any payments or purchases since the statement date. Missing details keep your saved values.':'We found these statement details. Check them before adding the card under Loans.')+'</p>'+field('detected-card-name','Card name',c.name==='Credit card'?'':c.name)+field('detected-card-balance','Balance owed ($)',c.balance)+field('detected-card-minimum','Minimum payment ($)',c.minimum)+field('detected-card-apr','Purchase APR % (leave blank if unknown)',c.apr)+field('detected-card-due','Payment due date',c.due,'date')+'<p class="goal-note" style="font-size:11px;margin-top:10px;">Your priority list uses this card name and confirmed balance. Check your latest balance. Keep a past due date if that payment is still unpaid; otherwise use your next due date.</p><button class="save-btn" style="margin-top:12px;" onclick="fpConfirmDetectedCard()">'+(c.existingId?'Update credit card':'Add credit card')+'</button><button class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="fpSkipDetectedCard()">Skip for now</button>';
+  const field=(id,label,value,type='text')=>'<label class="form-label" for="'+id+'" style="margin-top:10px;">'+label+'</label><input class="form-input" id="'+id+'" type="'+type+'"'+(type==='text'&&id!=='detected-card-name'?' inputmode="decimal"':'')+' value="'+fpEscHtml(value==null?'':value)+'">';
+  box.innerHTML='<h3 style="font-size:17px;margin:0 0 8px;">'+(c.existingId?'Update this card?':'Add this card to your plan?')+'</h3><p style="font-size:12px;line-height:1.5;">'+fpEscHtml(c.fileName)+'<br>'+(c.creditBalance>0?'This statement shows a $'+fmt(c.creditBalance)+' credit, so you owe $0.<br>':'')+(!_fpCardImported.length?'No transactions were imported. You can still add or update the card details below.<br>':'')+(c.balance===null?'This export has purchases, but no card balance. Fill in the missing statement details once.':c.existingId?'This statement shows a different balance. Check it against any payments or purchases since the statement date. Missing details keep your saved values.':'We found these statement details. Check them before adding the card under Loans.')+'</p>'+field('detected-card-name','Card name',c.name==='Credit card'?'':c.name)+field('detected-card-balance','Balance owed ($)',c.balance)+field('detected-card-minimum','Minimum payment ($)',c.minimum)+field('detected-card-apr','Purchase APR % (leave blank if unknown)',c.apr)+field('detected-card-due','Payment due date',c.due,'date')+'<p class="goal-note" style="font-size:11px;margin-top:10px;">Your priority list uses this card name and confirmed balance. Check your latest balance. Keep a past due date if that payment is still unpaid; otherwise use your next due date.</p><button class="save-btn" style="margin-top:12px;" onclick="fpConfirmDetectedCard()">'+(c.existingId?'Update credit card':'Add credit card')+'</button><button class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="fpSkipDetectedCard()">Skip for now</button>';
 }
 function fpSkipDetectedCard(){if(_fpCardSaving)return;_fpCardReview.shift();fpRenderDetectedCard();}
 async function fpConfirmDetectedCard() {
@@ -6434,6 +6447,7 @@ async function fpConfirmDetectedCard() {
   if(transactions.some(t=>t.type==='loan'&&String(t.id)!==String(card.existingId)&&fpImportDesc(t.description)===fpImportDesc(name))){showToast('This card is already in Loans. Review it there.','error');return;}
   const uid=currentUser.id;_fpCardSaving=true;document.querySelectorAll('#import-preview input, #import-preview button, #import-close-btn').forEach(el=>el.disabled=true);
   const record={type:'loan',description:name,amount:balance>0?minimum:0,min_payment:balance>0?minimum:0,original_min_payment:balance>0?minimum:0,date:balance>0?date:fpIso(new Date()),anchor_date:balance>0?date:fpIso(new Date()),category:'Credit Card',lender:'Credit Card | account:'+card.sourceAccount+' |'+(card.asOf?' statement:'+card.asOf:''),recurring:true,frequency:'monthly',balance,apr};
+  if(card.existingId){const previous=transactions.find(t=>String(t.id)===String(card.existingId)),paid=previous&&fpPaidOffDate(previous);if(paid)record.lender+=' | paid_off:'+paid;}
   let saved=false;try{saved=card.existingId?await fpUpdateTransaction(card.existingId,record):await saveTxn(Object.assign(record,{original_balance:balance}));}
   finally{_fpCardSaving=false;document.querySelectorAll('#import-preview input, #import-preview button, #import-close-btn').forEach(el=>el.disabled=false);}
   if(!saved||!currentUser||currentUser.id!==uid)return;_fpCardReview.shift();fpRenderDetectedCard();renderCalendar();updateStats();renderLoans();renderPriorityReport();showToast('Credit card added to Loans');

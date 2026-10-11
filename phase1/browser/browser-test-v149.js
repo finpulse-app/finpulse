@@ -841,6 +841,10 @@ const loan = id => txns().find(t => t.id === id);
   ok('Paid off card displays its date and leaves payment priorities',/Paid off/.test(await page.textContent('#loans-list'))&&!/Chase ending 1234/.test(await page.textContent('#priority-report')),'payoff display or priorities');
   await page.evaluate(()=>{_fpDetectedCards=[{name:'Chase ending 1234',issuer:'Chase',last4:'1234',sourceAccount:'import:card:Chase ending 1234',fileName:'pre-payoff-statement.pdf',asOf:'2026-10-10',balance:400,minimum:30,apr:24.99,due:'2026-10-20'}];fpStartDetectedCardReview([]);});
   ok('A statement from before payoff cannot reopen the paid card',loan(detectedCard.id).balance===0&&await page.evaluate(()=>_fpCardReview.length===0),'old statement revived paid card');
+  await page.clock.setFixedTime(new Date(2026,10,3,12));await page.evaluate(()=>{openConnectAccounts();_fpDetectedCards=[{name:'Chase ending 1234',issuer:'Chase',last4:'1234',sourceAccount:'import:card:Chase ending 1234',fileName:'zero-balance-statement.pdf',asOf:'2026-10-30',balance:0,minimum:0,apr:24.99,due:'2026-11-20'}];fpStartDetectedCardReview([]);});
+  await page.click('#import-preview button.save-btn');await page.waitForTimeout(400);
+  ok('A later zero-balance statement preserves the recorded payoff date',loan(detectedCard.id).balance===0&&loan(detectedCard.id).lender.endsWith('paid_off:2026-10-17'),'payoff milestone lost');
+  await page.evaluate(()=>closeConnectAccounts());
   await page.clock.setFixedTime(new Date(2026,9,8,12));
 
   seed();await load();await hideStage();await page.evaluate(()=>openConnectAccounts());
