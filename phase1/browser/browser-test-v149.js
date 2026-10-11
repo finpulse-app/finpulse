@@ -221,6 +221,7 @@ const loan = id => txns().find(t => t.id === id);
   // ---- T10 CSV import
   await load();
   const before = txns().length;
+  await page.evaluate(()=>document.getElementById('import-account-type').value='bank');
   const csv = 'Date,Description,Amount\n2026-10-01,STARBUCKS COFFEE,-6.50\n2026-10-02,PAYROLL ACME,1500.00\n2026-10-03,SHELL GAS,-40.25\n2026-10-04,Weird Shop,-12\n';
   fs.writeFileSync('/tmp/test-bank.csv', csv);
   await page.evaluate(() => { const el = document.getElementById('import-csv-input'); let p = el; while (p && getComputedStyle(p).display === 'none') { p.style.display = 'block'; p = p.parentElement; } });
@@ -311,7 +312,7 @@ const loan = id => txns().find(t => t.id === id);
   ok('T13g malformed rows are counted and reported, good row kept', /Found 1 transaction/.test(v.text) && /3 rows could not be read/.test(v.text), v.text);
   await page.click('#import-cancel-btn'); await page.waitForTimeout(300);
   v = await pick([['junk.csv', 'foo,bar\n1,2\n']]);
-  ok('T13g unrecognized columns shows the no-transactions message', /No recognizable transactions/.test(v.text) && /1 file had no usable rows/.test(v.text), v.text);
+  ok('T13g unrecognized columns shows the no-transactions message', /No recognizable transactions/.test(v.text) && /1 file had no recognizable transactions/.test(v.text), v.text);
   // H. two files with the same content in one batch
   n0 = txns().length;
   v = await pick([['f1.csv', H + '2026-10-25,BATCH ROW,-5.00\n'], ['f2.csv', H + '2026-10-25,BATCH ROW,-5.00\n2026-10-26,ONLY IN SECOND,-6.00\n']]);
@@ -777,7 +778,7 @@ const loan = id => txns().find(t => t.id === id);
   ok('T27 new transactions can be excluded before saving',/Importing 1: -\$0 in expenses, \+\$100 in income/.test(await page.textContent('#import-totals')),await page.textContent('#import-totals'));
   await page.click('#import-confirm-btn');await page.waitForTimeout(1200);
   ok('T27 only selected income saved with correct amount and date',db.transactions.some(t=>t.description==='Pay'&&t.type==='income'&&t.amount===100&&t.date==='2026-10-10')&&!db.transactions.some(t=>/Shop,/.test(t.description)),'selection or direction failed');
-  await page.selectOption('#import-account-type','card');
+  await page.selectOption('#import-account-type','card',{force:true});
   await page.selectOption('#import-card-format','card-negative');
   await pick([['card-negative.csv','Date,Description,Amount\n2026-10-09,Card purchase,-12\n2026-10-10,Card payment,50\n']],'card-negative');
   ok('T27 negative card purchase convention excludes positive card payment',/Importing 1: -\$12/.test(await page.textContent('#import-totals')) && /1 card payment or credit row/.test(await page.textContent('#import-preview')),await page.textContent('#import-preview'));

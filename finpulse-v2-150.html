@@ -3618,7 +3618,7 @@ function fpPrioritySnapshot(asOf, opts) {
   cannotCalculate.push({ code: 'bank_balance', text: 'Your live bank balance. Only the balance you entered, with its date, is available.' });
   cannotCalculate.push({ code: 'future_spending', text: 'Future everyday spending that is not yet on the calendar.' });
   cannotCalculate.push({ code: 'essential_status', text: 'Which obligations are essential. FinPulse does not store that.' });
-  if (loansAll.some(function(l) { return /credit card/i.test(l.category || l.lender || ''); })) cannotCalculate.push({ code: 'card_statement', text: 'Credit card statement balances and separate card due dates.' });
+  if (loansAll.some(function(l) { return /credit card/i.test(l.category || l.lender || ''); })) cannotCalculate.push({ code: 'card_statement', text: 'Changes after your latest confirmed card balance, including new purchases, interest and payments.' });
 
   // --- cash available for anything optional (extra debt payments, savings): every check must pass, see the safety model above
   const blockers = [];
@@ -6300,7 +6300,7 @@ async function fpReadStatementPDF(file) {
   try{doc=await task.promise;if(doc.numPages>80)throw Error('Choose a statement with 80 pages or fewer.');const pages=[];
     for(let i=1;i<=doc.numPages;i++){const page=await doc.getPage(i),content=await page.getTextContent();const groups=[];content.items.forEach(item=>{if(!item.str)return;const y=item.transform[5],x=item.transform[4];let line=groups.find(g=>Math.abs(g.y-y)<2);if(!line){line={y,items:[]};groups.push(line);}line.items.push({text:item.str,x,width:item.width||0});});groups.sort((a,b)=>b.y-a.y);pages.push(groups.map(g=>{g.items.sort((a,b)=>a.x-b.x);return {text:g.items.map(t=>t.text).join(' '),items:g.items};}));}
     const text=pages.flat().map(l=>l.text).join('\n');if(text.trim().length<50)throw Error('This PDF is a scan with no readable text. Upload its CSV export instead.');return {text,pages,format:'pdf',identity:fpStatementIdentity(text,file.name),card:fpStatementCardDetails(text,file.name)};
-  }catch(e){if(e.name==='PasswordException')throw Error('This PDF is password protected. Upload an unlocked copy or a CSV export.');throw e;}finally{if(doc)await doc.destroy();else await task.destroy();}
+  }catch(e){if(e.name==='PasswordException')throw Error('This PDF is password protected. Upload an unlocked copy or a CSV export.');throw e;}finally{await task.destroy();}
 }
 function fpParseStatementPDF(file,kind) {
   const rows=[], result={rows,unreadable:0,cardCredits:0};const end=file.card.asOf;
@@ -6391,10 +6391,10 @@ function fpStartDetectedCardReview(imported) {
   if(!currentUser)return;
   const latest=new Map();_fpDetectedCards.forEach(card=>{const key=card.sourceAccount+(!card.last4?'|'+card.fileName:'');const old=latest.get(key);if(!old||(card.asOf||'')>(old.asOf||''))latest.set(key,card);});
   _fpCardReview=Array.from(latest.values()).filter(card=>{
-    const existing=transactions.find(t=>t.type==='loan'&&(fpImportDesc(t.description)===fpImportDesc(card.name)||(card.last4&&String(t.description).includes('ending '+card.last4))));
+    const existing=transactions.find(t=>t.type==='loan'&&(String(t.lender||'').includes('| account:'+card.sourceAccount+' |')||fpImportDesc(t.description)===fpImportDesc(card.name)||(card.last4&&card.issuer&&String(t.description).includes('ending '+card.last4)&&fpImportDesc(t.description).includes(fpImportDesc(card.issuer)))));
     if(!existing)return true;
     const stamp=String(existing.lender||'').match(/\| statement:(\d{4}-\d{2}-\d{2})/);
-    if(card.balance===null||(stamp&&(!card.asOf||card.asOf<=stamp[1]))||Number(existing.balance)===card.balance)return false;
+    if(card.balance===null||(stamp&&(!card.asOf||card.asOf<=stamp[1]))||(!stamp&&Number(existing.balance)===card.balance))return false;
     card.existingId=existing.id;card.name=existing.description;
     if(card.minimum===null)card.minimum=Number(existing.min_payment)||null;
     if(card.apr===null&&fpLoanRateKnown(existing))card.apr=Number(existing.apr);
@@ -6421,7 +6421,7 @@ async function fpConfirmDetectedCard() {
   const card=_fpCardReview[0];
   if(transactions.some(t=>t.type==='loan'&&String(t.id)!==String(card.existingId)&&fpImportDesc(t.description)===fpImportDesc(name))){showToast('This card is already in Loans. Review it there.','error');return;}
   const uid=currentUser.id;_fpCardSaving=true;document.querySelectorAll('#import-preview input, #import-preview button, #import-close-btn').forEach(el=>el.disabled=true);
-  const record={type:'loan',description:name,amount:balance>0?minimum:0,min_payment:balance>0?minimum:0,original_min_payment:balance>0?minimum:0,date:balance>0?date:fpIso(new Date()),anchor_date:balance>0?date:fpIso(new Date()),category:'Credit Card',lender:'Credit Card'+(card.asOf?' | statement:'+card.asOf:''),recurring:true,frequency:'monthly',balance,apr};
+  const record={type:'loan',description:name,amount:balance>0?minimum:0,min_payment:balance>0?minimum:0,original_min_payment:balance>0?minimum:0,date:balance>0?date:fpIso(new Date()),anchor_date:balance>0?date:fpIso(new Date()),category:'Credit Card',lender:'Credit Card | account:'+card.sourceAccount+' |'+(card.asOf?' statement:'+card.asOf:''),recurring:true,frequency:'monthly',balance,apr};
   let saved=false;try{saved=card.existingId?await fpUpdateTransaction(card.existingId,record):await saveTxn(Object.assign(record,{original_balance:balance}));}
   finally{_fpCardSaving=false;document.querySelectorAll('#import-preview input, #import-preview button, #import-close-btn').forEach(el=>el.disabled=false);}
   if(!saved||!currentUser||currentUser.id!==uid)return;_fpCardReview.shift();fpRenderDetectedCard();renderCalendar();updateStats();renderLoans();renderPriorityReport();showToast('Credit card added to Loans');
@@ -6436,7 +6436,7 @@ async function fpConfirmPaidOff() {
   if(!currentUser||!_fpPaidOffId||_fpMutationBusy)return;const date=document.getElementById('paid-off-date').value,loan=transactions.find(t=>String(t.id)===String(_fpPaidOffId)&&t.type==='loan');
   if(!loan)return;if(!parseImportDate(date)||date>fpIso(new Date())){showToast('Choose the date you paid it off, today or earlier.','error');return;}
   const uid=currentUser.id,id=loan.id,btn=document.getElementById('paid-off-save');btn.disabled=true;let saved=false;
-  try{saved=await fpUpdateTransaction(id,{balance:0,lender:(loan.category||'Credit Card')+' | paid_off:'+date});}finally{btn.disabled=false;}
+  try{saved=await fpUpdateTransaction(id,{balance:0,lender:String(loan.lender||loan.category||'Credit Card').replace(/\s*\| paid_off:\d{4}-\d{2}-\d{2}$/,'')+' | paid_off:'+date});}finally{btn.disabled=false;}
   if(!saved||!currentUser||currentUser.id!==uid)return;fpClosePaidOff();renderLoans();renderCalendar();updateStats();renderPriorityReport();showToast('Marked paid off');
 }
 function fpPaidOffDate(loan){const m=String(loan.lender||'').match(/\| paid_off:(\d{4}-\d{2}-\d{2})$/);return m&&parseImportDate(m[1])?m[1]:null;}
