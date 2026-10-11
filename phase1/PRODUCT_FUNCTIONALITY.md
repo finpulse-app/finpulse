@@ -13,6 +13,8 @@ security configuration and public launch setup are deferred at the user's reques
   obligation. Both shortcuts use today's actual date even after browsing another
   calendar month; selecting a specific day retains that date. Category changes
   preserve both the typed description and amount.
+- Quick entry includes an editable date. Changing it keeps the draft, category
+  and repeat choice and starts the saved recurring obligation on that date.
 - Goal deadlines show the monthly amount needed and the number of deposits,
   assuming the first deposit is one month from today with month-end clamping.
   A shortcut prepares that monthly amount in the editor; saving remains explicit.

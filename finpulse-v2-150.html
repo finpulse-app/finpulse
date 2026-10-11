@@ -969,6 +969,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <div class="bs-date" id="bs-date">Today</div>
       <button class="bs-close" onclick="closeBottomSheet()">&#10005;</button>
     </div>
+    <div class="form-group" style="margin:0 24px 12px;"><label class="form-label" for="bs-entry-date">Date</label><input class="form-input" id="bs-entry-date" type="date" onchange="bsChangeDate()"></div>
     <div class="bs-body" id="bs-body"></div>
   </div>
 </div>
@@ -4226,6 +4227,7 @@ function openBottomSheet(day,kind='expense') {
   const sheet = document.getElementById('bottom-sheet');
   const dateEl = document.getElementById('bs-date');
   if (!sheet) return;
+  document.getElementById('bs-entry-date').value=fpIso(new Date(currentYear,currentMonth,day,12));
 
   if (day) {
     const d = new Date(currentYear, currentMonth, day);
@@ -4242,6 +4244,19 @@ function openBottomSheet(day,kind='expense') {
     const inp = document.getElementById('bs-ai-input');
     if (inp) inp.focus();
   }, 100);
+}
+
+function bsChangeDate() {
+  const input=document.getElementById('bs-entry-date'),previous=fpIso(new Date(currentYear,currentMonth,bsSelectedDay,12));
+  const date=fpParseIso(input.value);
+  if(_fpMutationBusy||!date||fpIso(date)!==input.value){input.value=previous;if(!_fpMutationBusy)showToast('Choose a valid date.', 'error');return;}
+  const text=document.getElementById('bs-ai-input'),amount=document.getElementById('bs-cat-amount');
+  const draftText=text?text.value:'',draftAmount=amount?amount.value:'';
+  currentYear=date.getFullYear();currentMonth=date.getMonth();bsSelectedDay=date.getDate();selectedDay=bsSelectedDay;
+  document.getElementById('bs-date').textContent=date.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  renderCalendar();renderBottomSheetBody();
+  const nextText=document.getElementById('bs-ai-input'),nextAmount=document.getElementById('bs-cat-amount');
+  if(nextText)nextText.value=draftText;if(nextAmount)nextAmount.value=draftAmount;
 }
 
 function closeBottomSheet() {

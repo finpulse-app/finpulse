@@ -984,6 +984,11 @@ const loan = id => txns().find(t => t.id === id);
   ok('T44 selecting a calendar day retains its explicit historical date',db.transactions.some(t=>t.description==='Home'&&t.date==='2025-01-15'&&t.amount===4.25),'explicit calendar date was replaced');
   await page.evaluate(()=>closeBottomSheet());
 
+  seed();await load();await page.evaluate(()=>{showView('bills',null);openDayPanel(null,'bill')});await page.fill('#bs-ai-input','Rent $1,200');await page.fill('#bs-entry-date','2026-11-03');await page.locator('#bs-ai-input').click();
+  ok('T45 changing the entry date preserves the text and repeating choice',await page.inputValue('#bs-ai-input')==='Rent $1,200'&&await page.evaluate(()=>bsRecurring&&currentMonth===10&&bsSelectedDay===3),'date change erased draft');
+  await page.click('#bs-ai-send-btn');await page.waitForTimeout(300);
+  ok('T45 recurring bill starts on the chosen date across a month boundary',db.transactions.some(t=>t.description==='Rent'&&t.type==='bill'&&t.date==='2026-11-03'&&t.anchor_date==='2026-11-03'),'wrong recurring date');await page.evaluate(()=>closeBottomSheet());
+
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {
     await page.evaluate(v=>showView(v,null),view);
