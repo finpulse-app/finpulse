@@ -651,7 +651,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
           <h2>Expenses</h2>
           <p>All your spending, organized.</p>
         </div>
-        <button class="btn btn-solid" onclick="showView('calendar',null);openBottomSheet(null);bsRecurring=true;renderBottomSheetBody();">+ Add Expense</button>
+        <button class="btn btn-solid" onclick="showView('calendar',null);openBottomSheet(null);">+ Add Expense</button>
       </div>
 
       <!-- Fixed vs Variable explainer -->
@@ -4210,13 +4210,16 @@ let bsSelectedDay = null;
 let bsSelectedCat = null;
 let bsPendingTxn = null; // AI-parsed pending confirmation
 let bsRecurring = false;
+let bsEntryKind = "expense";
 let bsFrequency = "monthly"; // whether the next save should be a recurring monthly charge
 
-function openBottomSheet(day) {
+function openBottomSheet(day,kind='expense') {
+  if(day==null){const today=new Date();currentYear=today.getFullYear();currentMonth=today.getMonth();day=today.getDate();}
+  bsEntryKind=kind==='bill'?'bill':'expense';
   bsSelectedDay = day;
   bsSelectedCat = null;
   bsPendingTxn = null;
-  bsRecurring = false;bsFrequency="monthly";
+  bsRecurring = bsEntryKind==='bill';bsFrequency="monthly";
   selectedDay = day;
   renderCalendar();
 
@@ -4254,7 +4257,7 @@ function closeBottomSheet() {
 }
 
 // Keep old names as aliases so nothing else breaks
-function openDayPanel(day, forceTab) { openBottomSheet(day); }
+function openDayPanel(day, forceTab) { openBottomSheet(day,forceTab==='bill'?'bill':'expense'); }
 function closePanel() { closeBottomSheet(); }
 function switchTab(tab) { activeTab = tab; }
 
@@ -4364,9 +4367,13 @@ function bsToggleRecurring() {
 }
 
 function bsSelectCat(catId) {
+  const text=document.getElementById('bs-ai-input'),amount=document.getElementById('bs-cat-amount');
+  const draftText=text?text.value:'',draftAmount=amount?amount.value:'';
   bsSelectedCat = catId;
   bsPendingTxn = null;
   renderBottomSheetBody();
+  const nextText=document.getElementById('bs-ai-input'),nextAmount=document.getElementById('bs-cat-amount');
+  if(nextText)nextText.value=draftText;if(nextAmount)nextAmount.value=draftAmount;
 }
 
 function bsClearPending() {
@@ -4453,7 +4460,7 @@ async function bsAiSubmit() {
   const dateStr = currentYear + '-' + String(currentMonth+1).padStart(2,'0') + '-' + String(Math.min(day, daysInMonth)).padStart(2,'0');
 
   const txnObj = {
-    type: 'expense',
+    type: bsRecurring && bsEntryKind==='bill' ? 'bill' : 'expense',
     description: description,
     amount: amount,
     date: dateStr,
@@ -4473,7 +4480,7 @@ async function bsAiSubmit() {
     if (!await saveTxn(txnObj)) return;
     inp.value = '';
     showToast(description + (bsRecurring ? ' · $' + fmt(amount) + ' '+bsFrequency+' added' : ' · $' + fmt(amount) + ' added'));
-    bsRecurring = false;bsFrequency="monthly";
+    bsRecurring = bsEntryKind==='bill';bsFrequency="monthly";
     renderBottomSheetBody();
   }
 }
@@ -4519,7 +4526,7 @@ async function bsCatSave() {
   const desc = cats[savedCat] || 'Expense';
 
   const txnObj = {
-    type: 'expense',
+    type: bsRecurring && bsEntryKind==='bill' ? 'bill' : 'expense',
     description: desc,
     amount: amt,
     date: dateStr,
@@ -4536,7 +4543,7 @@ async function bsCatSave() {
     bsSelectedCat = null;
     if (amtEl) amtEl.value = '';
     showToast(desc + (bsRecurring ? ' · $' + fmt(amt) + ' '+bsFrequency+' added' : ' · $' + fmt(amt) + ' added'));
-    bsRecurring = false;bsFrequency="monthly";
+    bsRecurring = bsEntryKind==='bill';bsFrequency="monthly";
     renderBottomSheetBody();
   }
 }

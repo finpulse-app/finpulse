@@ -970,6 +970,20 @@ const loan = id => txns().find(t => t.id === id);
   ok('T43 invalid precision keeps entry text and creates no record',db.transactions.length===beforeInvalid&&await page.inputValue('#bs-ai-input')==='Coffee $6.555','invalid amount saved');
   await page.evaluate(()=>closeBottomSheet());
 
+  seed();await load();await page.evaluate(()=>{currentYear=2025;currentMonth=0;showView('expenses',null)});await page.click('button:has-text("+ Add Expense")');
+  ok('T44 add expense defaults to one-time today in the current month',await page.evaluate(()=>currentYear===2026&&currentMonth===9&&bsSelectedDay===8&&!bsRecurring),'wrong date or repeating default');
+  await page.fill('#bs-ai-input','Coffee $6');await page.click('#bs-ai-send-btn');await page.waitForTimeout(300);
+  ok('T44 ordinary expense is saved once on today rather than the browsed month',db.transactions.some(t=>t.description==='Coffee'&&t.date==='2026-10-08'&&!t.recurring),'wrong expense date or repeat');
+  await page.evaluate(()=>{closeBottomSheet();showView('bills',null)});await page.click('button:has-text("+ Add Bill")');
+  ok('T44 add bill starts with a visible monthly repeat',await page.evaluate(()=>bsRecurring&&bsEntryKind==='bill')&&await page.isVisible('#bs-frequency'),'bill default ignored');
+  await page.fill('#bs-ai-input','Rent $1,200');await page.click('#bs-ai-send-btn');await page.waitForTimeout(300);
+  ok('T44 bill entry saves an obligation with its monthly anchor',db.transactions.some(t=>t.description==='Rent'&&t.type==='bill'&&t.recurring&&t.frequency==='monthly'&&t.anchor_date==='2026-10-08'),'bill was saved as everyday spending');
+  await page.evaluate(()=>{closeBottomSheet();currentYear=2025;currentMonth=0;openBottomSheet(15)});await page.fill('#bs-ai-input','Tape $4');await page.evaluate(()=>bsSelectCat('shopping'));await page.fill('#bs-cat-amount','4.25');await page.evaluate(()=>bsSelectCat('home'));
+  ok('T44 category changes keep both amount and typed description',await page.inputValue('#bs-cat-amount')==='4.25'&&await page.inputValue('#bs-ai-input')==='Tape $4','draft erased');
+  await page.click('.bs-save-btn');await page.waitForTimeout(300);
+  ok('T44 selecting a calendar day retains its explicit historical date',db.transactions.some(t=>t.description==='Home'&&t.date==='2025-01-15'&&t.amount===4.25),'explicit calendar date was replaced');
+  await page.evaluate(()=>closeBottomSheet());
+
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {
     await page.evaluate(v=>showView(v,null),view);
