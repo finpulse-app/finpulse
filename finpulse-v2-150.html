@@ -4721,7 +4721,7 @@ async function saveLoanEdit() {
   if (!desc || balance === null || payment === null || (apr !== null && (!/^\d+(?:\.\d+)?$/.test(aprText) || !Number.isFinite(apr) || apr < 0 || apr >= 1e6))) { showToast('Check the loan name, balance, rate and payment. Use dollars and cents for money.','error'); return; }
   const date=document.getElementById('le-date').value;
   if(!fpParseIso(date)||fpIso(fpParseIso(date))!==date){showToast('Choose a valid monthly due date.','error');return;}
-  if (!await fpUpdateTransaction(_loanEditId, { description: desc, balance, apr, min_payment: payment, amount: payment, date, anchor_date:date })) return;
+  if (!await fpUpdateTransaction(_loanEditId, { description: desc, balance, apr, min_payment: payment, amount: payment, original_min_payment:payment, date, anchor_date:date })) return;
   document.getElementById('loan-edit-overlay').style.display = 'none';
   _loanEditId = null;
   showToast('Loan updated');
