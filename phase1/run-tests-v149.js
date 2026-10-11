@@ -666,7 +666,7 @@ t('v149-M7 the rollover AI reply is written with textContent, never inserted as 
 t('v149-L5 the AI phrase never says "Payday in null days"', () => /nextPayDays != null && nextPayDays >= 0/.test(grab('updateBrAiPhrase')) || 'bad');
 t('v149-L3 skip-purchase messages describe a choice without claiming bank savings', () => { const a = grab('rippleSaveInstead'), b = grab('rippleStillBuy'), c = grab('fpRecordSkippedPurchase'); return (/fpRecordSkippedPurchase/.test(a) && /purchase skipped/.test(c) && /bank balance is unchanged/.test(c) && !/money saved/i.test(c) && /recorded/.test(b) && !/ saved'\)/.test(b)) || 'bad'; });
 t('v149-L3 quick-add toasts say an expense was "added", never "$X saved" (which reads like savings)', () => !/fmt\([^()]*(\([^()]*\))?[^()]*\) \+ ' saved'/.test(src) && (src.match(/\$' \+ fmt\(amount\) \+ ' added'/g) || []).length >= 1 || (src.match(/fmt\([^()]*(\([^()]*\))?[^()]*\) \+ ' saved'/) || ['?'])[0]);
-t('v149-L4 the history card no longer calls the projected month-end the "current balance"', () => !/current balance, updates as you spend/.test(html) && /projected month-end from your calendar/.test(html) || 'bad');
+t('v149-L4 the history card identifies every plotted balance as a calendar estimate', () => !/current balance, updates as you spend/.test(html) && /This month-end estimate\. Every point is calculated from your saved calendar\./.test(html) || 'bad');
 
 // ---- H8 / M6: calendar start numbers come from the dated balance, also after a month change ---------------------
 const H8TX = () => [bill('gym', 'Gym', 300, '2026-09-10'), bill('ph', 'Phone', 50, '2026-09-28')];

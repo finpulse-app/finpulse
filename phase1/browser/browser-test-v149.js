@@ -1074,6 +1074,17 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>showView('dreams',null));
   ok('T36 calculator cost controls fit a narrow screen',await page.evaluate(()=>document.getElementById('d-amt-input').getBoundingClientRect().right<=window.innerWidth&&document.getElementById('d-amt-input').getBoundingClientRect().left>=0),'cost control clipped');
   await page.setViewportSize({width:1280,height:900});
+
+  // Story keeps recorded history separate from whole-month calendar estimates.
+  seed();db.transactions=[{id:'story-income',user_id:'user-A',type:'income',description:'Recorded pay',amount:200,date:'2026-09-10',recurring:false},{id:'story-spend',user_id:'user-A',type:'expense',description:'Groceries',amount:50,date:'2026-09-12',category:'food',recurring:false},{id:'story-bill',user_id:'user-A',type:'bill',description:'Service',amount:100,date:'2026-09-12',anchor_date:'2026-09-12',recurring:true,frequency:'monthly'},{id:'story-future',user_id:'user-A',type:'expense',description:'Upcoming spending',amount:30,date:'2026-10-20',recurring:false}];
+  db.user_settings[0]={...db.user_settings[0],starting_balance:500,payday:'2026-09-01',pay_frequency:'monthly',pay_amount:1000,month_balances_json:JSON.stringify({__dated_balance:{v:2,amount:500,asOf:'2026-10-08',monthStart:500,paycheck:null}})};
+  await load();await hideStage();const storyBefore=JSON.stringify(db);await page.getByRole('button',{name:'Your Story',exact:true}).click();
+  const storyCards=page.locator('#history-month-row article');
+  ok('T49 past story shows recorded 200 in, 50 out and 150 net instead of a changed bank balance',/RECORDED ONLY/.test(await storyCards.nth(0).innerText()) && /\+\$200/.test(await storyCards.nth(0).innerText()) && /−\$50/.test(await storyCards.nth(0).innerText()) && /In minus out \$150/.test(await storyCards.nth(0).innerText()),await storyCards.nth(0).innerText());
+  ok('T49 current story uses full-calendar 1000 in, 130 out and 870 net with explicit estimated balance',/MONTH-END ESTIMATE/.test(await storyCards.nth(1).innerText()) && /\+\$1,000/.test(await storyCards.nth(1).innerText()) && /−\$130/.test(await storyCards.nth(1).innerText()) && /In minus out \$870/.test(await storyCards.nth(1).innerText()) && /Month-end estimate/.test(await storyCards.nth(1).innerText()),await storyCards.nth(1).innerText());
+  ok('T49 story labels every plotted balance as a calendar estimate and does not claim earnings or a real trend',/Every point is calculated/.test(await page.innerText('#history-trend-label')) && !/trending|\/mo|Now|net gained|net lost/.test(await page.innerText('#view-history')) && /stroke-dasharray/.test(await page.locator('#history-pulse-svg').innerHTML()) && /Recorded income and spending/.test(await page.innerText('#history-list')) && JSON.stringify(db)===storyBefore,await page.innerText('#view-history'));
+  seed();await load();await hideStage();await page.getByRole('button',{name:'Your Story',exact:true}).click();
+  ok('T49 recurring schedules alone do not invent past income or spending records',/No income or spending records/.test(await storyCards.nth(0).innerText()) && /will appear here/.test(await page.innerText('#history-list')),'empty history claimed recorded cash');
   const offline=await browser.newContext();
   await offline.route('**/cdn.jsdelivr.net/**',r=>r.fulfill({contentType:'application/javascript',body:''}));
   await offline.route(/fonts\.(googleapis|gstatic)\.com|cdnjs|chart/,r=>r.fulfill({contentType:'text/css',body:''}));

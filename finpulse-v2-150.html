@@ -530,12 +530,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
         <div><h2>Your Story</h2><p>Every dollar you spend, playing out over time.</p></div>
       </div>
       <!-- 3-card month row -->
+      <p class="goal-note" style="margin-bottom:16px;">Past totals use your recorded income and expenses. Current and future months use the full saved calendar, including scheduled bills and paychecks. Estimates are not confirmed bank balances. Updating a balance does not count as income or savings.</p>
       <div id="history-month-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;"></div>
       <!-- Pulse line -->
       <div id="history-pulse" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px;box-shadow:var(--shadow);margin-bottom:20px;display:none;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
           <div>
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text3);margin-bottom:4px;">Balance Trend</div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text3);margin-bottom:4px;">Calendar balance estimates</div>
             <div style="font-family:'DM Serif Display',serif;font-size:26px;" id="history-trend-num">—</div>
           </div>
           <div style="font-size:12px;color:var(--text3);text-align:right;margin-top:4px;" id="history-trend-label"></div>
@@ -6775,319 +6776,51 @@ async function saveItem(item, catId, key) {
 
 
 // ── HISTORY VIEW ───────────────────────────────────────────────
+// Recorded history and calendar estimates use separate totals. A changed bank
+// balance is never counted as earned income or savings.
+function fpHistoryMonth(yr,mo,asOf) {
+  const first=fpIso(new Date(yr,mo,1,12)),last=fpIso(new Date(yr,mo+1,0,12)),today=fpIso(asOf);
+  const map=buildDayMap(yr,mo),startBal=getStartingBalanceForMonth(yr,mo),lastDay=new Date(yr,mo+1,0).getDate();
+  let calendarIn=0,calendarOut=0;
+  Object.values(map).forEach(function(day){day.income.forEach(function(t){calendarIn+=Number(t.amount)||0;});day.expenses.concat(day.bills,day.loans).forEach(function(t){calendarOut+=fpAmountDue(t);});});
+  const recorded=transactions.filter(function(t){return !t.recurring && ['income','expense'].includes(t.type) && t.date>=first && t.date<=last && t.date<=today;});
+  let recordedIn=0,recordedOut=0;const byCat={};
+  recorded.forEach(function(t){const amount=Number(t.amount)||0;if(t.type==='income')recordedIn+=amount;else{recordedOut+=amount;const cat=t.category||'other';byCat[cat]=(byCat[cat]||0)+amount;}});
+  const key=first.slice(0,7),anchor=monthBalances.__dated_balance;
+  const hasHistory=transactions.some(function(t){return t.type!=='note' && t.date>=first && t.date<=last;}) || fpStoredMonthBalance(key)!==null || !!(anchor && String(anchor.asOf||'').slice(0,7)===key);
+  const label=new Date(yr,mo,1).toLocaleDateString('en-US',{month:'long',year:'numeric'}),shortLabel=new Date(yr,mo,1).toLocaleDateString('en-US',{month:'short',year:'2-digit'});
+  return {yr,mo,label,shortLabel,startBal,endBal:map[lastDay]?map[lastDay].balance:startBal,calendarIn:fpRound2(calendarIn),calendarOut:fpRound2(calendarOut),calendarNet:fpRound2(calendarIn-calendarOut),recordedIn:fpRound2(recordedIn),recordedOut:fpRound2(recordedOut),recordedNet:fpRound2(recordedIn-recordedOut),hasRecords:recorded.length>0,hasHistory,topCat:Object.entries(byCat).sort(function(a,b){return b[1]-a[1];})[0]||null};
+}
 function renderHistory() {
-  const today = new Date();
-  const curYr = today.getFullYear();
-  const curMo = today.getMonth();
-
-  // ── Helper: build one month's data snapshot ──────────────────
-  function monthSnapshot(yr, mo) {
-    const dayMap = buildDayMap(yr, mo);
-    const daysInMonth = new Date(yr, mo + 1, 0).getDate();
-    const startBal = getStartingBalanceForMonth(yr, mo);
-    const endBal = dayMap[daysInMonth] ? dayMap[daysInMonth].balance : startBal;
-    // Only actual DB transactions dated in this month
-    const monthTxns = transactions.filter(function(t) {
-      const d = new Date(t.date + 'T12:00:00');
-      return d.getFullYear() === yr && d.getMonth() === mo && t.type !== 'note';
-    });
-    // hasRealData: user has at least one actual transaction recorded this month
-    const hasRealData = monthTxns.length > 0;
-    // topCat: only from actual one-time expenses (no recurring projections)
-    const byCat = {};
-    monthTxns.filter(function(t) {
-      return (t.type === 'expense' || t.type === 'bill') && !t.recurring;
-    }).forEach(function(t) {
-      const cat = t.category || 'other';
-      byCat[cat] = (byCat[cat] || 0) + parseFloat(t.amount);
-    });
-    const topCat = Object.entries(byCat).sort(function(a,b){ return b[1]-a[1]; })[0] || null;
-    // totalOut: actual recorded expenses for past/current months,
-    // dayMap-derived for future months (captures recurring projections)
-    const today2 = new Date();
-    const isCurrentMonth = yr === today2.getFullYear() && mo === today2.getMonth();
-    const isFutureMonth = yr > today2.getFullYear() || (yr === today2.getFullYear() && mo > today2.getMonth());
-
-    let totalOut, totalIn;
-    if (isFutureMonth) {
-      // For projected months: sum income and expenses from dayMap (recurring items included)
-      let projIn = 0, projOut = 0;
-      for (let d = 1; d <= daysInMonth; d++) {
-        const dm = dayMap[d];
-        if (!dm) continue;
-        dm.income.forEach(function(i) { projIn += parseFloat(i.amount); });
-        dm.expenses.forEach(function(e) { projOut += parseFloat(e.amount); });
-        dm.bills.forEach(function(b) { projOut += parseFloat(b.amount); });
-        dm.loans.forEach(function(l) { projOut += parseFloat(l.min_payment || l.amount); });
-      }
-      totalIn = projIn;
-      totalOut = projOut;
-    } else {
-      // Past/current months: only actually recorded transactions
-      totalOut = monthTxns.filter(function(t) {
-        return t.type === 'expense' || t.type === 'bill';
-      }).reduce(function(s,t){ return s + parseFloat(t.amount); }, 0);
-      totalIn = monthTxns.filter(function(t){ return t.type === 'income'; })
-        .reduce(function(s,t){ return s + parseFloat(t.amount); }, 0)
-        + (isCurrentMonth ? getPayDatesForMonth(yr, mo).length * (userSettings.payAmount || 0) : 0);
-    }
-    const netFlow = endBal - startBal;
-    const label = new Date(yr, mo, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
-    const shortLabel = new Date(yr, mo, 1).toLocaleString('default', { month: 'short' });
-    return { yr, mo, startBal, endBal, netFlow, totalIn, totalOut, topCat, label, shortLabel, hasRealData };
+  const today=new Date(),yr=today.getFullYear(),mo=today.getMonth();
+  const previous=new Date(yr,mo-1,1),following=new Date(yr,mo+1,1);
+  const prev=fpHistoryMonth(previous.getFullYear(),previous.getMonth(),today),curr=fpHistoryMonth(yr,mo,today),next=fpHistoryMonth(following.getFullYear(),following.getMonth(),today);
+  const money=function(n){return (n<0?'−':'')+'$'+fmt(n);};
+  function rows(income,out,net,end) {
+    return '<div style="display:grid;gap:6px;margin-top:12px;font-size:12px;"><div>Money in <strong>+$'+fmt(income)+'</strong></div><div>Money out <strong>−$'+fmt(out)+'</strong></div><div>In minus out <strong>'+money(net)+'</strong></div>'+(end===undefined?'':'<div>Month-end estimate <strong>'+money(end)+'</strong></div>')+'</div>';
   }
-
-  // Build month references: prev, current, next
-  const prevMo = curMo === 0 ? 11 : curMo - 1;
-  const prevYr = curMo === 0 ? curYr - 1 : curYr;
-  const nextMo = curMo === 11 ? 0 : curMo + 1;
-  const nextYr = curMo === 11 ? curYr + 1 : curYr;
-
-  const prev = monthSnapshot(prevYr, prevMo);
-  const curr = monthSnapshot(curYr, curMo);
-  const next = monthSnapshot(nextYr, nextMo); // projected
-
-  // vs last month delta for current card
-  const vsLastMonth = curr.netFlow - prev.netFlow;
-  const vsPositive = vsLastMonth >= 0;
-
-  const catEmoji = { streaming:'📺', music:'🎵', food:'🍽', health:'💊', transport:'🚗', home:'🏠', shopping:'🛍', personal:'✂️', pets:'🐾', loan_payment:'🏦', other:'💳' };
-
-  function miniCard(snap, role) {
-    // role: 'past' | 'current' | 'next'
-    const isPast = role === 'past';
-    const isCurr = role === 'current';
-    const isNext = role === 'next';
-    const positive = snap.netFlow >= 0;
-
-    const borderStyle = isCurr
-      ? '2px solid var(--accent)'
-      : isNext
-        ? '1.5px dashed var(--border2)'
-        : '1px solid var(--border)';
-    const opacity = isPast ? '0.55' : '1';
-    const bgStyle = isCurr ? 'var(--surface)' : 'var(--surface)';
-
-    const netColor = positive ? 'var(--accent)' : 'var(--danger)';
-    const netSign = positive ? '+' : '\u2212';
-    const textOpacity = isNext ? '0.65' : '1';
-
-    let badge = '';
-    if (isCurr) badge = '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);margin-bottom:6px;">Current</div>';
-    if (isPast) badge = '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:6px;">Last month</div>';
-    if (isNext) badge = '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:6px;">Projected</div>';
-
-    const vsLine = isCurr && prev
-      ? '<div style="font-size:11px;color:' + (vsPositive?'var(--accent)':'var(--danger)') + ';margin-top:4px;">'
-        + (vsPositive?'▲':'\u25bc') + ' $' + fmt(Math.abs(vsLastMonth)) + ' vs last month'
-        + '</div>'
-      : '';
-
-    // No topCat in mini cards, too noisy, inconsistent
-    const noDataMsg = (isPast && !snap.hasRealData)
-      ? '<div style="margin-top:10px;font-size:11px;color:var(--text3);font-style:italic;">No data for this month</div>'
-      : '';
-
-    return '<div style="background:' + bgStyle + ';border:' + borderStyle + ';border-radius:var(--radius);padding:16px 18px;opacity:' + opacity + ';box-shadow:var(--shadow);position:relative;">'
-      + (isCurr ? '<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:2px 10px;border-radius:0 0 6px 6px;">Live</div>' : '')
-      + badge
-      + '<div style="font-family:\'Playfair Display\',serif;font-size:15px;font-weight:600;color:var(--text);margin-bottom:10px;opacity:' + textOpacity + ';">' + snap.label + '</div>'
-      + ((!isPast || snap.hasRealData) ? '<div style="font-family:\'DM Serif Display\',serif;font-size:26px;color:' + netColor + ';opacity:' + textOpacity + ';">' + netSign + '$' + fmt(Math.abs(snap.netFlow)) + '</div>' + vsLine
-        + '<div style="margin-top:10px;display:flex;flex-direction:column;gap:4px;opacity:' + textOpacity + ';">'
-        + '<div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text3);">In</span><span style="color:var(--accent);font-weight:600;">+$' + fmt(snap.totalIn) + '</span></div>'
-        + '<div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text3);">Out</span><span style="color:var(--danger);font-weight:600;">\u2212$' + fmt(snap.totalOut) + '</span></div>'
-        + '<div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text3);">Ended</span><span style="color:' + (snap.endBal>=0?'var(--text)':'var(--danger)') + ';font-weight:600;">' + (snap.endBal<0?'\u2212':'') + '$' + fmt(Math.abs(snap.endBal)) + '</span></div>'
-        + '</div>'
-        : noDataMsg)
-      + '</div>';
+  function card(snap,recorded) {
+    return '<article class="card"><div class="card-body"><div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:8px;">'+(recorded?'LAST MONTH · RECORDED ONLY':'MONTH-END ESTIMATE')+'</div><h3 style="font-size:16px;">'+snap.label+'</h3>'+(recorded?(snap.hasRecords?rows(snap.recordedIn,snap.recordedOut,snap.recordedNet):'<p class="goal-note" style="margin-top:12px;">No income or spending records for this month yet.</p>'):rows(snap.calendarIn,snap.calendarOut,snap.calendarNet,snap.endBal))+'</div></article>';
   }
-
-  // Render 3-card row
-  const rowEl = document.getElementById('history-month-row');
-  if (rowEl) {
-    rowEl.innerHTML = miniCard(prev, 'past') + miniCard(curr, 'current') + miniCard(next, 'next');
+  const row=document.getElementById('history-month-row');if(row)row.innerHTML=card(prev,true)+card(curr,false)+card(next,false);
+  const past=[];
+  for(let i=1;i<=5;i++){const date=new Date(yr,mo-i,1);past.push(fpHistoryMonth(date.getFullYear(),date.getMonth(),today));}
+  const points=past.filter(function(s){return s.hasHistory;}).reverse().concat([curr,next]);
+  const pulse=document.getElementById('history-pulse'),svg=document.getElementById('history-pulse-svg');
+  if(pulse && svg){
+    pulse.style.display='block';
+    document.getElementById('history-trend-num').textContent=money(curr.endBal);
+    document.getElementById('history-trend-num').style.color=curr.endBal<0?'var(--danger)':'var(--accent)';
+    document.getElementById('history-trend-label').textContent='This month-end estimate. Every point is calculated from your saved calendar.';
+    const vals=points.map(function(p){return p.endBal;}),min=Math.min(...vals),range=Math.max(200,Math.max(...vals)-min),W=700,H=160;
+    const x=function(i){return 48+i/(points.length-1)*(W-96);},y=function(v){return 28+(1-(v-min)/range)*(H-56);};
+    let chart='<svg viewBox="0 0 700 160" role="img" aria-label="Calendar month-end balance estimates" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;"><polyline points="'+points.map(function(p,i){return x(i)+','+y(p.endBal);}).join(' ')+'" fill="none" stroke="#a8a49a" stroke-width="2" stroke-dasharray="5 4" />';
+    points.forEach(function(p,i){const px=x(i),py=y(p.endBal);chart+='<circle cx="'+px+'" cy="'+py+'" r="5" fill="white" stroke="#a8a49a" stroke-width="2"/><text x="'+px+'" y="'+(py<48?py+20:py-10)+'" text-anchor="middle" font-family="Inter,sans-serif" font-size="12" fill="'+(p.endBal<0?'#c0392b':'#1a6b4a')+'">'+money(p.endBal)+'</text><text x="'+px+'" y="156" text-anchor="middle" font-family="Inter,sans-serif" font-size="10">'+p.shortLabel+'</text>';});
+    svg.innerHTML=chart+'</svg>';
   }
-
-  // ── Pulse line SVG ───────────────────────────────────────────
-  // Build points: past months with real data (solid) + current (live) + next projected (dashed)
-  const solidPoints = []; // past months with real data
-  for (let i = 5; i >= 1; i--) {
-    let mo = curMo - i;
-    let yr = curYr;
-    if (mo < 0) { mo += 12; yr--; }
-    const snap = monthSnapshot(yr, mo);
-    if (snap.hasRealData) {
-      solidPoints.push({ label: snap.shortLabel, endBal: snap.endBal, projected: false });
-    }
-  }
-  // Current month (live, always included)
-  solidPoints.push({ label: 'Now', endBal: curr.endBal, projected: false, isLive: true });
-  // Next month projection (always included)
-  solidPoints.push({ label: next.shortLabel, endBal: next.endBal, projected: true });
-
-  const pulseEl = document.getElementById('history-pulse');
-  const svgEl = document.getElementById('history-pulse-svg');
-  const trendNumEl = document.getElementById('history-trend-num');
-  const trendLabelEl = document.getElementById('history-trend-label');
-
-  if (pulseEl && svgEl) {
-    pulseEl.style.display = 'block';
-
-    // Trend: based on solid (real) points only
-    const realBals = solidPoints.filter(function(p){ return !p.projected; }).map(function(p){ return p.endBal; });
-    const avgChange = realBals.length >= 2 ? (realBals[realBals.length-1] - realBals[0]) / Math.max(1, realBals.length - 1) : 0;
-    const trending = avgChange >= 0;
-    const isFirstMonth = realBals.length === 1; // only current month exists
-
-    if (trendNumEl) {
-      if (isFirstMonth) {
-        trendNumEl.textContent = (curr.endBal >= 0 ? '+' : '\u2212') + '$' + fmt(Math.abs(curr.endBal));
-        trendNumEl.style.color = curr.endBal >= 0 ? 'var(--accent)' : 'var(--danger)';
-      } else {
-        trendNumEl.textContent = (trending?'+':'\u2212') + '$' + fmt(Math.abs(Math.round(avgChange))) + '/mo';
-        trendNumEl.style.color = trending ? 'var(--accent)' : 'var(--danger)';
-      }
-    }
-    if (trendLabelEl) {
-      trendLabelEl.textContent = isFirstMonth
-        ? 'projected month-end from your calendar'
-        : trending
-          ? 'trending up over ' + (realBals.length - 1) + ' month' + (realBals.length - 1 === 1 ? '' : 's')
-          : 'trending down, focus on cash flow';
-    }
-
-    // Build SVG
-    const allPoints = solidPoints;
-    const allBals = allPoints.map(function(p){ return p.endBal; });
-    const W = 700, H = 160, PAD_X = 48, PAD_Y = 28;
-    const minBal = Math.min.apply(null, allBals);
-    const maxBal = Math.max.apply(null, allBals);
-    const range = Math.max(Math.abs(maxBal - minBal), 200); // min range so single point has room
-    const n = allPoints.length;
-
-    function px(i) { return PAD_X + (i / Math.max(n - 1, 1)) * (W - PAD_X * 2); }
-    function py(v) { return PAD_Y + (1 - (v - minBal) / range) * (H - PAD_Y * 2); }
-
-    const lineColor = trending ? '#1a6b4a' : '#b7791f';
-    const fillColor = trending ? 'rgba(26,107,74,0.07)' : 'rgba(183,121,31,0.07)';
-    const projColor = '#a8a49a'; // grey for projected
-
-    // Find the split index: last solid point before projected begins
-    const splitIdx = allPoints.findIndex(function(p){ return p.projected; }) - 1;
-    // splitIdx = index of the "Now" point = n - 2
-
-    let svgHtml = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">';
-
-    // Zero line if needed, labeled so new users understand it
-    if (minBal < 0 && maxBal > 0) {
-      const zeroY = py(0);
-      svgHtml += '<line x1="' + PAD_X + '" y1="' + zeroY + '" x2="' + (W-PAD_X) + '" y2="' + zeroY + '" stroke="#c0392b" stroke-width="1" stroke-dasharray="4 4" opacity="0.35" />';
-      // $0 label on left
-      svgHtml += '<text x="' + (PAD_X - 4) + '" y="' + (zeroY + 4) + '" text-anchor="end" font-family="Inter, sans-serif" font-size="10" font-weight="600" fill="#c0392b" opacity="0.6">$0</text>';
-      // "break even" label centered on the line, always in frame
-      svgHtml += '<rect x="' + (W/2 - 32) + '" y="' + (zeroY - 8) + '" width="64" height="14" rx="3" fill="#fff" opacity="0.85" />';
-      svgHtml += '<text x="' + (W/2) + '" y="' + (zeroY + 3) + '" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="600" fill="#c0392b" opacity="0.6">break even</text>';
-    }
-
-    // Solid fill under real segment (up to split)
-    if (splitIdx > 0) {
-      let solidPathD = 'M ' + px(0) + ' ' + py(allBals[0]);
-      for (let i = 1; i <= splitIdx; i++) {
-        const cpx = (px(i-1) + px(i)) / 2;
-        solidPathD += ' C ' + cpx + ' ' + py(allBals[i-1]) + ' ' + cpx + ' ' + py(allBals[i]) + ' ' + px(i) + ' ' + py(allBals[i]);
-      }
-      const solidFillD = solidPathD + ' L ' + px(splitIdx) + ' ' + (H-PAD_Y) + ' L ' + px(0) + ' ' + (H-PAD_Y) + ' Z';
-      svgHtml += '<path d="' + solidFillD + '" fill="' + fillColor + '" />';
-      svgHtml += '<path d="' + solidPathD + '" fill="none" stroke="' + lineColor + '" stroke-width="2.5" stroke-linecap="round" />';
-    }
-
-    // Dashed line from "Now" to projected next month
-    if (n >= 2) {
-      const liveIdx = n - 2; // "Now" point
-      const projIdx = n - 1; // projected point
-      svgHtml += '<line x1="' + px(liveIdx) + '" y1="' + py(allBals[liveIdx]) + '" x2="' + px(projIdx) + '" y2="' + py(allBals[projIdx]) + '" stroke="' + projColor + '" stroke-width="1.5" stroke-dasharray="5 4" />';
-    }
-
-    // Dots + labels for all points
-    for (let i = 0; i < n; i++) {
-      const x = px(i), y = py(allBals[i]);
-      const pt = allPoints[i];
-      const isLive = !!pt.isLive;
-      const isProj = !!pt.projected;
-      const dotColor = isProj ? projColor : (allBals[i] >= 0 ? lineColor : '#c0392b');
-      const labelAmt = (allBals[i] < 0 ? '\u2212' : '') + '$' + fmt(Math.abs(allBals[i]));
-      const labelY = y < PAD_Y + 20 ? y + 20 : y - 10;
-
-      if (isLive) {
-        // Pulsing live dot, three rings
-        svgHtml += '<circle cx="' + x + '" cy="' + y + '" r="12" fill="' + lineColor + '" opacity="0.1"><animate attributeName="r" values="8;14;8" dur="2.5s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.12;0.03;0.12" dur="2.5s" repeatCount="indefinite"/></circle>';
-        svgHtml += '<circle cx="' + x + '" cy="' + y + '" r="6" fill="' + lineColor + '" stroke="#fff" stroke-width="2.5" />';
-      } else if (isProj) {
-        // Outlined projected dot
-        svgHtml += '<circle cx="' + x + '" cy="' + y + '" r="5" fill="#fff" stroke="' + projColor + '" stroke-width="2" stroke-dasharray="3 2" />';
-      } else {
-        // Normal past dot
-        svgHtml += '<circle cx="' + x + '" cy="' + y + '" r="4" fill="' + dotColor + '" stroke="#fff" stroke-width="2" />';
-      }
-
-      // Amount label
-      svgHtml += '<text x="' + x + '" y="' + labelY + '" text-anchor="middle" font-family="DM Serif Display, serif" font-size="12" fill="' + dotColor + '">' + labelAmt + '</text>';
-      // Month label at bottom
-      const moLabelColor = isProj ? projColor : (isLive ? lineColor : 'var(--text3)');
-      const moLabelWeight = isLive ? 'bold' : 'normal';
-      svgHtml += '<text x="' + x + '" y="' + (H - 4) + '" text-anchor="middle" font-family="Inter, sans-serif" font-size="10" font-weight="' + moLabelWeight + '" fill="' + moLabelColor + '">' + pt.label + '</text>';
-    }
-
-    // Legend
-    svgHtml += '<text x="' + PAD_X + '" y="' + (H - 4) + '" text-anchor="start" font-family="Inter, sans-serif" font-size="9" fill="var(--text3)"></text>';
-    svgHtml += '</svg>';
-    svgEl.innerHTML = svgHtml;
-  }
-
-  // ── Past months journal ──────────────────────────────────────
-  const el = document.getElementById('history-list');
-  if (!el) return;
-
-  const pastMonths = [];
-  for (let i = 1; i <= 5; i++) {
-    let mo = curMo - i;
-    let yr = curYr;
-    if (mo < 0) { mo += 12; yr--; }
-    const snap = monthSnapshot(yr, mo);
-    if (snap.hasRealData) pastMonths.push(snap);
-  }
-
-  if (pastMonths.length === 0) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0;">No past months yet, your history will appear here once you\'ve used FinPulse for more than one month.</div>';
-    return;
-  }
-
-  const cards = pastMonths.map(function(snap) {
-    const positive = snap.netFlow >= 0;
-    return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;box-shadow:var(--shadow);">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
-      + '<div>'
-      + '<div style="font-family:\'Playfair Display\',serif;font-size:18px;font-weight:600;color:var(--text);">' + snap.label + '</div>'
-      + '<div style="font-size:11px;color:var(--text3);margin-top:2px;">Started at ' + (snap.startBal<0?'\u2212':'') + '$' + fmt(Math.abs(snap.startBal)) + '</div>'
-      + '</div>'
-      + '<div style="text-align:right;">'
-      + '<div style="font-family:\'DM Serif Display\',serif;font-size:24px;color:' + (positive?'var(--accent)':'var(--danger)') + ';">' + (positive?'+':'\u2212') + '$' + fmt(Math.abs(snap.netFlow)) + '</div>'
-      + '<div style="font-size:11px;color:var(--text3);margin-top:1px;">net ' + (positive?'gained':'lost') + '</div>'
-      + '</div>'
-      + '</div>'
-      + '<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:' + (snap.topCat?'10px':'0') + ';">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 13px;background:var(--surface2);border-radius:var(--radius-sm);"><span style="font-size:13px;color:var(--text2);">Money in</span><span style="font-family:\'DM Serif Display\',serif;font-size:16px;color:var(--accent);">+$' + fmt(snap.totalIn) + '</span></div>'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 13px;background:var(--surface2);border-radius:var(--radius-sm);"><span style="font-size:13px;color:var(--text2);">Money out</span><span style="font-family:\'DM Serif Display\',serif;font-size:16px;color:var(--danger);">\u2212$' + fmt(snap.totalOut) + '</span></div>'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 13px;background:var(--surface2);border-radius:var(--radius-sm);"><span style="font-size:13px;color:var(--text2);">Ended at</span><span style="font-family:\'DM Serif Display\',serif;font-size:16px;color:' + (snap.endBal>=0?'var(--text)':'var(--danger)') + ';">' + (snap.endBal<0?'\u2212':'') + '$' + fmt(Math.abs(snap.endBal)) + '</span></div>'
-      + '</div>'
-      + (snap.topCat ? '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 13px;border:1px solid var(--border);border-radius:var(--radius-sm);">'
-        + '<div style="display:flex;align-items:center;gap:7px;"><span style="font-size:15px;">' + (catEmoji[snap.topCat[0]]||'💳') + '</span><span style="font-size:12px;color:var(--text2);">Biggest: <strong style="color:var(--text);">' + snap.topCat[0].charAt(0).toUpperCase()+snap.topCat[0].slice(1) + '</strong></span></div>'
-        + '<span style="font-size:12px;font-weight:600;color:var(--text2);">$' + fmt(snap.topCat[1]) + '</span>'
-        + '</div>' : '')
-      + '</div>';
-  }).join('');
-
-  el.innerHTML = cards;
+  const list=document.getElementById('history-list');if(!list)return;
+  const records=past.filter(function(p){return p.hasRecords;});
+  list.innerHTML=records.length?records.map(function(p){return '<article class="card"><div class="card-body"><h3>'+p.label+'</h3><p class="goal-note">Recorded income and spending</p>'+rows(p.recordedIn,p.recordedOut,p.recordedNet)+(p.topCat?'<p class="goal-note" style="margin-top:12px;">Biggest recorded expense category: '+fpEscHtml(fpImportCategories()[p.topCat[0]]||p.topCat[0])+' · $'+fmt(p.topCat[1])+'</p>':'')+'</div></article>';}).join(''):'<p class="goal-note" style="padding:20px 0;">Your past income and spending records will appear here. Scheduled bills and paychecks are estimates until you record them.</p>';
 }
 
 // ── AI BREATHING ROOM PHRASES ──────────────────────────────────
