@@ -1089,12 +1089,20 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
     <div style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:18px;">Upload CSV exports from your bank or card (up to 20 files). Review transactions before saving. This does not connect to your bank.</div>
     <div class="form-group">
       <label class="form-label" for="import-account-type">This batch is from a</label>
-      <select class="form-select" id="import-account-type" onchange="cancelStatementImport()">
-        <option value="bank">Bank: expenses negative, income positive</option>
-        <option value="card">Card: purchases positive</option>
-        <option value="card-negative">Card: purchases negative</option>
+      <select class="form-select" id="import-account-type" onchange="changeStatementAccountType()">
+        <option value="bank">Bank account</option>
+        <option value="card">Credit card</option>
       </select>
-      <div style="font-size:11px;color:var(--text2);margin-top:6px;">Choose the sign used for purchases in your file. Separate Debit/Credit columns use their own direction. Card payments and credits are excluded; review the preview before importing.</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:6px;">Upload bank and credit card statements separately. You'll review everything before saving.</div>
+    </div>
+    <div class="form-group" id="import-card-format-group" style="display:none;">
+      <label class="form-label" for="import-card-format">How does a purchase appear in your CSV?</label>
+      <select class="form-select" id="import-card-format" onchange="cancelStatementImport()">
+        <option value="">Choose the example that matches your file</option>
+        <option value="card">$25.00</option>
+        <option value="card-negative">−$25.00 (with a minus sign)</option>
+      </select>
+      <div style="font-size:11px;color:var(--text2);margin-top:6px;">Check one purchase in your file. This helps us separate purchases from payments and refunds. If your file has separate Debit and Credit columns, either example works.</div>
     </div>
     <div class="form-group">
       <label class="form-label" for="import-csv-input">Upload statement CSVs</label>
@@ -6018,6 +6026,11 @@ async function saveStartingBalance() {
   showToast('Balance saved');
 }
 
+function changeStatementAccountType() {
+  if (_importSaving) return;
+  cancelStatementImport();
+  document.getElementById('import-card-format-group').style.display = document.getElementById('import-account-type').value === 'card' ? 'block' : 'none';
+}
 function openConnectAccounts() {
   if (_importSaving) return;
   _importReadVersion++;
@@ -6227,7 +6240,11 @@ async function handleStatementFiles(fileList) {
   if (!currentUser) return;
   const uid = currentUser.id, version = ++_importReadVersion;
   const active = function() { return currentUser && currentUser.id === uid && version === _importReadVersion; };
-  const accountType = document.getElementById('import-account-type').value;
+  let accountType = document.getElementById('import-account-type').value;
+  if (accountType === 'card') {
+    accountType = document.getElementById('import-card-format').value;
+    if (!accountType) { document.getElementById('import-csv-input').value = ''; showToast('Choose the purchase example that matches your CSV first.', 'error'); document.getElementById('import-card-format').focus(); return; }
+  }
   const allRows = [];
   const meta = { files: files.length, fileNames: files.map(function(f) { return f.name || 'file'; }), unreadable: 0, cardCredits: 0, emptyFiles: 0, failedFiles: 0 };
   _pendingImportRows = [];
@@ -6315,7 +6332,7 @@ function fpImportLocked() {
 }
 function fpLockImportControls() {
   const locked=fpImportLocked();
-  document.querySelectorAll('#import-preview input[data-import-idx], #import-preview button, #import-account-type, #import-csv-input, #import-cancel-btn').forEach(function(el){el.disabled=locked;});
+  document.querySelectorAll('#import-preview input[data-import-idx], #import-preview button, #import-account-type, #import-card-format, #import-csv-input, #import-cancel-btn').forEach(function(el){el.disabled=locked;});
   const recovery=document.getElementById('import-recovery-btn');if(recovery){recovery.style.display=locked&&!_importSaving?'block':'none';recovery.disabled=_importSaving||_fpMutationBusy;}
   const close=document.getElementById('import-close-btn'); if(close) close.disabled=_importSaving;
   const note=document.getElementById('import-save-note');

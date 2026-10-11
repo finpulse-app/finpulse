@@ -238,7 +238,7 @@ const loan = id => txns().find(t => t.id === id);
   ok('T10 imported rows appear in app state', await page.evaluate(() => transactions.filter(t => t.description === 'SHELL GAS').length === 1), '');
 
   // ---- T11 card CSV: negative rows skipped
-  await page.evaluate(() => { document.getElementById('import-account-type').value = 'card'; });
+  await page.evaluate(() => { document.getElementById('import-account-type').value = 'card'; changeStatementAccountType(); document.getElementById('import-card-format').value = 'card'; });
   fs.writeFileSync('/tmp/test-card.csv', 'Transaction Date,Description,Amount\n10/05/2026,NETFLIX,15.49\n10/06/2026,PAYMENT THANK YOU,-200.00\n');
   const b1 = txns().length;
   await page.setInputFiles('#import-csv-input', '/tmp/test-card.csv'); await page.waitForTimeout(800);
@@ -247,7 +247,7 @@ const loan = id => txns().find(t => t.id === id);
 
   // ---- T13 CSV duplicate detection (v146). Fake backend only, never the real account.
   const pick = async (files, type) => {
-    await page.evaluate(t => { const so = document.getElementById('stage-overlay'); if (so) so.style.display = 'none'; openConnectAccounts(); document.getElementById('import-account-type').value = t; }, type || 'bank');
+    await page.evaluate(t => { const so = document.getElementById('stage-overlay'); if (so) so.style.display = 'none'; openConnectAccounts(); document.getElementById('import-account-type').value = t === 'bank' ? 'bank' : 'card'; changeStatementAccountType(); document.getElementById('import-card-format').value = t === 'bank' ? '' : t; }, type || 'bank');
     const paths = files.map((f, i) => { const fp = '/tmp/dup-' + i + '-' + f[0]; fs.writeFileSync(fp, f[1]); return fp; });
     await page.setInputFiles('#import-csv-input', paths); await page.waitForTimeout(700);
     return page.evaluate(() => ({ text: document.getElementById('import-preview').innerText, btn: document.getElementById('import-confirm-btn').innerText, btnDisabled: document.getElementById('import-confirm-btn').disabled, btnShown: getComputedStyle(document.getElementById('import-confirm-btn')).display !== 'none', cancelShown: getComputedStyle(document.getElementById('import-cancel-btn')).display !== 'none', pending: _pendingImportRows.length }));
@@ -777,7 +777,8 @@ const loan = id => txns().find(t => t.id === id);
   ok('T27 new transactions can be excluded before saving',/Importing 1: -\$0 in expenses, \+\$100 in income/.test(await page.textContent('#import-totals')),await page.textContent('#import-totals'));
   await page.click('#import-confirm-btn');await page.waitForTimeout(1200);
   ok('T27 only selected income saved with correct amount and date',db.transactions.some(t=>t.description==='Pay'&&t.type==='income'&&t.amount===100&&t.date==='2026-10-10')&&!db.transactions.some(t=>/Shop,/.test(t.description)),'selection or direction failed');
-  await page.selectOption('#import-account-type','card-negative');
+  await page.selectOption('#import-account-type','card');
+  await page.selectOption('#import-card-format','card-negative');
   await pick([['card-negative.csv','Date,Description,Amount\n2026-10-09,Card purchase,-12\n2026-10-10,Card payment,50\n']],'card-negative');
   ok('T27 negative card purchase convention excludes positive card payment',/Importing 1: -\$12/.test(await page.textContent('#import-totals')) && /1 card payment or credit row/.test(await page.textContent('#import-preview')),await page.textContent('#import-preview'));
   await page.evaluate(()=>cancelStatementImport());
