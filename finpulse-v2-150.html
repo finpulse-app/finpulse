@@ -4392,7 +4392,7 @@ function fpParseQuickExpense(raw) {
   const text=String(raw||'').trim();if(!text)return null;
   let token,index;
   if(text.includes('$')) {
-    const dollars=Array.from(text.matchAll(/\$\s*[^\s]+/g));
+    const dollars=Array.from(text.matchAll(/[+\-−]?\$\s*[^\s]+/g));
     if(dollars.length!==1||text.split('$').length!==2)return null;
     token=dollars[0][0];index=dollars[0].index;
   } else {
