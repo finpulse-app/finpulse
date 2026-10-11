@@ -15,6 +15,11 @@ security configuration and public launch setup are deferred at the user's reques
   preserve both the typed description and amount.
 - Quick entry includes an editable date. Changing it keeps the draft, category
   and repeat choice and starts the saved recurring obligation on that date.
+- Income editing rejects a cleared amount instead of saving zero. Explicit zero
+  remains available for users without income. Nonzero paychecks require a valid
+  date and amounts retain exact cents. Additional income uses the same amount
+  and date validation. Statement amounts outside the supported range are marked
+  unreadable during the preview instead of reaching a rejected import save.
 - Goal deadlines show the monthly amount needed and the number of deposits,
   assuming the first deposit is one month from today with month-end clamping.
   A shortcut prepares that monthly amount in the editor; saving remains explicit.

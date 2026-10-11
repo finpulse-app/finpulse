@@ -1002,7 +1002,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:10px;">Primary income</div>
     <div class="form-group">
       <label class="form-label" for="ei-amount">How much do you take home each paycheck?</label>
-      <input class="form-input" type="number" id="ei-amount" placeholder="e.g. 1400" style="font-size:18px;padding:12px;">
+      <input class="form-input" type="number" id="ei-amount" min="0" step="0.01" placeholder="e.g. 1400" style="font-size:18px;padding:12px;">
     </div>
     <div class="form-group">
       <label class="form-label" for="ei-frequency">How often do you get paid?</label>
@@ -1069,7 +1069,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
     </div>
     <div class="form-group">
       <label class="form-label" for="ais-amount">Amount per paycheck</label>
-      <input class="form-input" id="ais-amount" type="number" placeholder="e.g. 900">
+      <input class="form-input" id="ais-amount" type="number" min="0.01" step="0.01" placeholder="e.g. 900">
     </div>
     <div class="form-group">
       <label class="form-label" for="ais-frequency">How often?</label>
@@ -5919,10 +5919,10 @@ function openAddIncomeSource(editId) {
 
 async function saveIncomeSource() {
   const desc = document.getElementById('ais-desc').value.trim();
-  const amount = parseFloat(document.getElementById('ais-amount').value);
+  const amount = fpParseMoney(document.getElementById('ais-amount').value);
   const frequency = document.getElementById('ais-frequency').value;
   const payday = document.getElementById('ais-payday').value;
-  if (!desc || isNaN(amount) || amount <= 0 || !payday) { return; }
+  if (!desc || amount===null || !['weekly','biweekly','monthly','twicemonthly'].includes(frequency) || !fpParseIso(payday) || fpIso(fpParseIso(payday))!==payday) {showToast('Add an income name, a valid paycheck amount and its payday.', 'error');return;}
 
   if (_editingIncomeSourceId) {
     if (!await fpUpdateTransaction(_editingIncomeSourceId, { description: desc, amount, frequency, anchor_date: payday, date: payday })) return;
@@ -5937,9 +5937,10 @@ async function saveIncomeSource() {
 }
 
 async function saveEditIncome() {
-  const amount = parseFloat(document.getElementById('ei-amount').value) || 0;
+  const amount = fpParseMoney(document.getElementById('ei-amount').value,true);
   const freq = document.getElementById('ei-frequency').value;
   const payday = document.getElementById('ei-payday').value;
+  if(amount===null||!['weekly','biweekly','monthly','twicemonthly'].includes(freq)||(amount>0&&!payday)||(payday&&(!fpParseIso(payday)||fpIso(fpParseIso(payday))!==payday))){showToast('Enter a paycheck amount, including 0 if you have no income, and a valid payday for nonzero income.', 'error');return;}
   try {
     if (!await saveUserSettings({ ...userSettings, payAmount: amount, payFrequency: freq, payday })) return;
     document.getElementById('edit-income-overlay').style.display = 'none';
@@ -6049,7 +6050,7 @@ function fpImportAmount(raw) {
   value = value.replace(/^([+-]?)\$/, '$1').trim();
   if (!/^[+-]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(value)) return null;
   const amount = Number(value.replace(/,/g, ''));
-  if (!Number.isFinite(amount) || (negative && amount < 0)) return null;
+  if (!Number.isFinite(amount) || Math.abs(amount)>=1e12 || (negative && amount < 0)) return null;
   return negative ? -amount : amount;
 }
 

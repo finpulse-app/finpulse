@@ -989,6 +989,13 @@ const loan = id => txns().find(t => t.id === id);
   await page.click('#bs-ai-send-btn');await page.waitForTimeout(300);
   ok('T45 recurring bill starts on the chosen date across a month boundary',db.transactions.some(t=>t.description==='Rent'&&t.type==='bill'&&t.date==='2026-11-03'&&t.anchor_date==='2026-11-03'),'wrong recurring date');await page.evaluate(()=>closeBottomSheet());
 
+  seed();await load();await page.click('#edit-income-btn');await page.fill('#ei-amount','');await page.locator('#edit-income-overlay .save-btn').click();await page.waitForTimeout(100);
+  ok('T46 clearing primary income never silently saves zero',db.user_settings[0].pay_amount===1000&&await page.isVisible('#edit-income-overlay'),'blank erased saved income');
+  await page.fill('#ei-amount','1400.25');await page.fill('#ei-payday','');await page.locator('#edit-income-overlay .save-btn').click();await page.waitForTimeout(100);
+  ok('T46 paycheck without a schedule keeps inputs and saved income',db.user_settings[0].pay_amount===1000&&await page.inputValue('#ei-amount')==='1400.25','incomplete schedule saved');
+  await page.fill('#ei-payday','2026-10-12');await page.locator('#edit-income-overlay .save-btn').click();await page.waitForTimeout(300);
+  ok('T46 corrected paycheck saves exact cents and chosen payday',db.user_settings[0].pay_amount===1400.25&&db.user_settings[0].payday==='2026-10-12'&&!await page.isVisible('#edit-income-overlay'),'valid correction did not save');
+
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {
     await page.evaluate(v=>showView(v,null),view);
