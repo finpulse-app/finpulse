@@ -1144,6 +1144,30 @@ const loan = id => txns().find(t => t.id === id);
   ok('T52 the education source link is separate from its disclosure button',await page.locator('#snowball-body a').evaluate(el=>!el.closest('[role="button"]')),'link nested inside a button');
   await page.setViewportSize({width:312,height:900});await page.evaluate(()=>showView('bills',null));
   ok('T52 bill date actions remain legible and touchable on a narrow phone',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&Array.from(document.querySelectorAll('.bill-date-action')).filter(e=>e.getClientRects().length).every(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.height>=44})),'date action clipped or too small');await page.setViewportSize({width:1280,height:900});
+
+  // T53 Core goal audit: use synthetic records for every write.
+  seed();await load();await hideStage();await page.evaluate(()=>{showView('loans',null);openLoanModal();});
+  await page.fill('#lm-desc','Unknown rate debt');await page.fill('#lm-balance','500');await page.fill('#lm-payment','25');await page.click('#lm-save-btn');await wait(200);
+  const unknownDebt=txns().find(t=>t.description==='Unknown rate debt');
+  ok('T53 adding debt with blank APR preserves unknown rate and statement payment',unknownDebt&&unknownDebt.apr===null&&unknownDebt.original_min_payment===25,'blank APR became a rate');
+  await page.evaluate(id=>recordLoanPayment(id),unknownDebt.id);
+  ok('T53 unknown APR payment opens details without a false zero-interest preview',await page.isVisible('#loan-edit-overlay')&&!await page.isVisible('#record-payment-overlay'),'unknown rate split shown');await page.keyboard.press('Escape');
+  await page.evaluate(()=>openLoanModal());await page.fill('#lm-desc','Tiny zero rate');await page.fill('#lm-balance','5');await page.fill('#lm-apr','0');
+  ok('T53 credit card estimate includes zero APR and caps a small balance',await page.inputValue('#lm-payment')==='5.00','estimate exceeds debt');await page.evaluate(()=>closeLoanModal());
+  await page.evaluate(()=>renderLoans());
+  ok('T53 every existing open debt offers a comparison',await page.locator('.loan-card button[onclick^="openWhatIf"]').count()===txns().filter(t=>t.type==='loan').length,'comparison missing on nonfocus debt');
+  seed();db.transactions=db.transactions.filter(t=>t.id==='loan-car');db.transactions[0].category='Student Loan';await load();await hideStage();await page.evaluate(()=>showView('loans',null));
+  ok('T53 student-only plan can compare payments without unconditional priority advice',await page.locator('.loan-card button[onclick^="openWhatIf"]').count()===1&&!/wait their turn|Every extra dollar/.test(await page.textContent('#view-loans')),'student plan unavailable');
+  seed();db.transactions.push({id:'goal-expense',user_id:'user-A',type:'expense',description:'Recorded shopping',amount:200,date:'2026-10-08',category:'shopping',recurring:false});await load();await hideStage();
+  await page.evaluate(()=>{openExpenseEdit('goal-expense');deleteExpenseFromEdit();});await page.keyboard.press('Escape');await page.evaluate(()=>openExpenseEdit('goal-expense'));
+  ok('T53 Escape from expense deletion leaves a working editor when reopened',await page.inputValue('#ee-desc')==='Recorded shopping','editor markup lost');
+  await page.evaluate(()=>deleteExpenseFromEdit());await page.locator('#edit-expense-overlay button').filter({hasText:'Keep it'}).click();
+  ok('T53 keeping an expense restores its editor without deleting the record',await page.inputValue('#ee-desc')==='Recorded shopping'&&txns().some(t=>t.id==='goal-expense'),'cancel broke editor');await page.keyboard.press('Escape');
+  await page.evaluate(()=>fpOpenTodayEntry('expense'));await page.fill('#bs-ai-input','Shopping $200');await page.evaluate(()=>bsAiSubmit());await wait(200);
+  ok('T53 recording spent money saves directly without a purchase decision popup',txns().some(t=>t.description==='Shopping'&&t.amount===200)&&!await page.isVisible('#ripple-overlay'),'expense diverted into a skipped purchase');
+  await page.setViewportSize({width:312,height:900});await page.evaluate(()=>{showView('loans',null);openLoanModal();});
+  ok('T53 debt entry and comparison controls fit a narrow phone',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&Array.from(document.querySelectorAll('#loan-add-form input,#loan-add-form select,.loan-card button')).filter(e=>e.getClientRects().length).every(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth})),'debt controls overflow');await page.evaluate(()=>closeLoanModal());await page.setViewportSize({width:1280,height:900});
+
   const offline=await browser.newContext();
   await offline.route('**/cdn.jsdelivr.net/**',r=>r.fulfill({contentType:'application/javascript',body:''}));
   await offline.route(/fonts\.(googleapis|gstatic)\.com|cdnjs|chart/,r=>r.fulfill({contentType:'text/css',body:''}));

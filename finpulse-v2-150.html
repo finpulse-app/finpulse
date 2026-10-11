@@ -461,6 +461,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .bill-payment-details summary{cursor:pointer;padding:8px 0;line-height:1.5;}
 .bill-occurrence{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:8px 0;border-top:1px solid var(--border);}.bill-date-action{min-height:44px;padding:8px 10px;font-size:12px;}
 @media(max-width:600px){.fp-dialog-overlay{padding:12px!important}.fp-dialog-card{padding:20px!important;max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px)}.bill-info{min-width:0}.bill-due{white-space:normal;line-height:1.5}.bill-amt{font-size:14px}.bill-payment-details{margin-left:0}}
+@media(max-width:600px){#loan-add-form>div[style*="display:grid"]{grid-template-columns:1fr!important}.loan-header{flex-wrap:wrap;gap:10px}.loan-card button{min-height:42px}.loan-card .loan-proj+div{flex-wrap:wrap}.loan-card button[onclick^="openWhatIf"]{min-height:44px}}
 </style>
 </head>
 <body>
@@ -806,7 +807,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <div id="loan-add-form" style="display:none;background:var(--surface);border:1.5px solid var(--accent);border-radius:var(--radius);padding:20px 22px;margin-bottom:18px;box-shadow:var(--shadow-md);">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
           <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:600;">Add Loan or Debt</div>
-          <button onclick="closeLoanModal()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--text3);">&#10005;</button>
+          <button aria-label="Close loan form" onclick="closeLoanModal()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--text3);">&#10005;</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <div class="form-group" style="margin-bottom:0;">
@@ -826,12 +827,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
             <input class="form-input" type="number" id="lm-balance" placeholder="e.g. 3500" oninput="calcLoanMinPayment()">
           </div>
           <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label" for="lm-apr">APR %</label>
+            <label class="form-label" for="lm-apr">APR % <span style="font-weight:400;">(blank if unknown)</span></label>
             <input class="form-input" type="number" id="lm-apr" placeholder="e.g. 24.99" step="0.01" oninput="calcLoanMinPayment()">
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label class="form-label" for="lm-payment">Statement minimum ($)</label>
-            <input class="form-input" type="number" id="lm-payment" placeholder="Enter your statement amount" min="0.01" step="0.01" oninput="_fpManualLoanPayment=true"><p class="goal-note" style="font-size:11px;margin-top:4px;">A credit-card estimate can be edited. Use the payment from your statement.</p>
+            <input class="form-input" type="number" id="lm-payment" placeholder="Enter your statement amount" min="0.01" step="0.01" oninput="_fpManualLoanPayment=true"><p class="goal-note" style="font-size:11px;margin-top:4px;">A credit-card estimate fills in when you know the APR, including 0%. Use your statement amount if different.</p>
           </div>
         </div>
         <div style="margin-top:12px;">
@@ -1423,7 +1424,14 @@ function openLoanPaymentInfo(txnId) {
   document.getElementById('lp-info-overlay').style.display = 'flex';
 }
 
+function fpRestoreExpenseEditor() {
+  const card=document.querySelector('#edit-expense-overlay > div');
+  if(card&&window._eeOriginalContent)card.innerHTML=window._eeOriginalContent;
+  window._eeOriginalContent=null;
+}
+
 function openExpenseEdit(txnId) {
+  fpRestoreExpenseEditor();
   const txn = transactions.find(function(t){ return String(t.id) === String(txnId); });
   if (!txn) { console.warn('openExpenseEdit: txn not found for id', txnId); return; }
   _editExpenseTxnId = txn.id;
@@ -1481,7 +1489,7 @@ async function deleteExpenseFromEdit() {
   const originalContent = modal.innerHTML;
   modal.innerHTML = '<div style="font-family:\'Playfair Display\',serif;font-size:18px;font-weight:600;margin-bottom:10px;">Delete expense?</div>'
     + '<div style="font-size:13px;color:var(--text2);margin-bottom:6px;">You\'re about to delete <strong>' + fpEscHtml(name) + '</strong>.</div>'
-    + '<div style="font-size:12px;color:var(--text3);margin-bottom:24px;">This can\'t be undone.</div>'
+    + '<div style="font-size:12px;color:var(--text3);margin-bottom:24px;">You can use Undo immediately after deleting it.</div>'
     + '<div style="display:flex;gap:8px;">'
     + '<button onclick="confirmDeleteExpense()" style="flex:1;background:var(--danger);color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-family:Inter,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Yes, delete it</button>'
     + '<button onclick="document.querySelector(\'#edit-expense-overlay > div\').innerHTML = window._eeOriginalContent;window._eeOriginalContent=null;" style="flex:1;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;font-family:Inter,sans-serif;font-weight:600;font-size:14px;cursor:pointer;">Keep it</button>'
@@ -1493,7 +1501,7 @@ async function confirmDeleteExpense() {
   if (!_editExpenseTxnId) return;
   if (!await deleteTxnWithUndo(_editExpenseTxnId)) return;
   document.getElementById('edit-expense-overlay').style.display = 'none';
-  window._eeOriginalContent = null;
+  fpRestoreExpenseEditor();
   _editExpenseTxnId = null;
 }
 
@@ -1732,6 +1740,7 @@ async function undoLastDelete() {
 
 // Clear every account-scoped value before displaying or loading a different account.
 function fpResetAccountState() {
+  fpRestoreExpenseEditor();
   const focusButton=document.getElementById('today-focus-button');if(focusButton){focusButton.hidden=true;focusButton.onclick=null;}
   for(const [id,text] of [['today-focus-date','Your next step'],['today-focus-title','Getting your plan ready'],['today-focus-description','Your saved numbers will show what needs attention first.'],['today-focus-secondary',''],['today-focus-payday','']]){const el=document.getElementById(id);if(el)el.textContent=text;}
   _fpBillMarkVersion++;
@@ -4205,19 +4214,13 @@ function updateStats() {
 }
 
 function updateRippleAlert(dayMap) {
-  const today = new Date();
-  if (today.getMonth() !== currentMonth || today.getFullYear() !== currentYear) { document.getElementById('ripple-bar').style.display = 'none'; return; }
-  const d = today.getDate();
-  const futureBalance = (dayMap[d] && dayMap[d].balance) || 0;
-  const threshold = 1000;
-  const bar = document.getElementById('ripple-bar');
-  if (futureBalance < threshold && futureBalance >= 0) {
-    document.getElementById('ripple-text').innerHTML = '<strong style="color:var(--text);">Heads up!</strong> Your balance is getting close to $' + fmt(threshold) + ', you have $' + fmt(futureBalance) + ' projected for today. Keep an eye on spending this week.';
-    bar.style.display = 'flex';
-  } else if (futureBalance < 0) {
-    document.getElementById('ripple-text').innerHTML = '<strong style="color:var(--text);">Important!</strong> Based on your bills and expenses, your balance could go negative this month. Consider what you can adjust now.';
-    bar.style.display = 'flex';
-  } else { bar.style.display = 'none'; }
+  const today=new Date(),bar=document.getElementById('ripple-bar');
+  bar.style.display='none';
+  if(today.getMonth()!==currentMonth||today.getFullYear()!==currentYear||fpBalanceAnchor(fpIso(today)).status!=='ok')return;
+  const balance=dayMap[today.getDate()]&&dayMap[today.getDate()].balance;
+  if(!Number.isFinite(balance)||balance>=0)return;
+  document.getElementById('ripple-text').innerHTML='<strong>Below zero in your calendar:</strong> −$'+fmt(balance)+' estimated for today. Review upcoming payments and update your bank balance if it has changed.';
+  bar.style.display='flex';
 }
 
 // ── NAV ────────────────────────────────────────────────────────
@@ -4452,6 +4455,15 @@ function fpParseMoney(raw,allowZero=false) {
   const amount=Number(text.replace(/,/g,''));
   return Number.isFinite(amount)&&amount<1e12&&(allowZero?amount>=0:amount>0)?amount:null;
 }
+function fpParseBalance(raw) {
+  const text=String(raw==null?'':raw).trim();
+  const amount=fpParseMoney(text.replace(/^[-+]/,''),true);
+  return amount===null?null:text.startsWith('-')?-amount:amount;
+}
+function fpCreditCardPaymentEstimate(balance,apr) {
+  const interest=balance*apr/100/12;
+  return fpRound2(Math.min(balance+interest,Math.max(25,balance*.01+interest)));
+}
 function fpParseQuickExpense(raw) {
   const text=String(raw||'').trim();if(!text)return null;
   let token,index;
@@ -4537,10 +4549,8 @@ async function bsAiSubmit() {
   // Keep the text until a confirmed save.
   if (btn) { btn.disabled = false; btn.textContent = 'Add'; }
 
-  // Ripple warning is for one-time discretionary purchases, skip it for new recurring charges
-  if (!bsRecurring && shouldShowRipple(amount, category)) {
-    showRippleWarning(description, amount, category, txnObj);
-  } else {
+  // Recording money already spent should not ask whether to buy it.
+  {
     if (!await saveTxn(txnObj)) return;
     inp.value = '';
     showToast(description + (bsRecurring ? ' · $' + fmt(amount) + ' '+bsFrequency+' added' : ' · $' + fmt(amount) + ' added'));
@@ -4600,9 +4610,8 @@ async function bsCatSave() {
     anchor_date: bsRecurring ? dateStr : null
   };
 
-  if (!bsRecurring && shouldShowRipple(amt, savedCat)) {
-    showRippleWarning(desc, amt, savedCat, txnObj);
-  } else {
+  // Purchase decisions have their own Before you buy tool.
+  {
     if (!await saveTxn(txnObj)) return;
     bsSelectedCat = null;
     if (amtEl) amtEl.value = '';
@@ -4727,7 +4736,7 @@ async function saveLoanEdit() {
   const aprText = document.getElementById('le-apr').value.trim();
   const apr = aprText === '' ? null : Number(aprText);
   const payment = fpParseMoney(document.getElementById('le-payment').value);
-  if (!desc || balance === null || payment === null || (apr !== null && (!Number.isFinite(apr) || apr < 0))) { showToast('Check the loan name, balance, rate and payment. Use dollars and cents for money.','error'); return; }
+  if (!desc || balance === null || payment === null || (apr !== null && (!/^\d+(?:\.\d+)?$/.test(aprText) || !Number.isFinite(apr) || apr < 0 || apr >= 1e6))) { showToast('Check the loan name, balance, rate and payment. Use dollars and cents for money.','error'); return; }
   if (!await fpUpdateTransaction(_loanEditId, { description: desc, balance, apr, min_payment: payment, amount: payment })) return;
   document.getElementById('loan-edit-overlay').style.display = 'none';
   _loanEditId = null;
@@ -4761,60 +4770,27 @@ function closeLoanModal() {
 }
 
 async function saveLoanFromModal() {
-  const desc = document.getElementById('lm-desc') ? document.getElementById('lm-desc').value.trim() : '';
-  const balance = parseFloat(document.getElementById('lm-balance') ? document.getElementById('lm-balance').value : '');
-  const apr = parseFloat(document.getElementById('lm-apr') ? document.getElementById('lm-apr').value : '') || 0;
-  const payment = parseFloat(document.getElementById('lm-payment') ? document.getElementById('lm-payment').value : '');
-  const cat = document.getElementById('lm-cat') ? document.getElementById('lm-cat').value : 'Other';
-  const anchorVal = document.getElementById('lm-anchor') ? document.getElementById('lm-anchor').value : '';
-
-  if (!desc) { alert('Please enter a lender name.'); return; }
-  if (isNaN(balance) || balance <= 0) { alert('Please enter the balance owed.'); return; }
-
-  // Only use the optional credit-card estimate when no statement amount was entered.
-  let finalPayment = payment;
-  if (isNaN(finalPayment) || finalPayment <= 0) {
-    if(cat!=='Credit Card'){showToast('Enter the monthly payment from your loan statement.','error');return;}
-    const apr2 = parseFloat(document.getElementById('lm-apr') ? document.getElementById('lm-apr').value : '') || 0;
-    if (apr2 > 0) {
-      const monthlyInterest = balance * (apr2 / 100 / 12);
-      finalPayment = Math.max(25, Math.round((balance * 0.01 + monthlyInterest) * 100) / 100);
-    } else {
-      alert('Please enter the APR to calculate minimum payment.'); return;
-    }
-  }
-
-  const today = new Date();
-  const date = anchorVal || (today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0'));
-
-  const btn = document.getElementById('lm-save-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
-
-  const txn = {
-    type: 'loan',
-    description: desc,
-    amount: finalPayment,
-    date: date,
-    category: cat,
-    recurring: true,
-    frequency: 'monthly',
-    anchor_date: date,
-    balance: balance,
-    original_balance: balance,
-    apr: apr,
-    min_payment: finalPayment,
-    lender: cat
-  };
-
-  const userId = currentUser && currentUser.id, loadVersion = _dataLoadVersion;
-  const saved = await saveTxn(txn);
-  if (!currentUser || currentUser.id !== userId || loadVersion !== _dataLoadVersion) return;
-  if (btn) { btn.disabled = false; btn.textContent = 'Add to My Debt Plan'; }
-  if (!saved) return;
-  showToast('Loan added to your debt plan');
-  closeLoanModal();
-  renderLoans();
-  if (btn) { btn.disabled = false; btn.textContent = 'Add to My Debt Plan'; }
+  const desc=document.getElementById('lm-desc').value.trim();
+  const balance=fpParseMoney(document.getElementById('lm-balance').value);
+  const aprText=document.getElementById('lm-apr').value.trim();
+  const apr=aprText===''?null:Number(aprText);
+  const payment=fpParseMoney(document.getElementById('lm-payment').value);
+  const cat=document.getElementById('lm-cat').value||'Other';
+  const date=document.getElementById('lm-anchor').value;
+  if(!desc){showToast('Add a lender or debt name.','error');return;}
+  if(balance===null){showToast('Enter the balance owed in dollars and cents.','error');return;}
+  if(apr!==null&&(!/^\d+(?:\.\d+)?$/.test(aprText)||!Number.isFinite(apr)||apr<0||apr>=1e6)){showToast('Enter the APR from your statement, or leave it blank if unknown.','error');return;}
+  if(payment===null){showToast('Enter the monthly payment from your statement. Use dollars and cents.','error');return;}
+  if(!fpParseIso(date)||fpIso(fpParseIso(date))!==date){showToast('Choose a valid monthly due date.','error');return;}
+  const btn=document.getElementById('lm-save-btn'),uid=currentUser&&currentUser.id,version=_dataLoadVersion;
+  if(!uid||_fpMutationBusy)return;
+  btn.disabled=true;btn.textContent='Saving…';
+  try {
+    const saved=await saveTxn({type:'loan',description:desc,amount:payment,date,category:cat,recurring:true,frequency:'monthly',anchor_date:date,balance,original_balance:balance,apr,min_payment:payment,original_min_payment:payment,lender:cat});
+    if(!currentUser||currentUser.id!==uid||version!==_dataLoadVersion)return;
+    if(!saved)return;
+    showToast('Loan added to your debt plan');closeLoanModal();renderLoans();
+  } finally {if(currentUser&&currentUser.id===uid&&version===_dataLoadVersion){btn.disabled=false;btn.textContent='Add to My Debt Plan';}}
 }
 
 
@@ -5193,6 +5169,7 @@ function recordLoanPayment(loanId) {
   _rpPendingDate = null;
   try {
     const pending = fpPendingOperation('record:' + loanId);
+    if(!fpLoanRateKnown(loan)&&!pending){showToast('Add the APR from your statement first so the payment split does not assume 0% interest.','error');openLoanEdit(loanId);return;}
     if (pending && pending.kind === 'record') {
       _rpHasPending = true;
       _rpIncludeMonthly = pending.payload.include_monthly;
@@ -5249,7 +5226,7 @@ function updateRpBreakdown() {
     + '<div><div style="font-size:10px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Interest</div><div style="font-family:\'DM Serif Display\',serif;font-size:15px;">$' + fmt(interest) + '</div></div>'
     + '<div><div style="font-size:10px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">To principal</div><div style="font-family:\'DM Serif Display\',serif;font-size:15px;">$' + fmt(principal) + '</div></div>'
     + '<div><div style="font-size:10px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">New balance</div><div style="font-family:\'DM Serif Display\',serif;font-size:15px;color:var(--accent);">$' + fmt(newBal) + '</div></div>'
-    + '</div>';
+    + '</div><p style="font-size:11px;color:var(--text2);line-height:1.5;margin-top:10px;">Estimated split using one month of APR. Your lender may calculate interest differently; check the balance on your statement.</p>';
 
   // Live button, exact total, disabled if there's nothing to actually pay
   const btn = document.getElementById('rp-confirm-btn');
@@ -5285,8 +5262,8 @@ async function confirmRecordPayment(includeExtra) {
   const userId = currentUser.id;
   const dialogVersion = _rpDialogVersion;
   const extraInput = document.getElementById('rp-extra');
-  const requestedExtra = Number(extraInput && extraInput.value || 0);
-  if (!Number.isFinite(requestedExtra) || requestedExtra < 0) {
+  const requestedExtra = fpParseMoney(extraInput && extraInput.value.trim() || '0',true);
+  if (requestedExtra === null) {
     showToast('Enter a valid extra payment amount.', 'error'); return;
   }
   const isExtraOnly = !_rpIncludeMonthly;
@@ -5296,6 +5273,7 @@ async function confirmRecordPayment(includeExtra) {
   try { pending = fpPendingOperation('record:' + loanId); }
   catch(e) { showToast('Pending payment could not be read. Please retry.', 'error'); return; }
   if (balance <= 0 && !pending) return;
+  if(!fpLoanRateKnown(loan)&&!pending){showToast('Add the interest rate before recording this payment.','error');return;}
   const dateStr = (pending&&pending.payload.date) || _rpPendingDate || document.getElementById('rp-date').value;
   const parsedDate=fpParseIso(dateStr);
   if(!parsedDate||fpIso(parsedDate)!==dateStr){showToast('Choose a valid payment date.','error');return;}
@@ -5411,7 +5389,7 @@ function renderLoans() {
   const consumerLoans = loans.filter(function(l) { return !isStudLoan(l); }).sort(function(a,b) { return fpLoanBalanceAmount(a) - fpLoanBalanceAmount(b); });
   const studentLoans = loans.filter(function(l) { return isStudLoan(l); });
   const sorted = consumerLoans.concat(studentLoans);
-  const focusLoan = consumerLoans.find(l=>fpLoanBalanceAmount(l)>0);
+  const focusLoan = sorted.find(l=>fpLoanBalanceAmount(l)>0);
 
   container.innerHTML = sorted.map(function(l, idx) {
     const bal = fpLoanBalanceAmount(l) || 0;
@@ -5451,12 +5429,11 @@ function renderLoans() {
     // Coach note, one sentence, no padding
     const focusLoanDesc = focusLoan ? focusLoan.description : 'your focus debt';
     const minNote = isStudent
-      ? '<div style="font-size:12px;color:#3b5bdb;margin-bottom:10px;padding-left:2px;">Minimum only. Student loans wait their turn, consumer debt goes first.</div>'
+      ? '<div style="font-size:12px;color:#3b5bdb;margin-bottom:10px;padding-left:2px;">Student loans are shown after consumer debts in this view. Keep required payments current.</div>'
       : isFocus ? ''
-      : '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;padding-left:2px;">Hold at $' + fmt(minPay) + '/mo. Every extra dollar goes to ' + fpEscHtml(focusLoanDesc) + ' until it\'s gone.</div>';
+      : '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;padding-left:2px;">Your plan lists ' + fpEscHtml(focusLoanDesc) + ' first. Keep required payments current.</div>';
 
-    const whatIfBtn = isFocus
-      ? '<div style="background:var(--accent-light);border:1px solid #c3ddd1;border-left:3px solid var(--accent);border-radius:var(--radius-sm);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;">'
+    const whatIfBtn = '<div style="background:var(--accent-light);border:1px solid #c3ddd1;border-left:3px solid var(--accent);border-radius:var(--radius-sm);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;">'
         + '<div style="font-size:13px;color:#2d5a46;line-height:1.6;flex:1;">'
         + (l.planned_payment && parseFloat(l.planned_payment) > minPay
           ? 'Your goal: <strong>$' + fmt(l.planned_payment) + '/month</strong>. That\'s $' + fmt(parseFloat(l.planned_payment) - minPay) + ' above the minimum, keep it up.'
@@ -5469,7 +5446,7 @@ function renderLoans() {
         + '<button onclick="recordLoanPayment(\'' + l.id + '\')" style="background:var(--surface);color:var(--accent);border:1px solid #c3ddd1;border-radius:var(--radius-sm);padding:8px 14px;font-size:12px;font-weight:600;font-family:Inter,sans-serif;cursor:pointer;white-space:nowrap;">&#10003; Record Payment</button>'
         + '</div>'
         + '</div>'
-      : '<div style="margin-top:8px;"><button onclick="recordLoanPayment(\'' + l.id + '\')" style="width:100%;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 14px;font-size:12px;font-weight:600;font-family:Inter,sans-serif;cursor:pointer;">&#10003; Record Payment</button></div>';
+      ;
 
     return '<div class="loan-card" style="' + (isFocus ? 'border:2px solid var(--accent);' : '') + 'margin-bottom:14px;">'
       + '<div class="loan-header"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><div class="loan-name">' + fpEscHtml(l.description) + '</div>' + focusBadge + '</div>'
@@ -5869,8 +5846,8 @@ function openEditBalance() {
 
 async function saveEditBalance() {
   const input = document.getElementById('edit-balance-input').value;
-  const bal = Number(input);
-  if (!input.trim() || !Number.isFinite(bal)) { showToast('Enter a bank balance, including 0 if it is zero.','error'); return; }
+  const bal = fpParseBalance(input);
+  if (bal === null) { showToast('Enter your bank balance in dollars and cents. Use a minus sign if overdrawn.','error'); return; }
   const dateVal = document.getElementById('edit-balance-date').value;
   if (!fpNormalizeAsOf(dateVal, fpIso(new Date()))) { showToast(fpBadBalanceDateMessage(), 'error'); return; }
   if (!await fpApplyDatedBalance(bal, dateVal, null, fpPayAnswer('edit-balance'))) return;
@@ -6030,27 +6007,27 @@ function closeSetup() { document.getElementById('setup-overlay').style.display =
 
 async function saveSetup() {
   const balanceInput=document.getElementById('setup-balance').value;
-  const bal = Number(balanceInput);
-  if (!balanceInput.trim() || !Number.isFinite(bal)) { showToast('Enter a bank balance, including 0 if it is zero.','error'); return; }
+  const bal = fpParseBalance(balanceInput);
+  if (bal === null) { showToast('Enter your bank balance in dollars and cents. Use a minus sign if overdrawn.','error'); return; }
   const payday = document.getElementById('setup-payday').value;
   const freq = document.getElementById('setup-frequency').value;
   const payInput=document.getElementById('setup-payamount').value;
-  const payAmt=payInput.trim()?Number(payInput):0;
-  if (!Number.isFinite(payAmt) || payAmt<0) { showToast('Enter a valid non-negative paycheck amount.','error');return; }
+  const payAmt=fpParseMoney(payInput.trim()||'0',true);
+  if(payAmt===null||!['weekly','biweekly','monthly','twicemonthly'].includes(freq)||(payAmt>0&&(!fpParseIso(payday)||fpIso(fpParseIso(payday))!==payday))){showToast('Check your paycheck amount, frequency and payday. Enter 0 if you have no regular paycheck.','error');return;}
   const setupDate = document.getElementById('setup-balance-date').value;
   if (!fpNormalizeAsOf(setupDate, fpIso(new Date()))) { showToast(fpBadBalanceDateMessage(), 'error'); return; }
-  if (!await fpApplyDatedBalance(bal, setupDate, { startingBalance: bal, payday, payFrequency: freq, payAmount: payAmt }, fpPayAnswer('setup-balance'))) return;
+  if (!await fpApplyDatedBalance(bal, setupDate, { startingBalance: bal, payday:payAmt>0?payday:null, payFrequency: freq, payAmount: payAmt }, fpPayAnswer('setup-balance'))) return;
   closeSetup();
   const setupBtn = document.getElementById('setup-btn');
   if (setupBtn) setupBtn.style.display = 'none';
   renderCalendar(); updateStats(); updateTopbarButtons();
-  setTimeout(showStageModal, 500);
+  // Today provides the next step without interrupting setup with another popup.
 }
 
 async function saveStartingBalance() {
   const balanceInput=document.getElementById('settings-balance').value;
-  const bal = Number(balanceInput);
-  if (!balanceInput.trim() || !Number.isFinite(bal)) { showToast('Enter a bank balance, including 0 if it is zero.','error'); return; }
+  const bal = fpParseBalance(balanceInput);
+  if (bal === null) { showToast('Enter your bank balance in dollars and cents. Use a minus sign if overdrawn.','error'); return; }
   const settingsDate = document.getElementById('settings-balance-date').value;
   if (!fpNormalizeAsOf(settingsDate, fpIso(new Date()))) { showToast(fpBadBalanceDateMessage(), 'error'); return; }
   if (!await fpApplyDatedBalance(bal, settingsDate, null, fpPayAnswer('settings-balance'))) return;
@@ -6923,18 +6900,12 @@ async function updateBrAiPhrase(endBal, stage, monthlyCashFlow, nextBillName, ne
 // ── MINIMUM PAYMENT AUTO-CALCULATOR ────────────────────────────
 function calcLoanMinPayment() {
   if(_fpManualLoanPayment)return;
-  const category=document.getElementById('lm-cat');
-  if(category && category.value!=='Credit Card'){const field=document.getElementById('lm-payment');if(field)field.value='';return;}
-  const balance = parseFloat(document.getElementById('lm-balance') ? document.getElementById('lm-balance').value : '') || 0;
-  const apr = parseFloat(document.getElementById('lm-apr') ? document.getElementById('lm-apr').value : '') || 0;
-  const payEl = document.getElementById('lm-payment');
-  if (!payEl || balance <= 0 || apr <= 0) { if(payEl) payEl.value = ''; return; }
-  // Standard credit card minimum: 1% of balance + monthly interest, floor $25
-  const monthlyRate = apr / 100 / 12;
-  const monthlyInterest = balance * monthlyRate;
-  const onePercent = balance * 0.01;
-  const calcMin = Math.max(25, Math.round((onePercent + monthlyInterest) * 100) / 100);
-  payEl.value = calcMin.toFixed(2);
+  const pay=document.getElementById('lm-payment');if(!pay)return;
+  const type=document.getElementById('lm-cat').value;
+  const balance=fpParseMoney(document.getElementById('lm-balance').value);
+  const rateText=document.getElementById('lm-apr').value.trim(),apr=Number(rateText);
+  if(type!=='Credit Card'||balance===null||!rateText||!/^\d+(?:\.\d+)?$/.test(rateText)||!Number.isFinite(apr)||apr<0||apr>=1e6){pay.value='';return;}
+  pay.value=fpCreditCardPaymentEstimate(balance,apr).toFixed(2);
 }
 
 // ── BILL BADGE ──────────────────────────────────────────────────
@@ -7119,7 +7090,7 @@ function fpDismissDialog(id) {
   const el=document.getElementById(id);if(el)el.style.display='none';
   if(id==='loan-delete-overlay')_loanDeleteId=null;
   if(id==='loan-edit-overlay')_loanEditId=null;
-  if(id==='edit-expense-overlay'){_editExpenseTxnId=null;window._eeOriginalContent=null;}
+  if(id==='edit-expense-overlay'){fpRestoreExpenseEditor();_editExpenseTxnId=null;}
   if(id==='reassign-overlay')_reassignTxnId=null;
   if(id==='lp-info-overlay')window._lpInfoId=null;
   if(id==='add-income-overlay')_editingIncomeSourceId=null;
