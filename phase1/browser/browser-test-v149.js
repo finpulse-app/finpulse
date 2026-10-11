@@ -831,7 +831,7 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(id=>fpOpenPaidOff(id),detectedCard.id);await page.fill('#paid-off-date','2026-10-19');await page.click('#paid-off-save');await page.waitForTimeout(200);
   ok('Paid off rejects future date without changing balance',loan(detectedCard.id).balance===500,'future payoff saved');
   await page.fill('#paid-off-date','2026-10-17');writeFault='reject';await page.click('#paid-off-save');await page.waitForTimeout(200);
-  ok('Rejected payoff keeps balance and date draft',loan(detectedCard.id).balance===1203.45&&await page.inputValue('#paid-off-date')==='2026-10-17','payoff draft lost');
+  ok('Rejected payoff keeps balance and date draft',loan(detectedCard.id).balance===500&&await page.inputValue('#paid-off-date')==='2026-10-17','payoff draft lost');
   await page.click('#paid-off-save');await page.waitForTimeout(400);
   ok('Paid off saves zero balance and selected date',loan(detectedCard.id).balance===0&&loan(detectedCard.id).lender.endsWith('paid_off:2026-10-17'),'payoff not saved');
   await page.evaluate(()=>{renderLoans();renderPriorityReport();});
