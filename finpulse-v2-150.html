@@ -1064,7 +1064,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
     <div id="import-preview" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px;margin-top:10px;"></div>
     <button id="import-confirm-btn" class="save-btn" style="display:none;margin-top:10px;" onclick="confirmStatementImport()">Import Transactions</button>
     <button id="import-cancel-btn" class="btn btn-outline" style="display:none;width:100%;padding:10px;margin-top:10px;" onclick="cancelStatementImport()">Cancel Import</button>
-    <button class="btn btn-outline" style="width:100%;padding:10px;margin-top:10px;" onclick="closeConnectAccounts()">Close</button>
+    <button class="btn btn-outline" style="width:100%;padding:10px;margin-top:10px;" id="import-close-btn" onclick="closeConnectAccounts()">Close</button>
   </div>
 </div>
 
@@ -1589,7 +1589,10 @@ async function fpResolvePendingOperation(key) {
   catch(e) { showToast('Pending change could not be read.', 'error'); return; }
   if (!pending) return;
   if (pending.kind === 'insert') {
-    if (await fpInsertTransactions(pending.payload)) showToast('Save confirmed');
+    if (await fpInsertTransactions(pending.payload)) {
+      if (fpStatementImportMatches(pending.payload)) fpFinishStatementImport();
+      showToast('Save confirmed');
+    }
     return;
   }
   const data = await fpAtomicMutation(pending.kind, pending.payload, key);
@@ -1717,7 +1720,7 @@ function fpResetAccountState() {
   _lastDeleted = null;
   _lastDeletedRestoreInfo = null;
   _editExpenseTxnId = null;
-  _pendingImportRows = [];
+  _pendingImportRows = []; _importEditIndex=-1;
   _ripplePending = null;
   bsPendingTxn = null;
   bsSelectedDay = null;
@@ -5984,21 +5987,25 @@ async function saveStartingBalance() {
 }
 
 function openConnectAccounts() {
+  if (_importSaving) return;
   _importReadVersion++;
   document.getElementById('import-preview').style.display = 'none';
   document.getElementById('import-confirm-btn').style.display = 'none';
   document.getElementById('import-cancel-btn').style.display = 'none';
   document.getElementById('import-csv-input').value = '';
-  _pendingImportRows = [];
+  _pendingImportRows = []; _importEditIndex = -1;
   document.getElementById('connect-accounts-overlay').style.display = 'flex';
+  fpLockImportControls();
 }
 function closeConnectAccounts() {
+  if (_importSaving) return;
   _importReadVersion++;
   // Closing without confirming saves nothing
   _pendingImportRows = [];
   document.getElementById('connect-accounts-overlay').style.display = 'none';
 }
 function cancelStatementImport() {
+  if (_importSaving) return;
   _importReadVersion++;
   _pendingImportRows = [];
   document.getElementById('import-preview').style.display = 'none';
@@ -6013,6 +6020,8 @@ function cancelStatementImport() {
 // using the same keyword logic as manual entry, and shows a preview before committing.
 let _pendingImportRows = [];
 let _importReadVersion = 0;
+let _importEditIndex = -1;
+let _importSaving = false;
 
 function parseCsvText(text) {
   const rows = [];
@@ -6178,6 +6187,8 @@ function fpEscHtml(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;')
 let _importMeta = { files: 0, fileNames: [], unreadable: 0, cardCredits: 0, emptyFiles: 0 };
 
 async function handleStatementFiles(fileList) {
+  if (fpImportLocked()) return;
+  _importEditIndex = -1;
   const files = Array.from(fileList || []);
   if (files.length === 0) return;
   if (files.length > 20) { showToast('Please upload 20 files or fewer at a time.', 'error'); return; }
@@ -6233,9 +6244,6 @@ function renderImportPreview() {
   }
   const newRows = allRows.filter(function(r) { return r.dupKind === null; });
   const dupRows = allRows.filter(function(r) { return r.dupKind !== null; });
-  const inc = allRows.filter(function(r) { return r.include; });
-  const totalExp = inc.filter(function(r) { return r.type === 'expense'; }).reduce(function(s,r){ return s+r.amount; }, 0);
-  const totalInc = inc.filter(function(r) { return r.type === 'income'; }).reduce(function(s,r){ return s+r.amount; }, 0);
   const repeats = newRows.filter(function(r) { return r.occ > 1; }).length;
 
   let html = '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px;">Found ' + allRows.length + ' transaction' + (allRows.length===1?'':'s') + ' across ' + meta.files + ' file' + (meta.files===1?'':'s') + '</div>'
@@ -6244,40 +6252,114 @@ function renderImportPreview() {
     + '<div id="import-totals" style="font-size:12px;color:var(--text2);margin-top:2px;"></div>';
   if (repeats > 0) html += '<div style="font-size:11px;color:var(--text3);margin-top:4px;">' + repeats + ' identical purchase' + (repeats===1?'':'s') + ' inside a file ' + (repeats===1?'is':'are') + ' kept as separate transactions.</div>';
 
-  html += '<div style="margin-top:10px;font-size:11px;font-weight:700;">Review selected transactions</div><div style="max-height:220px;overflow-y:auto;margin-top:6px;">';
-  allRows.forEach(function(r, i) {
-    if (r.dupKind !== null) return;
-    html += '<label style="display:flex;align-items:center;gap:8px;padding:7px 0;font-size:12px;cursor:pointer;">'
-      + '<input type="checkbox" data-import-idx="' + i + '"' + (r.include ? ' checked' : '') + ' onchange="toggleImportRow(' + i + ', this.checked)">'
-      + '<span style="flex:1;min-width:0;overflow-wrap:anywhere;">' + fpEscHtml(r.description) + '<span style="display:block;font-size:10.5px;color:var(--text2);">' + fpEscHtml(r.date) + ' · ' + fpEscHtml(r.fileName) + '</span></span>'
-      + '<span style="font-weight:600;white-space:nowrap;">' + (r.type==='income'?'+':'-') + '$' + fmt(r.amount) + '</span></label>';
-  });
+  html += '<div id="import-row-editor"></div><div style="margin-top:10px;font-size:11px;font-weight:700;">Review selected transactions</div><div style="max-height:220px;overflow-y:auto;margin-top:6px;">';
+  allRows.forEach(function(r, i) { if (r.dupKind === null) html += fpRenderImportRow(r, i); });
   html += '</div>';
   if (dupRows.length > 0) {
     html += '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">'
       + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:4px;">Possible duplicates (skipped unless checked)</div>'
       + '<div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Same date, amount and description as a transaction you already have or one in an earlier file. Check a row to import it anyway.</div>'
       + '<div style="max-height:180px;overflow-y:auto;">';
-    allRows.forEach(function(r, i) {
-      if (r.dupKind === null) return;
-      const why = r.dupKind === 'existing' ? 'Already in your account' : 'Also in an earlier file you added';
-      html += '<label style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;color:var(--text);cursor:pointer;">'
-        + '<input type="checkbox" data-import-idx="' + i + '"' + (r.include ? ' checked' : '') + ' onchange="toggleImportRow(' + i + ', this.checked)">'
-        + '<span style="flex:1;min-width:0;"><span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + fpEscHtml(r.description) + '</span>'
-        + '<span style="display:block;font-size:10.5px;color:var(--text3);">' + fpEscHtml(r.date) + ' &middot; ' + why + '</span></span>'
-        + '<span style="font-weight:600;">' + (r.type==='income'?'+':'-') + '$' + fmt(r.amount) + '</span></label>';
-    });
+    allRows.forEach(function(r, i) { if (r.dupKind !== null) html += fpRenderImportRow(r, i); });
     html += '</div>'
       + '<div style="display:flex;gap:12px;margin-top:6px;">'
       + '<button type="button" onclick="setAllImportDups(true)" style="background:none;border:none;color:var(--accent);font-size:11.5px;font-weight:600;cursor:pointer;padding:0;">Import all duplicates anyway</button>'
       + '<button type="button" onclick="setAllImportDups(false)" style="background:none;border:none;color:var(--text2);font-size:11.5px;font-weight:600;cursor:pointer;padding:0;">Skip all duplicates</button>'
       + '</div></div>';
   }
-  html += skipHtml + '<div style="font-size:11px;color:var(--text3);margin-top:6px;">Nothing is saved until you press Import.</div>';
+  html += skipHtml + '<div id="import-save-note" style="font-size:11px;color:var(--text3);margin-top:6px;"></div><button type="button" id="import-recovery-btn" class="btn btn-outline" style="display:none;margin-top:8px;" onclick="fpResolvePendingOperation(\'insert\')">Check saved import</button>';
   preview.style.display = 'block';
   preview.innerHTML = html;
   cancelBtn.style.display = 'block';
   updateImportSummary();
+}
+
+function fpImportCategories() {
+  return {food:'Food & Drink',transport:'Transport',shopping:'Shopping',health:'Health',home:'Home',streaming:'Streaming',music:'Music',personal:'Personal',pets:'Pets',other:'Other'};
+}
+function fpImportLocked() {
+  if (_importSaving || _fpMutationBusy) return true;
+  try { return !!fpPendingOperation('insert'); } catch(e) { return true; }
+}
+function fpLockImportControls() {
+  const locked=fpImportLocked();
+  document.querySelectorAll('#import-preview input[data-import-idx], #import-preview button, #import-account-type, #import-csv-input, #import-cancel-btn').forEach(function(el){el.disabled=locked;});
+  const recovery=document.getElementById('import-recovery-btn');if(recovery){recovery.style.display=locked&&!_importSaving?'block':'none';recovery.disabled=_importSaving||_fpMutationBusy;}
+  const close=document.getElementById('import-close-btn'); if(close) close.disabled=_importSaving;
+  const note=document.getElementById('import-save-note');
+  if(note) note.textContent=_importSaving?'Saving your selected transactions…':locked?'A previous save needs confirmation. Check the saved import before making corrections.':'Review the categories. Use Edit to correct a row. Nothing is saved until you press Import.';
+}
+function fpRenderImportRow(r,i) {
+  const category=r.type==='income'?'Income':(fpImportCategories()[r.category]||'Other');
+  const why=r.dupKind==='existing'?' · Already in your account':r.dupKind==='file'?' · Also in an earlier file you added':'';
+  return '<div style="display:flex;align-items:center;gap:6px;padding:7px 0;font-size:12px;">'
+    +'<label style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer;"><input type="checkbox" data-import-idx="'+i+'"'+(r.include?' checked':'')+' onchange="toggleImportRow('+i+',this.checked)">'
+    +'<span style="min-width:0;overflow-wrap:anywhere;">'+fpEscHtml(r.description)+'<span style="display:block;font-size:10.5px;color:var(--text2);">'+fpEscHtml(r.date)+' · '+fpEscHtml(category)+why+'<span style="display:block;">'+fpEscHtml(r.fileName)+'</span></span></span></label>'
+    +'<span style="font-weight:600;white-space:nowrap;">'+(r.type==='income'?'+':'-')+'$'+fmt(r.amount)+'</span>'
+    +'<button type="button" data-import-edit="'+i+'" aria-label="Edit transaction '+(i+1)+'" onclick="openImportRowEdit('+i+')" style="background:none;border:none;color:var(--accent);padding:8px 2px;font:600 12px Inter,sans-serif;cursor:pointer;">Edit</button></div>';
+}
+function openImportRowEdit(i) {
+  if(fpImportLocked() || !_pendingImportRows[i]) return;
+  if(_importEditIndex!==-1 && _importEditIndex!==i){showToast('Apply or cancel this correction first.');return;}
+  _importEditIndex=i;
+  const r=_pendingImportRows[i],editor=document.getElementById('import-row-editor');
+  if(!editor)return;
+  editor.innerHTML='<div style="padding:12px 0;border-bottom:1px solid var(--border);"><div style="font-size:13px;font-weight:600;margin-bottom:8px;">Correct this transaction</div>'
+    +'<label class="form-label" for="import-edit-desc">Description</label><input class="form-input" id="import-edit-desc" value="'+fpEscHtml(r.description)+'">'
+    +'<label class="form-label" for="import-edit-date" style="margin-top:8px;">Date</label><input class="form-input" id="import-edit-date" type="date" value="'+fpEscHtml(r.date)+'">'
+    +'<label class="form-label" for="import-edit-amount" style="margin-top:8px;">Amount</label><input class="form-input" id="import-edit-amount" inputmode="decimal" value="'+r.amount.toFixed(2)+'">'
+    +'<label class="form-label" for="import-edit-type" style="margin-top:8px;">Money out or in?</label><select class="form-select" id="import-edit-type" onchange="updateImportEditType()"><option value="expense">Expense · money out</option><option value="income">Income · money in</option></select>'
+    +'<div id="import-edit-category-group"><label class="form-label" for="import-edit-category" style="margin-top:8px;">Category</label><select class="form-select" id="import-edit-category">'+Object.entries(fpImportCategories()).map(function(c){return '<option value="'+c[0]+'">'+c[1]+'</option>';}).join('')+'</select></div>'
+    +'<p id="import-edit-error" role="alert" style="font-size:12px;color:var(--danger);"></p><div style="display:flex;gap:8px;margin-top:10px;"><button type="button" class="btn btn-primary" id="import-edit-apply" onclick="applyImportRowEdit()">Apply correction</button><button type="button" class="btn btn-outline" onclick="cancelImportRowEdit()">Cancel</button></div><div style="font-size:11px;color:var(--text2);margin-top:6px;">This changes the preview only. You’ll review it before importing.</div></div>';
+  document.getElementById('import-edit-type').value=r.type;
+  document.getElementById('import-edit-category').value=fpImportCategories()[r.category]?r.category:'other';
+  updateImportEditType(); updateImportSummary();
+  editor.scrollIntoView({block:'nearest'}); document.getElementById('import-edit-desc').focus();
+}
+function updateImportEditType() {
+  const group=document.getElementById('import-edit-category-group');
+  if(group)group.hidden=document.getElementById('import-edit-type').value==='income';
+}
+function fpImportCorrection(draft) {
+  const description=String(draft.description||'').trim(),date=String(draft.date||''),parsedDate=fpParseIso(date);
+  if(!description)return {error:'Enter a description.'};
+  if(!parsedDate || fpIso(parsedDate)!==date)return {error:'Choose a valid date.'};
+  const amount=fpImportAmount(draft.amount);
+  if(amount===null || amount<=0)return {error:'Enter an amount above zero with no more than two decimal places.'};
+  if(!['expense','income'].includes(draft.type))return {error:'Choose expense or income.'};
+  if(draft.type==='expense' && !Object.hasOwn(fpImportCategories(),draft.category))return {error:'Choose a category.'};
+  return {row:{description,date,amount,type:draft.type,category:draft.type==='expense'?draft.category:null}};
+}
+function fpCorrectImportRows(rows,i,changes,existing) {
+  const previous=rows.map(function(r){return {include:r.include,dupKind:r.dupKind};});
+  Object.assign(rows[i],changes);
+  fpClassifyImportRows(rows,existing);
+  rows.forEach(function(r,j){if(r.dupKind===previous[j].dupKind)r.include=previous[j].include;});
+}
+function applyImportRowEdit() {
+  if(fpImportLocked() || !_pendingImportRows[_importEditIndex])return;
+  const draft={};['desc','date','amount','type','category'].forEach(function(k){draft[k==='desc'?'description':k]=document.getElementById('import-edit-'+k).value;});
+  const result=fpImportCorrection(draft);
+  if(result.error){document.getElementById('import-edit-error').textContent=result.error;return;}
+  fpCorrectImportRows(_pendingImportRows,_importEditIndex,result.row,transactions);
+  _importEditIndex=-1; renderImportPreview();
+}
+function cancelImportRowEdit() {
+  if(fpImportLocked())return;
+  _importEditIndex=-1; const editor=document.getElementById('import-row-editor');if(editor)editor.replaceChildren();updateImportSummary();
+}
+function fpStatementImportRecords() {
+  return _pendingImportRows.filter(function(r){return r.include!==false;}).map(function(row){return {user_id:currentUser.id,type:row.type,description:row.description,amount:row.amount,date:row.date,category:row.category||null,recurring:false,frequency:null,anchor_date:null,apr:null,min_payment:null,balance:null,original_balance:null,lender:null};});
+}
+function fpStatementImportMatches(records) {
+  return !!currentUser && _pendingImportRows.length>0 && JSON.stringify(fpStatementImportRecords())===JSON.stringify(records);
+}
+function fpFinishStatementImport() {
+  _pendingImportRows=[];_importEditIndex=-1;
+  document.getElementById('import-confirm-btn').style.display='none';
+  document.getElementById('import-cancel-btn').style.display='none';
+  document.getElementById('import-preview').style.display='none';
+  document.getElementById('import-csv-input').value='';fpLockImportControls();
 }
 
 // Keeps the totals line and the confirm button in step with the checkboxes
@@ -6289,21 +6371,24 @@ function updateImportSummary() {
   const incm = inc.filter(function(r) { return r.type === 'income'; }).reduce(function(s,r){ return s+r.amount; }, 0);
   if (totals) totals.textContent = inc.length === 0 ? 'Nothing selected to import' : 'Importing ' + inc.length + ': -$' + fmt(exp) + ' in expenses' + (incm>0 ? ', +$' + fmt(incm) + ' in income' : '');
   confirmBtn.style.display = 'block';
-  confirmBtn.disabled = inc.length === 0;
-  confirmBtn.textContent = inc.length === 0 ? 'Nothing New to Import' : 'Import ' + inc.length + ' Transaction' + (inc.length===1?'':'s');
+  confirmBtn.disabled = inc.length === 0 || _importSaving || _importEditIndex !== -1;
+  fpLockImportControls();
+  confirmBtn.textContent = _importSaving ? 'Importing…' : _importEditIndex !== -1 ? 'Apply or cancel the correction first' : inc.length === 0 ? 'Nothing New to Import' : 'Import ' + inc.length + ' Transaction' + (inc.length===1?'':'s');
 }
 function toggleImportRow(i, on) {
+  if(fpImportLocked())return;
   if (_pendingImportRows[i]) _pendingImportRows[i].include = !!on;
   updateImportSummary();
 }
 function setAllImportDups(on) {
+  if(fpImportLocked())return;
   _pendingImportRows.forEach(function(r) { if (r.dupKind !== null) r.include = on; });
   document.querySelectorAll('#import-preview input[data-import-idx]').forEach(function(cb) { cb.checked = _pendingImportRows[Number(cb.getAttribute('data-import-idx'))].include; });
   updateImportSummary();
 }
 
 async function confirmStatementImport() {
-  if (!currentUser || _fpMutationBusy) return;
+  if (!currentUser || _fpMutationBusy || _importSaving || _importEditIndex !== -1) return;
   const toSave = _pendingImportRows.filter(function(r) { return r.include !== false; });
   if (toSave.length === 0) return;
   const skippedDups = _pendingImportRows.filter(function(r) { return r.include === false; }).length;
@@ -6311,36 +6396,16 @@ async function confirmStatementImport() {
   confirmBtn.disabled = true;
   confirmBtn.textContent = 'Importing...';
 
-  // Bulk insert in one call rather than looping saveTxn (which re-renders on every call)
-  const records = toSave.map(function(row) {
-    return {
-      user_id: currentUser.id,
-      type: row.type,
-      description: row.description,
-      amount: row.amount,
-      date: row.date,
-      category: row.category || null,
-      recurring: false,
-      frequency: null,
-      anchor_date: null,
-      apr: null,
-      min_payment: null,
-      balance: null,
-      original_balance: null,
-      lender: null
-    };
-  });
-
-  const saved = await fpInsertTransactions(records);
+  const records=fpStatementImportRecords();
+  _importSaving=true; fpLockImportControls();
+  let saved;
+  try { saved=await fpInsertTransactions(records); }
+  finally { _importSaving=false; fpLockImportControls(); }
   if (!currentUser || records[0].user_id !== currentUser.id) return;
   confirmBtn.disabled = false;
   if (!saved) { updateImportSummary(); return; }
-  confirmBtn.style.display = 'none';
-  document.getElementById('import-cancel-btn').style.display = 'none';
-  document.getElementById('import-preview').style.display = 'none';
-  document.getElementById('import-csv-input').value = '';
-  const count = records.length;
-  _pendingImportRows = [];
+  const count=records.length;
+  fpFinishStatementImport();
   showToast(count + ' transaction' + (count===1?'':'s') + ' imported' + (skippedDups > 0 ? ', ' + skippedDups + ' unselected row' + (skippedDups===1?'':'s') + ' skipped' : ''));
   renderCalendar(); updateStats(); renderExpensesView();
 }

@@ -318,6 +318,30 @@ const loan = id => txns().find(t => t.id === id);
   ok('T13h overlapping second file: shared row flagged, new row kept', /Found 3 transaction/.test(v.text) && /2 appear new, 1 possible duplicate/.test(v.text) && /earlier file/.test(v.text), v.text);
   await page.click('#import-confirm-btn'); await page.waitForTimeout(1000);
   ok('T13h only the 2 new rows saved', txns().length === n0 + 2 && txns().filter(t => t.description === 'BATCH ROW').length === 1, 'rows ' + (txns().length - n0));
+
+  // Corrections use the actual preview controls and the fake backend only.
+  n0=txns().length;
+  await pick([['correct.csv',H+'2026-10-28,AMAZON MARKETPLACE,-12.00\n2026-10-29,KEEP UNSELECTED,-4.00\n']]);
+  ok('T13j preview shows assigned expense categories',/Shopping/.test(await page.innerText('#import-preview')),'category hidden');
+  await page.uncheck('[data-import-idx="1"]');await page.click('[data-import-edit="0"]');
+  await page.fill('#import-edit-desc','Groceries');await page.fill('#import-edit-amount','1.001');await page.click('#import-edit-apply');
+  ok('T13j invalid correction keeps the draft and blocks import',/two decimal places/.test(await page.innerText('#import-edit-error')) && await page.isDisabled('#import-confirm-btn') && await page.inputValue('#import-edit-amount')==='1.001' && txns().length===n0,'invalid correction escaped review');
+  await page.fill('#import-edit-amount','$1,200.01');await page.fill('#import-edit-date','2026-10-30');await page.selectOption('#import-edit-category','food');await page.click('#import-edit-apply');
+  ok('T13j applied correction updates preview totals and preserves an unchecked row without saving',/Groceries/.test(await page.innerText('#import-preview')) && /Food & Drink/.test(await page.innerText('#import-preview')) && /1,200.01/.test(await page.innerText('#import-totals')) && !await page.isChecked('[data-import-idx="1"]') && txns().length===n0,'correction prematurely saved or selection lost');
+  await page.click('[data-import-edit="0"]');await page.fill('#import-edit-desc','Discard this draft');await page.getByRole('button',{name:'Cancel',exact:true}).click();
+  ok('T13j cancelling a correction keeps the applied preview unchanged',/Groceries/.test(await page.innerText('#import-preview')) && !/Discard this draft/.test(await page.innerText('#import-preview')) && txns().length===n0,'cancel changed row');
+  await page.click('#import-confirm-btn');await page.waitForTimeout(500);
+  const corrected=txns().find(t=>t.description==='Groceries');
+  ok('T13j import saves exactly the reviewed fields and no unchecked transaction',txns().length===n0+1 && corrected && near(corrected.amount,1200.01) && corrected.date==='2026-10-30' && corrected.category==='food' && corrected.type==='expense' && corrected.recurring===false && !txns().some(t=>t.description==='KEEP UNSELECTED'),JSON.stringify(corrected));
+  await pick([['correct-duplicate.csv',H+'2026-10-28,New bank label,-12.00\n']]);await page.click('[data-import-edit="0"]');
+  await page.fill('#import-edit-desc','Groceries');await page.fill('#import-edit-amount','1200.01');await page.fill('#import-edit-date','2026-10-30');await page.selectOption('#import-edit-category','food');await page.click('#import-edit-apply');
+  ok('T13k correction to an existing purchase is rechecked and skipped by default',/1 possible duplicate/.test(await page.innerText('#import-preview')) && !await page.isChecked('[data-import-idx="0"]') && await page.isDisabled('#import-confirm-btn'),'duplicate remained selected');
+  await page.click('[data-import-edit="0"]');await page.fill('#import-edit-amount','1200.02');await page.selectOption('#import-edit-type','income');
+  ok('T13k income correction hides the expense category',!await page.isVisible('#import-edit-category'),'income category still required');
+  await page.click('#import-edit-apply');
+  ok('T13k correcting away from a duplicate reselects the new row',await page.isChecked('[data-import-idx="0"]') && /Income/.test(await page.innerText('#import-preview')) && !await page.isDisabled('#import-confirm-btn'),'new row excluded');
+  n0=txns().length;await page.click('#import-confirm-btn');await page.waitForTimeout(500);
+  ok('T13k corrected income imports with no expense category',txns().length===n0+1 && txns().some(t=>t.description==='Groceries' && near(t.amount,1200.02) && t.type==='income' && t.category===null),'income correction lost');
   // I. descriptions are escaped in the duplicates list
   await pick([['x.csv', H + '2026-10-27,"<i id=""xss"">hello</i>",-2.00\n']]);
   await page.click('#import-confirm-btn'); await page.waitForTimeout(800);
@@ -637,6 +661,13 @@ const loan = id => txns().find(t => t.id === id);
   ok('T21 pending import recovery after reload uses original UUIDs without duplicates',txns().filter(t=>/^Import /.test(t.description)).length===2 && txns().filter(t=>/^Import /.test(t.description)).map(t=>t.id).sort().join(',')===importIDs && await page.evaluate(()=>transactions.filter(t=>/^Import /.test(t.description)).length)===2 && /Save confirmed/.test(await toast()),await toast());
   seed();await load();await hideStage();
 
+
+  await page.evaluate(()=>{openConnectAccounts();_pendingImportRows=[{type:'expense',description:'Recovery C',amount:14,date:'2026-10-09',category:'food',include:true,dupKind:null,fileIdx:0,fileName:'recovery.csv'}];renderImportPreview();});
+  writeFault='lost';await page.click('#import-confirm-btn');await wait(200);
+  ok('T21 unconfirmed import locks row corrections and selection',await page.isDisabled('[data-import-edit="0"]') && await page.isDisabled('[data-import-idx="0"]') && await page.isDisabled('#import-cancel-btn') && /needs confirmation/.test(await page.innerText('#import-save-note')) && await page.isVisible('#import-recovery-btn'),'pending save can be changed');
+  await page.click('#import-recovery-btn');await wait(200);await page.evaluate(()=>confirmStatementImport());
+  ok('T21 checking saved import clears its draft and cannot add duplicates',await page.evaluate(()=>_pendingImportRows.length)===0 && !await page.isVisible('#import-preview') && txns().filter(t=>t.description==='Recovery C').length===1,'confirmed batch left ready to import');
+  await page.click('#import-close-btn');seed();await load();await hideStage();
   // ---- T22 live-preview auth failure and recovery
   readFault='once';await load();await hideStage();
   ok('T22 transient JWT rejection retries account reads once and opens app',await page.isVisible('#app') && reqlog.filter(r=>r.op==='select'&&r.table==='user_settings').slice(-2).length===2,'account did not recover');

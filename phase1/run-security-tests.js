@@ -13,7 +13,7 @@ function make(names, extra={}) {
   const element = id => els[id] || (els[id]={value:'',style:{},textContent:'',innerHTML:'',classList:{remove(){},toggle(){}}});
   const c = vm.createContext(Object.assign({console,Date,Math,JSON,parseFloat,isNaN,setTimeout(){},
     currentUser:{id:'A'},userSettings:{startingBalance:100,payAmount:0},monthBalances:{},transactions:[],
-    _dataLoadVersion:0,_activeUserId:'A', savedPurchases:[],_importReadVersion:0,_fpSettingsVersion:0,_fpSettingsBusy:false,_fpSignOutBusy:false,fpReadTransactions:async()=>({data:[],error:null}),
+    _dataLoadVersion:0,_activeUserId:'A', savedPurchases:[],_importReadVersion:0,_importEditIndex:-1,_importSaving:false,fpImportLocked:()=>false,fpLockImportControls(){},_fpSettingsVersion:0,_fpSettingsBusy:false,_fpSignOutBusy:false,fpReadTransactions:async()=>({data:[],error:null}),
     fpLoadGoals:async()=>true,_fpGoals:[],_fpGoalsReady:true,_fpGoalBusy:false,_fpGoalDraftId:null,_fpGoalVersion:0,fpRenderAgenda(){},_fpExpenseQuery:'',
     _fpBillMarkRows:[],_fpBillMarksReady:true,_fpBillMarkBusy:false,_fpBillMarkVersion:0,fpRefreshBillMarks:async()=>true,renderPriorityReport(){},dRenderCashImpact(){},
     window:{},document:{getElementById:element,querySelector(){return element('modal')},querySelectorAll(){return []}},
@@ -373,7 +373,7 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
     const pending={txnObj:expense};const c=make(['rippleStillBuy'],{_ripplePending:pending,saveTxn:async()=>false});c.document.getElementById('ripple-overlay').style.display='flex';await c.rippleStillBuy();assert.equal(c._ripplePending,pending);assert.equal(c._els['ripple-overlay'].style.display,'flex');assert.equal(c._messages.length,0);
   });
   await test('failed import keeps preview and rows available for retry',async()=>{
-    const rows=[{...expense,include:true}];const c=make(['confirmStatementImport'],{_pendingImportRows:rows,fpInsertTransactions:async()=>false,updateImportSummary(){}});c.document.getElementById('import-preview').style.display='block';await c.confirmStatementImport();assert.equal(c._pendingImportRows,rows);assert.equal(c._els['import-preview'].style.display,'block');assert.equal(c._els['import-confirm-btn'].disabled,false);assert.equal(c._messages.length,0);
+    const rows=[{...expense,include:true}];const c=make(['confirmStatementImport','fpStatementImportRecords'],{_pendingImportRows:rows,fpInsertTransactions:async()=>false,updateImportSummary(){}});c.document.getElementById('import-preview').style.display='block';await c.confirmStatementImport();assert.equal(c._pendingImportRows,rows);assert.equal(c._els['import-preview'].style.display,'block');assert.equal(c._els['import-confirm-btn'].disabled,false);assert.equal(c._messages.length,0);
   });
 
   await test('large import confirms every UUID when API truncates insert response',async()=>{
@@ -504,5 +504,19 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   await test('pending payment retry retains the original date even if the field changes',async()=>{
     let payload;const c=make(['confirmRecordPayment'],{_rpLoanId:'loan',_rpIncludeMonthly:true,transactions:[{id:'loan',balance:5000,amount:200}],fpPendingOperation:()=>({payload:{date:'2026-10-07'}}),fpAtomicMutation:async(k,p)=>{payload=p;return null;}});c.document.getElementById('rp-date').value='2026-10-08';await c.confirmRecordPayment();assert.equal(payload.date,'2026-10-07');assert.equal(c._els['rp-date'].disabled,true);
   });
+
+  const importCorrectionFns=['fpImportCorrection','fpImportCategories','fpImportAmount'];
+  const importDraft={description:'  Bank description  ',date:'2026-10-09',amount:'$1,200.01',type:'expense',category:'home'};
+  await test('statement correction keeps exact cents and a local date without saving',()=>{const c=make(importCorrectionFns),r=c.fpImportCorrection(importDraft);assert.equal(r.row.amount,1200.01);assert.equal(r.row.description,'Bank description');assert.equal(r.row.date,'2026-10-09');assert.equal(r.row.category,'home');assert.equal(c.transactions.length,0);});
+  await test('statement correction rejects invalid amounts, dates and descriptions',()=>{const c=make(importCorrectionFns);for(const change of [{amount:''},{amount:'0'},{amount:'-10'},{amount:'1.001'},{amount:'1,23'},{amount:'1000000000000'},{date:'2026-02-31'},{date:''},{date:'2026-2-1'},{description:'  '},{category:'loan_payment'},{type:'bill'}])assert(c.fpImportCorrection({...importDraft,...change}).error,JSON.stringify(change));});
+  await test('statement income correction clears the expense category',()=>{const c=make(importCorrectionFns),r=c.fpImportCorrection({...importDraft,type:'income',category:'food'});assert.equal(r.row.category,null);assert.equal(r.row.type,'income');});
+  const correctFns=['fpCorrectImportRows','fpClassifyImportRows','fpImportKey','fpImportDesc'];
+  const importRow=(d,fileIdx=0)=>({type:'expense',description:d,date:'2026-10-09',amount:10,category:'other',fileIdx});
+  await test('correction to a saved transaction skips the duplicate and preserves unrelated selection',()=>{const c=make(correctFns),rows=[importRow('New'),importRow('Unselected')],existing=[importRow('Saved')];c.fpClassifyImportRows(rows,existing);rows[1].include=false;c.fpCorrectImportRows(rows,0,{description:'Saved'},existing);assert.equal(rows[0].dupKind,'existing');assert.equal(rows[0].include,false);assert.equal(rows[1].include,false);});
+  await test('correction away from a duplicate includes the new transaction',()=>{const c=make(correctFns),rows=[importRow('Saved')],existing=[importRow('Saved')];c.fpClassifyImportRows(rows,existing);c.fpCorrectImportRows(rows,0,{amount:10.01},existing);assert.equal(rows[0].dupKind,null);assert.equal(rows[0].include,true);});
+  await test('cross-file duplicate status refreshes while identical same-file purchases remain separate',()=>{const c=make(correctFns),rows=[importRow('Twin'),importRow('Twin'),importRow('Twin',1)];c.fpClassifyImportRows(rows,[]);c.fpCorrectImportRows(rows,0,{description:'Changed'},[]);assert.equal(rows[1].include,true);assert.equal(rows[2].dupKind,'file');c.fpCorrectImportRows(rows,1,{description:'Changed'},[]);assert.equal(rows[2].dupKind,null);assert.equal(rows[2].include,true);});
+  await test('category correction retains an intentionally selected duplicate',()=>{const c=make(correctFns),rows=[importRow('Saved')],existing=[importRow('Saved')];c.fpClassifyImportRows(rows,existing);rows[0].include=true;c.fpCorrectImportRows(rows,0,{category:'food'},existing);assert.equal(rows[0].dupKind,'existing');assert.equal(rows[0].include,true);});
+  await test('pending or active statement save blocks corrections',()=>{const c=make(['fpImportLocked']);assert.equal(c.fpImportLocked(),false);c._importSaving=true;assert.equal(c.fpImportLocked(),true);c._importSaving=false;c.fpPendingOperation=()=>({kind:'insert'});assert.equal(c.fpImportLocked(),true);});
+  await test('an open statement correction cannot import the old row',async()=>{let writes=0;const c=make(['confirmStatementImport'],{_importEditIndex:0,_pendingImportRows:[{include:true}],fpInsertTransactions:async()=>{writes++;}});await c.confirmStatementImport();assert.equal(writes,0);});
   console.log('TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
 })();
