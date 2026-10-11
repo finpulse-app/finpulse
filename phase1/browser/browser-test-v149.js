@@ -185,7 +185,7 @@ const loan = id => txns().find(t => t.id === id);
 
   // ---- T8b loan delete + Undo with real mouse
   await page.evaluate(() => { showView('loans', null); openLoanDeleteConfirm('loan-small'); }); await page.waitForTimeout(200);
-  await page.evaluate(() => { selectLoanDeleteReason(2, document.getElementById('ld-reasons').children[2]); confirmLoanDelete(); }); await page.waitForTimeout(800);
+  await page.evaluate(() => { confirmLoanDelete(); }); await page.waitForTimeout(800);
   ok('T8b loan removed after delete', !txns().some(t => t.id === 'loan-small'), 'still there');
   const lb = await page.evaluate(() => { const b = [...document.querySelectorAll('#toast button')].find(x => x.textContent === 'Undo'); const r = b.getBoundingClientRect(); const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return { x: r.x + r.width / 2, y: r.y + r.height / 2, hit: top === b }; });
   await page.mouse.click(lb.x, lb.y); await page.waitForTimeout(1200);
@@ -1167,6 +1167,14 @@ const loan = id => txns().find(t => t.id === id);
   ok('T53 recording spent money saves directly without a purchase decision popup',txns().some(t=>t.description==='Shopping'&&t.amount===200)&&!await page.isVisible('#ripple-overlay'),'expense diverted into a skipped purchase');
   await page.setViewportSize({width:312,height:900});await page.evaluate(()=>{showView('loans',null);openLoanModal();});
   ok('T53 debt entry and comparison controls fit a narrow phone',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&Array.from(document.querySelectorAll('#loan-add-form input,#loan-add-form select,.loan-card button')).filter(e=>e.getClientRects().length).every(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth})),'debt controls overflow');await page.evaluate(()=>closeLoanModal());await page.setViewportSize({width:1280,height:900});
+
+
+  seed();await load();await hideStage();await page.evaluate(()=>{showView('loans',null);openLoanEdit('loan-car');});await page.fill('#le-date','2026-10-18');await page.locator('#loan-edit-overlay .save-btn').click();await wait(200);
+  ok('T54 loan due-date correction updates its monthly schedule without recording a payment',loan('loan-car').anchor_date==='2026-10-18'&&await dayOut(18)===200&&!txns().some(t=>t.category==='loan_payment'),'due date could not be corrected');
+  await page.evaluate(()=>openLoanDeleteConfirm('loan-car'));
+  ok('T54 removing a loan needs only a confirmation, not an unused reason',!await page.isDisabled('#ld-confirm-btn')&&!await page.locator('#ld-reasons').count(),'unnecessary reason required');await page.keyboard.press('Escape');
+  await page.evaluate(()=>{transactions[0].balance=1000.01;transactions[0].original_balance=1000.01;transactions[0].apr=12;transactions[0].min_payment=200;renderLoans();});
+  ok('T54 payoff total keeps cents and identifies itself as an estimate',await page.locator('.loan-card').filter({hasText:'Test Car Loan'}).textContent().then(t=>/Estimated total repayment/.test(t)&&/\$1,031\.13/.test(t)),'estimated total rounded away cents');
 
   const offline=await browser.newContext();
   await offline.route('**/cdn.jsdelivr.net/**',r=>r.fulfill({contentType:'application/javascript',body:''}));

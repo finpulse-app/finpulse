@@ -461,7 +461,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .bill-payment-details summary{cursor:pointer;padding:8px 0;line-height:1.5;}
 .bill-occurrence{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:8px 0;border-top:1px solid var(--border);}.bill-date-action{min-height:44px;padding:8px 10px;font-size:12px;}
 @media(max-width:600px){.fp-dialog-overlay{padding:12px!important}.fp-dialog-card{padding:20px!important;max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px)}.bill-info{min-width:0}.bill-due{white-space:normal;line-height:1.5}.bill-amt{font-size:14px}.bill-payment-details{margin-left:0}}
-@media(max-width:600px){#loan-add-form>div[style*="display:grid"]{grid-template-columns:1fr!important}.loan-header{flex-wrap:wrap;gap:10px}.loan-card button{min-height:42px}.loan-card .loan-proj+div{flex-wrap:wrap}.loan-card button[onclick^="openWhatIf"]{min-height:44px}}
+@media(max-width:600px){#loan-add-form>div[style*="display:grid"]{grid-template-columns:1fr!important}.loan-header{flex-wrap:wrap;gap:10px}.loan-card button{min-height:44px;min-width:44px}.loan-card .loan-proj+div{flex-wrap:wrap}.loan-card button[onclick^="openWhatIf"]{min-height:44px}}
 </style>
 </head>
 <body>
@@ -1304,9 +1304,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   <div style="background:var(--surface);border-radius:20px;padding:26px;width:420px;max-width:95vw;box-shadow:var(--shadow-md);">
     <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:600;margin-bottom:6px;">Remove this loan?</div>
     <div style="font-size:12.5px;color:var(--text2);margin-bottom:16px;" id="ld-desc">This removes it from your plan and calendar.</div>
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:8px;">Why are you removing it?</div>
-    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;" id="ld-reasons"></div>
-    <input type="text" id="ld-other-text" placeholder="Tell us more (optional)" style="display:none;width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;font-size:13px;font-family:Inter,sans-serif;color:var(--text);outline:none;margin-bottom:14px;">
+    <p class="goal-note" style="margin-bottom:16px;">You can use Undo immediately after removing it.</p>
     <div style="display:flex;gap:8px;">
       <button id="ld-confirm-btn" onclick="confirmLoanDelete()" disabled style="flex:1;background:var(--surface3);color:var(--text3);border:none;border-radius:var(--radius-sm);padding:12px;font-family:Inter,sans-serif;font-weight:700;font-size:13px;cursor:not-allowed;">Remove loan</button>
       <button class="btn btn-outline" style="flex:1;padding:12px;" onclick="document.getElementById('loan-delete-overlay').style.display='none'">Keep it</button>
@@ -1324,6 +1322,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <div><label class="form-label" for="le-apr">APR (%)</label><input class="form-input" id="le-apr" type="number" step="0.01"></div>
     </div>
     <div class="form-group"><label class="form-label" for="le-payment">Monthly payment ($) <span style="font-weight:400;color:var(--text3);font-size:10px;">edit if your statement differs</span></label><input class="form-input" id="le-payment" type="number" step="0.01"></div>
+    <div class="form-group"><label class="form-label" for="le-date">Monthly due date</label><input class="form-input" id="le-date" type="date"><p class="goal-note" style="margin-top:6px;">Repeats monthly from this date. Recorded payments stay unchanged.</p></div>
     <div style="display:flex;gap:8px;margin-top:4px;">
       <button class="save-btn" style="flex:1;" onclick="saveLoanEdit()">Save Changes</button>
       <button class="btn btn-outline" style="padding:12px 16px;" onclick="document.getElementById('loan-edit-overlay').style.display='none'">Cancel</button>
@@ -4670,32 +4669,12 @@ function openLoanDeleteConfirm(loanId) {
   _loanDeleteId = loan.id;
   _loanDeleteReason = null;
   document.getElementById('ld-desc').innerHTML = 'You\'re removing <strong>' + fpEscHtml(loan.description) + '</strong> ($' + fmt(fpLoanBalanceAmount(loan)) + ' balance) from your plan and calendar.';
-  const reasons = ['Paid it off', 'Consolidated / refinanced it', 'Entered it by mistake', 'Other'];
-  const wrap = document.getElementById('ld-reasons');
-  wrap.innerHTML = reasons.map(function(r, i) {
-    return '<button onclick="selectLoanDeleteReason(' + i + ', this)" style="text-align:left;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;font-family:Inter,sans-serif;font-size:13px;color:var(--text);cursor:pointer;transition:all 0.1s;">' + r + '</button>';
-  }).join('');
-  document.getElementById('ld-other-text').style.display = 'none';
-  document.getElementById('ld-other-text').value = '';
-  const btn = document.getElementById('ld-confirm-btn');
-  btn.disabled = true; btn.style.background = 'var(--surface3)'; btn.style.color = 'var(--text3)'; btn.style.cursor = 'not-allowed';
+  const btn=document.getElementById('ld-confirm-btn');btn.disabled=false;btn.style.background='var(--danger)';btn.style.color='#fff';btn.style.cursor='pointer';
   document.getElementById('loan-delete-overlay').style.display = 'flex';
 }
 
-function selectLoanDeleteReason(idx, el) {
-  _loanDeleteReason = ['paid_off', 'consolidated', 'mistake', 'other'][idx];
-  const wrap = document.getElementById('ld-reasons');
-  Array.prototype.forEach.call(wrap.children, function(b) {
-    b.style.borderColor = 'var(--border)'; b.style.background = 'var(--surface2)';
-  });
-  el.style.borderColor = 'var(--accent)'; el.style.background = 'var(--accent-light)';
-  document.getElementById('ld-other-text').style.display = _loanDeleteReason === 'other' ? 'block' : 'none';
-  const btn = document.getElementById('ld-confirm-btn');
-  btn.disabled = false; btn.style.background = 'var(--danger)'; btn.style.color = '#fff'; btn.style.cursor = 'pointer';
-}
-
 async function confirmLoanDelete() {
-  if (!_loanDeleteId || !_loanDeleteReason) return;
+  if (!_loanDeleteId) return;
   const id = _loanDeleteId;
   const userId = currentUser && currentUser.id;
   const btn = document.getElementById('ld-confirm-btn');
@@ -4720,6 +4699,7 @@ function openLoanEdit(loanId) {
   document.getElementById('le-balance').value = loan.balance != null ? loan.balance : (loan.amount || '');
   document.getElementById('le-apr').value = loan.apr == null ? '' : loan.apr;
   document.getElementById('le-payment').value = loan.min_payment || loan.amount || '';
+  document.getElementById('le-date').value = loan.anchor_date || loan.date || fpIso(new Date());
   document.getElementById('loan-edit-overlay').style.display = 'flex';
 }
 
@@ -4739,7 +4719,9 @@ async function saveLoanEdit() {
   const apr = aprText === '' ? null : Number(aprText);
   const payment = fpParseMoney(document.getElementById('le-payment').value);
   if (!desc || balance === null || payment === null || (apr !== null && (!/^\d+(?:\.\d+)?$/.test(aprText) || !Number.isFinite(apr) || apr < 0 || apr >= 1e6))) { showToast('Check the loan name, balance, rate and payment. Use dollars and cents for money.','error'); return; }
-  if (!await fpUpdateTransaction(_loanEditId, { description: desc, balance, apr, min_payment: payment, amount: payment })) return;
+  const date=document.getElementById('le-date').value;
+  if(!fpParseIso(date)||fpIso(fpParseIso(date))!==date){showToast('Choose a valid monthly due date.','error');return;}
+  if (!await fpUpdateTransaction(_loanEditId, { description: desc, balance, apr, min_payment: payment, amount: payment, date, anchor_date:date })) return;
   document.getElementById('loan-edit-overlay').style.display = 'none';
   _loanEditId = null;
   showToast('Loan updated');
@@ -5053,7 +5035,7 @@ function updateWhatIf() {
     if (monthlyRate > 0 && pay <= monthInt) return { months: 999, interest: Math.round(monthInt * 12), canPayOff: false };
     let b = bal, m = 0, interest = 0;
     while (b > 0 && m < 600) { const int = b * monthlyRate; interest += int; b = b + int - pay; m++; }
-    return { months: b > 0 ? 999 : m, interest: Math.round(interest), canPayOff: b <= 0 };
+    return { months: b > 0 ? 999 : m, interest: fpRound2(interest), canPayOff: b <= 0 };
   }
   const minResult = calcPayoff(minPay);
   const newResult = calcPayoff(payment);
@@ -5069,9 +5051,9 @@ function updateWhatIf() {
     + (faster > 0 && minResult.canPayOff ? '<div style="font-size:10.5px;color:var(--accent);margin-top:4px;">' + payoffTime(faster) + ' sooner ✓</div>' : extra <= 0 ? '<div style="font-size:10.5px;color:var(--text3);margin-top:4px;">at the minimum</div>' : '')
     + '</div>'
     + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;min-height:76px;">'
-    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:6px;">Total you\'ll pay</div>'
+    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:6px;">Estimated total repayment</div>'
     + (newResult.canPayOff
-      ? '<div style="font-family:\'DM Serif Display\',serif;font-size:18px;color:' + (saved > 0 ? 'var(--accent)' : 'var(--danger)') + ';line-height:1.2;">$' + fmt(Math.round(bal + newResult.interest)) + '</div>'
+      ? '<div style="font-family:\'DM Serif Display\',serif;font-size:18px;color:' + (saved > 0 ? 'var(--accent)' : 'var(--danger)') + ';line-height:1.2;">$' + fmt(fpRound2(bal + newResult.interest)) + '</div>'
         + (saved > 0 ? '<div style="font-size:10.5px;color:var(--accent);margin-top:4px;">Save $' + fmt(saved) + ' vs min ✓</div>' : '')
       : '<div style="font-size:12px;color:var(--danger);margin-top:4px;">' + (payment <= bal * monthlyRate ? 'Payment does not cover monthly interest.' : 'No payoff within the 50-year estimate window.') + '</div>')
     + '</div></div>';
@@ -5410,7 +5392,7 @@ function renderLoans() {
       if (monthlyRate > 0 && payment <= monthInt) return {months:999, interest:Math.round(monthInt * 12), canPayOff:false};
       let b = bal, m = 0, interest = 0;
       while (b > 0 && m < 600) { const int = b * monthlyRate; interest += int; b = b + int - payment; m++; }
-      return {months: b > 0 ? 999 : m, interest: Math.round(interest), canPayOff: b <= 0};
+      return {months: b > 0 ? 999 : m, interest: fpRound2(interest), canPayOff: b <= 0};
     }
 
     const minResult = calcPayoff(minPay);
@@ -5419,8 +5401,8 @@ function renderLoans() {
     // Debt remaining bar: full bar = full debt, shrinks as balance decreases
     // origBal is the starting balance, bal is current, show % still owed
     const origBal = parseFloat(l.original_balance || l.balance || l.amount) || 0;
-    const debtRemainingPct = origBal > 0 ? Math.min(100, Math.max(2, Math.round((bal / origBal) * 100))) : 100;
-    const paidPct = 100 - debtRemainingPct;
+    const debtRemainingPct = origBal > 0 ? Math.min(100, Math.max(0, (bal / origBal) * 100)) : 100;
+    const paidPct = Math.min(99,Math.max(0,Math.floor(100-debtRemainingPct)));
 
     const focusBadge = isStudent
       ? '<span style="font-size:10px;font-weight:600;padding:2px 9px;border-radius:99px;background:#e8f0fe;color:#3b5bdb;border:1px solid #c5d3f5;">Student loan</span>'
@@ -5995,7 +5977,7 @@ async function saveEditIncome() {
     document.getElementById('edit-income-overlay').style.display = 'none';
     showToast('Income updated');
     renderCalendar(); updateStats();
-    if (shouldShowStageModal()) setTimeout(showStageModal, 400);
+    // Keep the next action in Today; position details remain available on demand.
   } catch(e) { console.error('Save income error:', e); }
 }
 
