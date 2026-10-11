@@ -846,9 +846,10 @@ const loan = id => txns().find(t => t.id === id);
   seed();await load();await hideStage();await page.evaluate(()=>openConnectAccounts());
   const summaryPdfPath='/tmp/finpulse-fictional-summary.pdf';fs.writeFileSync(summaryPdfPath,statementPDF(['Discover credit card','Account ending in 9876','Statement closing date 09/30/2026','New Balance $500.00','Minimum Payment Due $25.00','Payment Due Date 10/20/2026','Purchases APR 20.99%']));
   await page.setInputFiles('#import-csv-input',summaryPdfPath);await page.waitForSelector('#detected-card-balance',{state:'visible'});
+  await page.fill('#detected-card-due','2026-10-07');
   ok('Statement with a carried balance and no purchases prepares its card automatically',await page.inputValue('#detected-card-balance')==='500'&&/No transactions were imported/.test(await page.textContent('#import-preview')),'summary-only card lost');
   await page.click('#import-preview button.save-btn');await page.waitForTimeout(500);
-  ok('Summary-only statement adds debt without inventing expenses',db.transactions.some(t=>t.type==='loan'&&t.description==='Discover ending 9876'&&t.balance===500)&&db.transactions.every(t=>t.type==='loan'),'summary fabricated transactions');
+  ok('Summary-only statement adds debt without inventing expenses',db.transactions.some(t=>t.type==='loan'&&t.description==='Discover ending 9876'&&t.balance===500&&t.date==='2026-10-07')&&db.transactions.every(t=>t.type==='loan'),'summary fabricated transactions');
   await page.evaluate(()=>closeConnectAccounts());
 
   // ---- T28 Shared paid status and account-owned confirmations
