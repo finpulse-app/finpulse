@@ -712,6 +712,13 @@ t('v150 paying the latest bill does not hide an older missed occurrence',()=>{co
 t('v150 overdue priority actions have distinct IDs for each occurrence',()=>{const s=NEW(OCT8,NOPAY,[bill('w','Weekly service',40,'2026-09-30',{frequency:'weekly'})],100,'2026-10-08');const a=ACT(s).actions.filter(x=>x.code==='overdue_bill');return a.length===2&&new Set(a.map(x=>x.id)).size===2||JSON.stringify(a);});
 
 t('v150 early regular loan payment across a month boundary disables duplicate regular entry',()=>{setup(NOPAY,[CAR200('2026-10-10'),carPay('early',200,'2026-09-30')]);return run("fpLoanPaymentStatus(transactions[0],'2026-10-08').complete")===true||'early payment was ignored';});
+t('v150 current legacy month uses its saved amount instead of an older global balance',()=>{setup({...NOPAY,startingBalance:100},[],{'2026-10':350});return eq(run('getStartingBalanceForMonth(2026,9)'),350);});
+t('v150 legacy rollover chains missing months from the latest valid saved month',()=>{setup({...NOPAY,startingBalance:100},[bill('month','Service',100,'2026-08-15')],{'2026-08':1000});return eq(run('getStartingBalanceForMonth(2026,9)'),800);});
+t('v150 December cash flow carries into January with its own recurring dates',()=>{setup({...NOPAY,startingBalance:100},[bill('month','Service',50,'2026-12-15')],{'2026-12':1000});return eq(run('getStartingBalanceForMonth(2027,0)'),950);});
+t('v150 zero month balances survive invalid and future stored entries',()=>{setup({...NOPAY,startingBalance:100},[],{'2026-08':' ','2026-09':'oops','2026-10':0,'2027-01':999});return eq(run('getStartingBalanceForMonth(2026,9)'),0);});
+t('v150 a saved future-month amount supersedes an earlier legacy estimate',()=>{setup({...NOPAY,startingBalance:100},[],{'2026-10':350,'2026-11':2500});return eq(run('getStartingBalanceForMonth(2026,10)'),2500);});
+t('v150 legacy projections include all seventy-two months instead of stopping at sixty',()=>{setup({...NOPAY,startingBalance:1000},[bill('month','Service',10,'2026-10-15')],{'2026-10':1000});return eq(run('getStartingBalanceForMonth(2032,9)'),280);});
+t('v150 dated projections include all seventy-two months instead of stopping at sixty',()=>{setup({...NOPAY,startingBalance:1000},[bill('month','Service',10,'2026-10-15')],{__dated_balance:{v:2,amount:1000,asOf:'2026-10-01',monthStart:1000,paycheck:null}});return eq(run('getStartingBalanceForMonth(2032,9)'),280);});
 console.log('File: ' + file);
 if (missing.length) console.log('Functions not present in this build: ' + missing.join(', '));
 console.log(results.join('\n'));

@@ -5,6 +5,14 @@ security configuration and public launch setup are deferred at the user's reques
 
 ## Working additions
 
+- New months carry calendar estimates from the latest usable saved month instead
+  of reusing an older global balance. Zero balances and December-to-January dates
+  are preserved. Opening the account does not save a projected month balance or
+  show a delayed explanation popup. A balance from an earlier month offers a
+  direct check on the Today card. Explicit corrections use the existing dated
+  balance editor, preserve prior records and retain missed-payment reminders.
+  Calendar projections and recurring schedules include the full requested range
+  instead of silently stopping after sixty or forty months.
 - A Today card before the calendar gives one next action: confirm a dated balance,
   review an overdue payment, confirm income, inspect a shortfall, add a bill or
   check a purchase. It stays tied to today's records when browsing another month.

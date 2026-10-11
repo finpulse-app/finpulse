@@ -25,6 +25,7 @@ function dbop(s) {
     if (readFault === 'once') readFault = null;
     return {data:null,error:{code:'PGRST303',message:'Injected JWT claims rejection'}};
   }
+  if(s.table==='user_settings'&&s.op!=='select'&&writeFault==='settings-reject'){writeFault=null;return{data:null,error:{message:'Injected balance save failure'}};}
   if(s.table==='transactions' && s.op!=='select' && writeFault==='reject') { writeFault=null; return{data:null,error:{code:'23514',message:'Injected save failure'}}; }
   const rows = db[s.table]; if (!rows) return { data: null, error: { message: 'relation does not exist' } };
   const match = r => s.filters.every(([c,v,op]) => op==='in' ? v.includes(r[c]) : String(r[c])===String(v));
@@ -556,6 +557,8 @@ const loan = id => txns().find(t => t.id === id);
   await load(); await wait(1600);
   const nov = await page.evaluate(() => ({ start: getStartingBalanceForMonth(2026, 10), card: document.getElementById('stat-start').textContent, roll: document.getElementById('rollover-overlay').style.display, stored: userSettings.startingBalance }));
   ok('T19 on Nov 2 the November calendar starts at 2,000 (1,000 on Oct 25 + the Oct 30 paycheck), not October\'s stored -600; no rollover prompt', near(nov.start, 2000) && nov.card === '$2,000' && nov.roll !== 'flex' && near(nov.stored, -600), JSON.stringify(nov));
+  const monthCheck=/Start this month with a balance check/.test(await page.textContent('#today-focus-title'));await page.locator('#today-focus-button').click();
+  ok('T19 the new-month card opens a current balance check without forcing an explanation',monthCheck&&await page.isVisible('#edit-balance-overlay')&&await page.inputValue('#edit-balance-date')==='2026-11-02','wrong month balance action');await page.locator('#edit-balance-overlay button:text-is("Cancel")').click();
   await page.clock.setFixedTime(new Date(2026, 9, 8, 12, 0, 0));
   seed(); await load(); await hideStage();
 
@@ -1016,6 +1019,17 @@ const loan = id => txns().find(t => t.id === id);
   ok('T47 a scheduled one-time expense opens spending review directly',repairShown&&await page.isVisible('#view-expenses'),'scheduled expense omitted from next step');await page.evaluate(()=>showView('calendar',null));
   await page.setViewportSize({width:312,height:900});
   ok('T47 next-step action fits a narrow screen',await page.locator('#today-focus-button').evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth}), 'primary action clipped');
+
+  await page.setViewportSize({width:1280,height:900});seed();db.transactions=[{id:'service',user_id:'user-A',type:'bill',description:'Service',amount:50,date:'2026-09-15',anchor_date:'2026-09-15',frequency:'monthly',recurring:true,created_at:'2026-08-01'}];Object.assign(db.user_settings[0],{starting_balance:100,pay_amount:0,payday:null,month_balances_json:'{"2026-09":1000}'});await load();
+  ok('T48 an undated new month carries the prior estimate through real calendar events',await page.textContent('#stat-start')==='$950','older global starting balance reused');
+  ok('T48 loading a new month never writes an estimate or opens an explanation popup',JSON.parse(db.user_settings[0].month_balances_json)['2026-10']===undefined&&!reqlog.some(r=>r.table==='user_settings'&&r.op!=='select')&&!await page.isVisible('#rollover-overlay'),'opening account changed balances or forced a popup');
+  await page.locator('#today-focus-button').click();await page.fill('#edit-balance-input','425');await page.locator('#edit-balance-overlay button:text-is("Save")').click();await page.waitForTimeout(300);
+  ok('T48 explicit balance correction stores today and keeps older month records',JSON.parse(db.user_settings[0].month_balances_json).__dated_balance.amount===425&&JSON.parse(db.user_settings[0].month_balances_json).__dated_balance.asOf==='2026-10-08'&&JSON.parse(db.user_settings[0].month_balances_json)['2026-09']===1000,'correction lost its date or history');
+  ok('T48 an older missed bill stays visible after a new dated balance is saved',/past-due payment/.test(await page.textContent('#today-focus-title'))||/payment needs a check/.test(await page.textContent('#today-focus-title')),'missed obligation disappeared');
+  await page.locator('#stat-start-card').click();await page.fill('#edit-balance-input','700');writeFault='settings-reject';await page.locator('#edit-balance-overlay button:text-is("Save")').click();await page.waitForTimeout(200);
+  ok('T48 failed balance confirmation preserves the saved amount and typed correction',JSON.parse(db.user_settings[0].month_balances_json).__dated_balance.amount===425&&await page.isVisible('#edit-balance-overlay')&&await page.inputValue('#edit-balance-input')==='700','failed correction changed the record or erased the draft');
+  await page.locator('#edit-balance-overlay button:text-is("Save")').click();await page.waitForTimeout(300);
+  ok('T48 retry confirms the corrected balance without changing the prior month',JSON.parse(db.user_settings[0].month_balances_json).__dated_balance.amount===700&&JSON.parse(db.user_settings[0].month_balances_json)['2026-09']===1000&&!await page.isVisible('#edit-balance-overlay'),'retry did not preserve month history');
 
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {

@@ -1960,8 +1960,7 @@ async function loadUserData() {
   if (!stillCurrent()) return;
   await fpRefreshBillMarks(false);
   if (!stillCurrent()) return;
-  // Check if we need to roll over last month's ending balance
-  if (settings) await checkMonthRollover();
+  // Opening an account only reads its balances. The Today card offers a new-month balance check.
   if (!stillCurrent()) return;
   document.getElementById('loading-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
@@ -2131,59 +2130,10 @@ async function saveUserSettings(s, balances) {
 
 // ── MONTH ROLLOVER ──────────────────────────────────────────────
 async function checkMonthRollover() {
-  const today = new Date();
-  const curKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
-
-  // v149: a usable dated balance carries the calendar into the new month by itself (fpDatedMonthStart). The rollover check compares
-  // against last month's stored number, which would be stale, so it is skipped.
-  if (fpDatedMonthStart(today.getFullYear(), today.getMonth()) !== null) return;
-
-  // Already locked in for this month, nothing to do
-  if (monthBalances[curKey] != null) return;
-
-  // First month ever, no prior month to compare. Lock in the current starting balance silently.
-  const hasAnyPriorMonthKey = fpMonthKeys().length > 0;
-  if (!hasAnyPriorMonthKey) {
-    await saveMonthBalance(curKey, userSettings.startingBalance || 0);
-    return;
-  }
-
-  // We have prior data, compute last month's projected ending balance
-  const prevMo = today.getMonth() === 0 ? 11 : today.getMonth() - 1;
-  const prevYr = today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear();
-  const prevKey = prevYr + '-' + String(prevMo + 1).padStart(2, '0');
-
-  // Only proceed if we actually have a locked starting balance for the previous month
-  if (monthBalances[prevKey] == null) {
-    // No prior month locked, lock current silently and move on
-    await saveMonthBalance(curKey, userSettings.startingBalance || 0);
-    return;
-  }
-
-  // Build previous month's map using ITS locked starting balance
-  const prevDays = new Date(prevYr, prevMo + 1, 0).getDate();
-  const prevMap = buildDayMap(prevYr, prevMo);
-  const projectedEndBal = prevMap[prevDays] ? prevMap[prevDays].balance : parseFloat(monthBalances[prevKey]);
-
-  // Sanity check, if the projected balance is wildly different from anything reasonable
-  // (e.g. > 10x starting balance or < -10x), something is wrong with the data, skip modal
-  const startBal = parseFloat(userSettings.startingBalance) || 0;
-  const sanityLimit = Math.max(50000, Math.abs(startBal) * 20 + 10000);
-  if (Math.abs(projectedEndBal) > sanityLimit) {
-    await saveMonthBalance(curKey, startBal);
-    return;
-  }
-
-  const currentStart = parseFloat(userSettings.startingBalance) || 0;
-  const diff = Math.abs(currentStart - projectedEndBal);
-
-  if (diff <= 5) {
-    // Balances match closely, lock in silently
-    await saveMonthBalance(curKey, projectedEndBal);
-  } else {
-    // Real discrepancy, show the modal
-    setTimeout(function() { showRolloverModal(projectedEndBal, currentStart, curKey); }, 1200);
-  }
+  // Compatibility entry point: month changes do not save estimated balances or
+  // open delayed dialogs. Dated balances and saved month records drive the
+  // calendar; the Today card opens explicit balance confirmation when needed.
+  return false;
 }
 
 async function saveMonthBalance(key, balance) {
@@ -2434,18 +2384,24 @@ function fpPrincipalToRestore(pay, loan) {
   return Math.max(0, amt - interest);
 }
 // Balance at the start of a future month: chained from this month's projected end, month by month
+function fpStoredMonthBalance(key) {
+  const value=monthBalances&&monthBalances[key];
+  if(value==null||(typeof value!=='number'&&typeof value!=='string')||String(value).trim()==='')return null;
+  const amount=Number(value);return Number.isFinite(amount)?fpRound2(amount):null;
+}
 function fpChainedStartBalance(yr, mo) {
-  const today = new Date();
-  let y = today.getFullYear(), m = today.getMonth();
-  let bal = userSettings.startingBalance != null ? parseFloat(userSettings.startingBalance) : 0;
-  let guard = 0;
-  while ((y < yr || (y === yr && m < mo)) && guard++ < 60) {
-    const dim = new Date(y, m + 1, 0).getDate();
-    const dm = buildDayMap(y, m, bal);
-    bal = dm[dim] ? dm[dim].balance : bal;
-    m++; if (m > 11) { m = 0; y++; }
+  const today=new Date(),target=yr+'-'+fpPad2(mo+1);
+  const keys=fpMonthKeys().filter(k=>/^\d{4}-(0[1-9]|1[0-2])$/.test(k)&&k<=target&&fpStoredMonthBalance(k)!==null).sort();
+  let y=today.getFullYear(),m=today.getMonth(),bal=Number(userSettings.startingBalance)||0;
+  if(keys.length){const key=keys[keys.length-1];y=Number(key.slice(0,4));m=Number(key.slice(5))-1;bal=fpStoredMonthBalance(key);}
+  // Explicit start prevents recursive balance lookup. Every intervening month
+  // keeps its own paydays, charges and settlement rules, including December.
+  while(y<yr||(y===yr&&m<mo)) {
+    const dim=new Date(y,m+1,0).getDate(),dm=buildDayMap(y,m,bal);
+    bal=dm[dim]?dm[dim].balance:bal;
+    m++;if(m>11){m=0;y++;}
   }
-  return bal;
+  return fpRound2(bal);
 }
 
 // ── CALENDAR BALANCE RIPPLE ─────────────────────────────────────
@@ -3073,8 +3029,10 @@ function fpOccurrences(t, fromIso, toIso) {
   function add(iso) { if (iso < fromIso || iso > toIso || iso < startIso || seen[iso]) return; seen[iso] = 1; out.push(iso); }
   if (t.recurring && t.anchor_date) {
     const anchor = fpParseIso(fpEffectiveAnchorIso(t)), f = fpParseIso(fromIso), e = fpParseIso(toIso);
-    let y = f.getFullYear(), m = f.getMonth(), guard = 0;
-    while ((y < e.getFullYear() || (y === e.getFullYear() && m <= e.getMonth())) && guard++ < 40) {
+    let y = f.getFullYear(), m = f.getMonth();
+    // Include the full requested date range; truncating settlement history made
+    // repeating charges disappear from calendars farther in the future.
+    while (y < e.getFullYear() || (y === e.getFullYear() && m <= e.getMonth())) {
       getRecurringDates(anchor, t.frequency || 'monthly', y, m).forEach(function(rd) { add(fpIso(rd)); });
       m++; if (m > 11) { m = 0; y++; }
     }
@@ -3199,8 +3157,8 @@ function fpDatedMonthStart(year, month) {
   let y = d.getFullYear(), m = d.getMonth();
   if (year < y || (year === y && month < m)) return null;
   const inc = a.paycheck && a.paycheck.included === true ? a.paycheck : null;
-  let s = fpMonthStartFromDated(a.amount, a.asOf, inc), guard = 0;
-  while ((y < year || (y === year && m < month)) && guard++ < 60) {
+  let s = fpMonthStartFromDated(a.amount, a.asOf, inc);
+  while (y < year || (y === year && m < month)) {
     s += fpNetBeforeDay(y, m, new Date(y, m + 1, 0).getDate() + 1);
     m++; if (m > 11) { m = 0; y++; }
     if (inc && inc.date.slice(0, 7) === y + '-' + fpPad2(m + 1)) s -= inc.amount;
@@ -3962,7 +3920,8 @@ function ordinal(n) {
 
 function fpTodayFocus(snap,paidStatusReady=true) {
   const overdue=snap.overdue||[],basis=snap.balanceBasis||{},lateCount=overdue.length;
-  if(basis.status!=='ok'){const oldest=overdue.slice().sort((a,b)=>a.dueDate.localeCompare(b.dueDate))[0];return {code:'balance',tone:'attention',title:basis.status==='stale'?'Bring your balance up to date.':'Start with your bank balance.',description:'Enter what is in your account and the date it is from. That gives your upcoming bills a starting point.',label:'Update balance',destination:'balance',secondary:lateCount?lateCount+' past-due payment'+(lateCount===1?' also needs':'s also need')+' review.':null,secondaryDestination:oldest?(oldest.kind==='loan'?'loans':'bills'):null,secondaryLabel:oldest?(oldest.kind==='loan'?'Review loans':'Review bills'):null};}
+  const newMonth=basis.asOf&&snap.asOf&&basis.asOf.slice(0,7)<snap.asOf.slice(0,7);
+  if(basis.status!=='ok'||newMonth){const oldest=overdue.slice().sort((a,b)=>a.dueDate.localeCompare(b.dueDate))[0];return {code:newMonth?'month_balance':'balance',tone:'attention',title:newMonth?'Start this month with a balance check.':basis.status==='stale'?'Bring your balance up to date.':'Start with your bank balance.',description:newMonth?'Your last balance is from '+fpDateLabel(basis.asOf)+'. Enter what your account shows now to bring this month’s plan up to date.':'Enter what is in your account and the date it is from. That gives your upcoming bills a starting point.',label:'Update balance',destination:'balance',secondary:lateCount?lateCount+' past-due payment'+(lateCount===1?' also needs':'s also need')+' review.':null,secondaryDestination:oldest?(oldest.kind==='loan'?'loans':'bills'):null,secondaryLabel:oldest?(oldest.kind==='loan'?'Review loans':'Review bills'):null};}
   if(!paidStatusReady)return {code:'paid_status',tone:'attention',title:'Check your saved bill status.',description:'Refresh the paid status before relying on the next step.',label:'Review bills',destination:'bills'};
   if(lateCount){const first=overdue.slice().sort((a,b)=>a.dueDate.localeCompare(b.dueDate))[0];return {code:'overdue',tone:'urgent',title:lateCount+' payment'+(lateCount===1?' needs':'s need')+' a check.',description:'Start with '+first.description+', due '+fpDateLabel(first.dueDate)+'. If you already paid it, record that so your plan can catch up.',label:first.kind==='loan'?'Review loan':'Review bill',destination:first.kind==='loan'?'loans':'bills'};}
   if((snap.unconfirmedIncome||[]).length||(snap.uncertainIncome||[]).length)return {code:'income',tone:'attention',title:'Check your scheduled paycheck.',description:((snap.uncertainIncome||[]).length?'FinPulse cannot tell whether the paycheck is already in your balance. Confirm that when you update it.':'If the paycheck arrived, update your balance to include it.')+(snap.firstNegative?' Until that is confirmed, the calendar shows a possible shortfall on '+fpDateLabel(snap.firstNegative.date)+'.':''),label:'Update balance',destination:'balance'};
@@ -5779,20 +5738,11 @@ function handleStartBalClick() {
 }
 
 function getStartingBalanceForMonth(yr, mo) {
-  // v149: with a usable dated balance, every month from the balance's month onward starts from it (derived live, see fpDatedMonthStart)
-  const dated = fpDatedMonthStart(yr, mo);
-  if (dated !== null) return dated;
-  const today = new Date();
-  const isCurrentMonth = yr === today.getFullYear() && mo === today.getMonth();
-  if (isCurrentMonth) return userSettings.startingBalance != null ? parseFloat(userSettings.startingBalance) : 0;
-  // Check if we have a stored locked balance for this month
-  const key = yr + '-' + String(mo + 1).padStart(2, '0');
-  if (monthBalances[key] != null) return parseFloat(monthBalances[key]);
-  const isFuture = yr > today.getFullYear() || (yr === today.getFullYear() && mo > today.getMonth());
-  // Future month: chain from this month's projected end (iterative, explicit start, no recursion)
-  if (isFuture) return fpChainedStartBalance(yr, mo);
-  // Past month with no stored balance: best approximation is the user's starting balance
-  return userSettings.startingBalance || 0;
+  const dated=fpDatedMonthStart(yr,mo);
+  if(dated!==null)return dated;
+  // Legacy month records are estimates without a bank-balance date. Prefer the
+  // latest saved month at or before the target over reusing an older global value.
+  return fpChainedStartBalance(yr,mo);
 }
 
 // Fill a balance date input: today, limited to this month. A saved, still-valid dated balance shows its own date and amount.
