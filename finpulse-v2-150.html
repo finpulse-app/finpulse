@@ -6258,7 +6258,9 @@ function fpStatementIdentity(text,name) {
   const last=summary.match(/(?:ending(?:\s+in)?|last\s+(?:four|4)(?:\s+digits)?|account\s*(?:number|#)?\s*[:#]?)\s*(?:[xX*•\s-]*\d[\d\s-]{5,}|[xX*•\s-]*)(\d{4})\b/i);
   const card=/credit\s*card|minimum\s+(?:payment|amount)\s+due|payment\s+due\s+date|purchase\s+apr|annual percentage rate.*purchases|\b(?:sapphire|quicksilver|venture|freedom unlimited|blue cash|savor)\b/i.test(hint);
   const bank=/checking|savings account|beginning balance|ending balance|direct deposit|payroll/i.test(summary);
-  return {issuer:found?found[0]:null,last4:last?last[1]:null,kind:card?'card':bank?'bank':null};
+  const cardSummary=/minimum\s+(?:payment|amount)\s+due|payment\s+due\s+date|purchases?\s+apr|annual percentage rate.*purchases/i.test(summary);
+  const bankHeader=summary.split(/\r?\n/).slice(0,15).some(line=>/\b(checking|savings)\b/i.test(line)&&!/payment|transfer|\bfrom\b|linked|drawn|credit\s*card/i.test(line));
+  return {issuer:found?found[0]:null,last4:last?last[1]:null,kind:cardSummary?'card':bankHeader?'bank':card?'card':bank?'bank':null};
 }
 function fpStatementDate(text) {
   const value=String(text||'').trim();let d=parseImportDate(value);if(d)return fpIso(d);
@@ -6269,9 +6271,15 @@ function fpStatementCardDetails(text,name) {
   const id=fpStatementIdentity(text,name), lines=String(text||'').split(/\r?\n/);
   const amountFor=function(pattern){for(let i=0;i<lines.length;i++){const m=lines[i].match(pattern);if(!m)continue;const tail=lines[i].slice(m.index+m[0].length)+' '+(lines[i+1]||'');const a=tail.match(/^\s*[:\-]?\s*(\(?-?\$?\s*\d[\d,]*\.\d{2}\)?)/);if(a){const n=fpImportAmount(a[1].replace(/\s/g,''));if(n!==null&&n>=0)return n;}}return null;};
   const dateFor=function(pattern){for(let i=0;i<lines.length;i++){const m=lines[i].match(pattern);if(!m)continue;const tail=lines[i].slice(m.index+m[0].length)+' '+(lines[i+1]||'');const d=tail.match(/\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2}|(?:Jan\w*|Feb\w*|Mar\w*|Apr\w*|May|Jun\w*|Jul\w*|Aug\w*|Sep\w*|Oct\w*|Nov\w*|Dec\w*)\.?\s+\d{1,2},?\s+\d{4}/i);if(d)return fpStatementDate(d[0]);}return null;};
-  const rates=[];lines.forEach(l=>{if(/purchase/i.test(l)){const m=l.match(/(\d{1,3}(?:\.\d+)?)\s*%/);if(m&&Number(m[1])<=100)rates.push(Number(m[1]));}});
+  const rates=[];let rateTable=false;
+  lines.forEach(l=>{
+    if(/annual percentage rate|interest charge calculation|interest rates? and interest charges/i.test(l))rateTable=true;
+    if(/purchase/i.test(l)&&!/cash\s*back|rewards?|points|\bearn\b/i.test(l)&&(/\bAPR\b|annual percentage rate|interest rate/i.test(l)||(rateTable&&/^\s*purchases?\b/i.test(l)))){
+      for(const m of l.matchAll(/(\d{1,3}(?:\.\d+)?)\s*%/g))if(Number(m[1])<=100)rates.push(Number(m[1]));
+    }
+  });
   const apr=rates.length&&rates.every(r=>r===rates[0])?rates[0]:null;
-  return Object.assign(id,{name:(id.issuer||'Credit card')+(id.last4?' ending '+id.last4:''),balance:amountFor(/(?:new balance(?: total)?|statement balance|total balance)/i),minimum:amountFor(/(?:minimum payment due|minimum amount due|minimum payment)/i),due:dateFor(/payment due date|due date|payment due/i),asOf:dateFor(/statement closing date|closing date|statement date|period ending/i),apr});
+  return Object.assign(id,{name:(id.issuer||'Credit card')+(id.last4?' ending '+id.last4:''),balance:amountFor(/(?:new balance(?: total)?|statement balance|total balance)/i),minimum:amountFor(/(?:minimum payment due|minimum amount due|minimum payment)/i),due:dateFor(/payment due date|due date|payment due/i),asOf:dateFor(/statement closing date|closing date|statement date|period ending/i),apr,aprAmbiguous:rates.length>1&&apr===null});
 }
 function fpDetectStatementCSV(text,name) {
   const originalText=text,parsed=parseCsvText(text);
@@ -6400,7 +6408,7 @@ function fpStartDetectedCardReview(imported) {
     if(card.balance===null||(stamp&&(!card.asOf||card.asOf<=stamp[1]))||(!stamp&&Number(existing.balance)===card.balance))return false;
     card.existingId=existing.id;card.name=existing.description;
     if(card.minimum===null)card.minimum=Number(existing.min_payment)||null;
-    if(card.apr===null&&fpLoanRateKnown(existing))card.apr=Number(existing.apr);
+    if(card.apr===null&&!card.aprAmbiguous&&fpLoanRateKnown(existing))card.apr=Number(existing.apr);
     return true;
   });
   _fpStatementOwner=currentUser.id;_fpCardImported=imported;
