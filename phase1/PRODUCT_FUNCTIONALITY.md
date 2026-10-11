@@ -5,6 +5,19 @@ security configuration and public launch setup are deferred at the user's reques
 
 ## Working additions
 
+- Statement previews show categories and allow corrections to description, date,
+  amount, expense/income direction and expense category before saving. Corrections
+  recheck duplicates, preserve unrelated selection and update totals. Invalid or
+  unfinished corrections block import. Pending saves retain their UUIDs and lock
+  corrections; Check saved import confirms the same batch and clears its draft.
+  Close, Cancel and Escape discard an unsaved draft consistently.
+- Your Story separates recorded one-time income and expenses from whole-month
+  calendar estimates. A bank balance correction is never called earned income
+  or savings. Current/future totals use the same full-month calendar events, and
+  every plotted balance is explicitly an estimate. Past records retain exact
+  cents and exclude future-dated records, recurring schedules and loan balances.
+- Debt introductions describe the balances and payment plan without promising
+  the fastest possible way out of debt.
 - New months carry calendar estimates from the latest usable saved month instead
   of reusing an older global balance. Zero balances and December-to-January dates
   are preserved. Opening the account does not save a projected month balance or
