@@ -342,6 +342,8 @@ const loan = id => txns().find(t => t.id === id);
   ok('T13k correcting away from a duplicate reselects the new row',await page.isChecked('[data-import-idx="0"]') && /Income/.test(await page.innerText('#import-preview')) && !await page.isDisabled('#import-confirm-btn'),'new row excluded');
   n0=txns().length;await page.click('#import-confirm-btn');await page.waitForTimeout(500);
   ok('T13k corrected income imports with no expense category',txns().length===n0+1 && txns().some(t=>t.description==='Groceries' && near(t.amount,1200.02) && t.type==='income' && t.category===null),'income correction lost');
+  n0=txns().length;await pick([['escape.csv',H+'2026-10-28,ESCAPE CANCELLED,-8.00\n']]);await page.click('[data-import-edit="0"]');await page.fill('#import-edit-desc','Unsaved escape correction');await page.keyboard.press('Escape');await page.evaluate(()=>confirmStatementImport());
+  ok('T13l Escape cancels the import draft and correction without saving',!await page.isVisible('#connect-accounts-overlay') && await page.evaluate(()=>_pendingImportRows.length===0 && _importEditIndex===-1) && txns().length===n0,'Escape retained an importable draft');
   // I. descriptions are escaped in the duplicates list
   await pick([['x.csv', H + '2026-10-27,"<i id=""xss"">hello</i>",-2.00\n']]);
   await page.click('#import-confirm-btn'); await page.waitForTimeout(800);

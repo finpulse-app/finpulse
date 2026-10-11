@@ -6001,13 +6001,13 @@ function closeConnectAccounts() {
   if (_importSaving) return;
   _importReadVersion++;
   // Closing without confirming saves nothing
-  _pendingImportRows = [];
+  _pendingImportRows = []; _importEditIndex=-1;
   document.getElementById('connect-accounts-overlay').style.display = 'none';
 }
 function cancelStatementImport() {
   if (_importSaving) return;
   _importReadVersion++;
-  _pendingImportRows = [];
+  _pendingImportRows = []; _importEditIndex=-1;
   document.getElementById('import-preview').style.display = 'none';
   document.getElementById('import-confirm-btn').style.display = 'none';
   document.getElementById('import-cancel-btn').style.display = 'none';
@@ -7312,6 +7312,7 @@ document.addEventListener('keydown', function(e) {
   for (let i = 0; i < overlays.length; i++) {
     const el = document.getElementById(overlays[i]);
     if (el && el.style.display !== 'none' && el.style.display !== '') {
+      if (overlays[i] === 'connect-accounts-overlay') { closeConnectAccounts(); break; }
       el.style.display = 'none';
       if (overlays[i] === 'ripple-overlay') { _ripplePending = null; }
       if (overlays[i] === 'edit-expense-overlay') { _editExpenseTxnId = null; }
