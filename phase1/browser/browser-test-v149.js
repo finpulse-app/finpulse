@@ -1003,14 +1003,17 @@ const loan = id => txns().find(t => t.id === id);
   await page.click('#today-focus-button');
   ok('T47 primary balance action opens the current balance editor in one click',await page.isVisible('#edit-balance-overlay')&&await page.evaluate(()=>currentYear===2026&&currentMonth===9),'wrong editor or month');
   await page.locator('#edit-balance-overlay button:has-text("Cancel")').click();
-  await page.evaluate(()=>{const snap={asOf:'2026-10-08',balanceBasis:{status:'ok'},monthNet:0,upcoming:[],loans:[],nextPayday:null};fpRenderTodayFocus(snap)});await page.click('#today-focus-button');
+  // These isolated rendering checks use supplied snapshots; prevent a queued
+  // refresh of the different loaded fixture from replacing them before a click.
+  await page.evaluate(()=>{clearTimeout(window._priAiTimer);const snap={asOf:'2026-10-08',balanceBasis:{status:'ok'},monthNet:0,upcoming:[],loans:[],nextPayday:null};fpRenderTodayFocus(snap)});await page.click('#today-focus-button');
   ok('T47 no-income bill shortcut opens a monthly obligation directly',await page.isVisible('#bottom-sheet')&&await page.evaluate(()=>bsRecurring&&bsEntryKind==='bill'),'bill shortcut required extra navigation');await page.evaluate(()=>closeBottomSheet());
   await page.evaluate(()=>fpRenderTodayFocus({asOf:'2026-10-08',balanceBasis:{status:'ok'},unconfirmedIncome:[{amount:500}],firstNegative:{date:'2026-10-12'},nextPayday:null}));
   ok('T47 unconfirmed income explains a possible shortfall before reviewing spending',/Check your scheduled paycheck/.test(await page.textContent('#today-focus-title'))&&/possible shortfall/.test(await page.textContent('#today-focus-description'))&&await page.textContent('#today-focus-button')==='Update balance','income uncertainty hidden');
   await page.evaluate(()=>fpRenderTodayFocus({asOf:'2026-10-08',balanceBasis:{status:'undated'},overdue:[{kind:'bill',dueDate:'2026-10-05'},{kind:'loan',dueDate:'2026-09-20'}],nextPayday:null}));await page.locator('#today-focus-secondary button').click();
   ok('T47 overdue reminder opens the oldest payment type without recording a payment',await page.isVisible('#view-loans')&&db.bill_paid_marks.length===0,'wrong payment shortcut or mutation');await page.evaluate(()=>showView('calendar',null));
-  await page.evaluate(()=>fpRenderTodayFocus({asOf:'2026-10-08',weekEnd:'2026-10-10',balanceBasis:{status:'ok'},upcomingOneTime:[{description:'Car repair',amount:250.25,date:'2026-10-09'}],nextPayday:null}));await page.locator('#today-focus-button').click();
-  ok('T47 a scheduled one-time expense opens spending review directly',await page.isVisible('#view-expenses'),'scheduled expense omitted from next step');await page.evaluate(()=>showView('calendar',null));
+  seed();db.transactions=[{id:'repair',user_id:'user-A',type:'expense',description:'Car repair',amount:250.25,date:'2026-10-09',category:'transport',recurring:false}];Object.assign(db.user_settings[0],{starting_balance:1000,pay_amount:0,payday:null,month_balances_json:JSON.stringify({__dated_balance:{amount:1000,asOf:'2026-10-08',monthStart:1000}})});await load();
+  const repairShown=/Car repair is coming up/.test(await page.textContent('#today-focus-title'));await page.locator('#today-focus-button').click();
+  ok('T47 a scheduled one-time expense opens spending review directly',repairShown&&await page.isVisible('#view-expenses'),'scheduled expense omitted from next step');await page.evaluate(()=>showView('calendar',null));
   await page.setViewportSize({width:312,height:900});
   ok('T47 next-step action fits a narrow screen',await page.locator('#today-focus-button').evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth}), 'primary action clipped');
 
