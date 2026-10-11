@@ -461,7 +461,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .bill-payment-details summary{cursor:pointer;padding:8px 0;line-height:1.5;}
 .bill-occurrence{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:8px 0;border-top:1px solid var(--border);}.bill-date-action{min-height:44px;padding:8px 10px;font-size:12px;}
 @media(max-width:600px){.fp-dialog-overlay{padding:12px!important}.fp-dialog-card{padding:20px!important;max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px)}.bill-info{min-width:0}.bill-due{white-space:normal;line-height:1.5}.bill-amt{font-size:14px}.bill-payment-details{margin-left:0}}
-@media(max-width:600px){#loan-add-form>div[style*="display:grid"]{grid-template-columns:1fr!important}.loan-header{flex-wrap:wrap;gap:10px}.loan-card button{min-height:44px;min-width:44px}.loan-card .loan-proj+div{flex-wrap:wrap}.loan-card button[onclick^="openWhatIf"]{min-height:44px}}
+@media(max-width:600px){#loan-add-form>div[style*="display:grid"]{grid-template-columns:1fr!important}.loan-header{flex-wrap:wrap;gap:10px}.loan-card button{min-height:44px;min-width:44px}.loan-card .loan-proj+div{flex-wrap:wrap;flex-direction:column;align-items:stretch!important}.loan-card .loan-proj+div>div:last-child{width:100%}.loan-card .loan-proj+div button{width:100%}.loan-card button[onclick^="openWhatIf"]{min-height:44px}}
 </style>
 </head>
 <body>
@@ -7089,7 +7089,7 @@ function fpDialogControls(el) {
     el.classList.add('fp-dialog-overlay');card.classList.add('fp-dialog-card');
     card.setAttribute('role','dialog');card.setAttribute('aria-modal','true');card.tabIndex=-1;
     const heading=card.querySelector('h2,h3,[id$="title"]');
-    if(heading){if(!heading.id)heading.id=id+'-heading';card.setAttribute('aria-labelledby',heading.id);}else card.setAttribute('aria-label',id.replace(/-overlay|-sheet/g,'').replace(/-/g,' '));
+    if(heading){if(!heading.id)heading.id=id+'-heading';card.setAttribute('aria-labelledby',heading.id);}else card.setAttribute('aria-label',({'connect-accounts-overlay':'Import statements','setup-overlay':'Set up your calendar','stage-overlay':'Your financial position','loan-edit-overlay':'Edit loan','loan-delete-overlay':'Remove loan','reassign-overlay':'Move expense category'}[id])||id.replace(/-overlay|-sheet/g,'').replace(/-/g,' '));
     let opened=false,opener=null;
     new MutationObserver(function(){
       const visible=!!el.getClientRects().length;

@@ -12,3 +12,5 @@ Expense entry records money already spent directly. Before-you-buy decisions rem
 Debt cards label payoff time and total repayment as estimates, retain repayment cents, and explain that applying a payment comparison changes the calendar plan only. Future one-time expense records are labeled Scheduled. Cancelling expense deletion restores typed drafts as well as the editor markup.
 
 Loan editing can correct the monthly due date and schedule start without changing recorded payments. Removing a loan now asks for confirmation directly, with immediate Undo, rather than requiring a reason that was never saved. Debt payoff totals preserve estimated cents; progress does not claim completion while a balance remains. Phone debt actions have 44px touch targets. Saving income keeps the next step in Today rather than launching another delayed popup.
+
+On narrow phones, debt comparisons place readable full-width text above the actions instead of squeezing it beside them. Dialog accessible names use the product action, including Import statements, rather than internal component names.
