@@ -1427,7 +1427,8 @@ function openLoanPaymentInfo(txnId) {
 function fpRestoreExpenseEditor() {
   const card=document.querySelector('#edit-expense-overlay > div');
   if(card&&window._eeOriginalContent)card.innerHTML=window._eeOriginalContent;
-  window._eeOriginalContent=null;
+  if(window._eeOriginalDraft){Object.entries(window._eeOriginalDraft).forEach(([id,value])=>{const input=document.getElementById(id);if(input)input.value=value;});}
+  window._eeOriginalContent=null;window._eeOriginalDraft=null;
 }
 
 function openExpenseEdit(txnId) {
@@ -1487,12 +1488,13 @@ async function deleteExpenseFromEdit() {
   if (!modal) return;
   // Replace modal content with confirmation
   const originalContent = modal.innerHTML;
+  window._eeOriginalDraft=Object.fromEntries(['ee-desc','ee-amount','ee-date','ee-frequency'].map(id=>[id,document.getElementById(id).value]));
   modal.innerHTML = '<div style="font-family:\'Playfair Display\',serif;font-size:18px;font-weight:600;margin-bottom:10px;">Delete expense?</div>'
     + '<div style="font-size:13px;color:var(--text2);margin-bottom:6px;">You\'re about to delete <strong>' + fpEscHtml(name) + '</strong>.</div>'
     + '<div style="font-size:12px;color:var(--text3);margin-bottom:24px;">You can use Undo immediately after deleting it.</div>'
     + '<div style="display:flex;gap:8px;">'
     + '<button onclick="confirmDeleteExpense()" style="flex:1;background:var(--danger);color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-family:Inter,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Yes, delete it</button>'
-    + '<button onclick="document.querySelector(\'#edit-expense-overlay > div\').innerHTML = window._eeOriginalContent;window._eeOriginalContent=null;" style="flex:1;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;font-family:Inter,sans-serif;font-weight:600;font-size:14px;cursor:pointer;">Keep it</button>'
+    + '<button onclick="fpRestoreExpenseEditor();" style="flex:1;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;font-family:Inter,sans-serif;font-weight:600;font-size:14px;cursor:pointer;">Keep it</button>'
     + '</div>';
   window._eeOriginalContent = originalContent;
 }
@@ -2780,7 +2782,7 @@ function fpChangeExpenseMonth(delta) {
 
 function fpExpenseRecordLabel(t) {
   const frequencies = { monthly: 'Monthly', weekly: 'Weekly', biweekly: 'Every two weeks', twicemonthly: 'Twice monthly', yearly: 'Yearly' };
-  const label = t.recurring ? (frequencies[t.frequency || 'monthly'] || 'Recurring') : (t.category === 'loan_payment' ? 'Payment recorded' : 'Recorded');
+  const label = t.recurring ? (frequencies[t.frequency || 'monthly'] || 'Recurring') : (t.date>fpIso(new Date())?'Scheduled':t.category === 'loan_payment' ? 'Payment recorded' : 'Recorded');
   const iso = t.recurring ? (t.anchor_date || t.date) : t.date;
   const date = iso ? new Date(iso + 'T12:00:00') : null;
   return label + (date && !isNaN(date.getTime()) ? ' · ' + (t.recurring ? 'from ' : '') + date.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '');
@@ -4910,7 +4912,7 @@ function openWhatIf(loanId) {
     + '<div id="whatif-result" style="margin-bottom:12px;"></div>'
     + '<div id="whatif-coach" style="border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;line-height:1.6;min-height:72px;margin-bottom:12px;"></div>'
     + '<button id="whatif-apply-btn" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-family:\'Inter\',sans-serif;font-weight:700;font-size:13px;cursor:pointer;" onclick="applyWhatIfPayment(\'' + loan.id + '\')">&#10003; Set this as my monthly payment</button>'
-    + '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:6px;">This updates your committed monthly payment going forward</div>';
+    + '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:6px;">Updates your calendar plan. It does not change your lender payment or send money.</div>';
 
   // Inject slider thumb CSS once
   if (!document.getElementById('wi-thumb-style')) {
@@ -5092,7 +5094,7 @@ async function applyWhatIfPayment(loanId) {
   if(!await fpUpdateTransaction(loanId, {min_payment:newPayment,amount:newPayment,original_min_payment:originalMin})) return;
   closeWhatIf();
   renderLoans(); renderCalendar(); updateStats();
-  showToast('Monthly payment set to $'+fmt(newPayment));
+  showToast('Calendar payment plan set to $'+fmt(newPayment));
 }
 
 let _rpLoanId = null;
@@ -5462,10 +5464,10 @@ function renderLoans() {
       + '</div>'
       + '<div style="font-size:11px;color:var(--text3);margin-top:4px;">' + (l._originalBalanceEstimated ? 'Original balance not recorded; payoff progress is unavailable.' : paidPct > 0 ? paidPct + '% paid off, $' + fmt(origBal - bal) + ' cleared so far' : 'Start making payments to see progress here') + '</div></div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">'
-      + '<div style="background:var(--danger-light);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--danger);margin-bottom:4px;">Time to pay off</div><div style="font-family:\'DM Serif Display\',serif;font-size:16px;color:var(--danger);">' + (rateKnown ? payoffTime(minResult.months) : 'Add interest rate') + '</div></div>'
-      + '<div style="background:var(--danger-light);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--danger);margin-bottom:4px;">You\'ll actually pay in total</div>'
+      + '<div style="background:var(--danger-light);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--danger);margin-bottom:4px;">Estimated payoff time</div><div style="font-family:\'DM Serif Display\',serif;font-size:16px;color:var(--danger);">' + (rateKnown ? payoffTime(minResult.months) : 'Add interest rate') + '</div></div>'
+      + '<div style="background:var(--danger-light);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--danger);margin-bottom:4px;">Estimated total repayment</div>'
       + (!rateKnown ? '<div style="font-size:13px;color:var(--text2);">Add your statement APR to estimate total interest.</div>' : minResult.canPayOff
-        ? '<div style="font-family:\'DM Serif Display\',serif;font-size:16px;color:var(--danger);">$' + fmt(Math.round(bal + minResult.interest)) + '</div><div style="font-size:10px;color:var(--danger);margin-top:3px;">for a $' + fmt(bal) + ' loan, $' + fmt(minResult.interest) + ' is interest</div>'
+        ? '<div style="font-family:\'DM Serif Display\',serif;font-size:16px;color:var(--danger);">$' + fmt(fpRound2(bal + minResult.interest)) + '</div><div style="font-size:10px;color:var(--danger);margin-top:3px;">for a $' + fmt(bal) + ' loan, $' + fmt(minResult.interest) + ' is interest</div>'
         : '<div style="font-family:\'DM Serif Display\',serif;font-size:15px;color:var(--danger);">No payoff within 50 years</div><div style="font-size:10px;color:var(--danger);margin-top:3px;">' + (minPay <= bal * monthlyRate ? 'Your payment does not cover monthly interest.' : 'This payment takes longer than the 50-year estimate window.') + '</div>')
       + '</div></div></div>'
       + whatIfBtn
