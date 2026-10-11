@@ -459,7 +459,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .bill-chk{width:44px;height:44px;min-width:44px;flex-shrink:0;}
 .bill-payment-details{margin:0 0 14px 52px;font-size:12px;color:var(--text2);}
 .bill-payment-details summary{cursor:pointer;padding:8px 0;line-height:1.5;}
-.bill-occurrence{display:flex;justify-content:space-between;gap:12px;padding:8px;border-top:1px solid var(--border);}
+.bill-occurrence{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:8px 0;border-top:1px solid var(--border);}.bill-date-action{min-height:44px;padding:8px 10px;font-size:12px;}
 @media(max-width:600px){.fp-dialog-overlay{padding:12px!important}.fp-dialog-card{padding:20px!important;max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px)}.bill-info{min-width:0}.bill-due{white-space:normal;line-height:1.5}.bill-amt{font-size:14px}.bill-payment-details{margin-left:0}}
 </style>
 </head>
@@ -4049,8 +4049,10 @@ function renderPriorityReport() {
   const built = fpPriorityActions(snap);
   const actions = built.actions;
   if (actions.length === 0) {
-    if (hasIncome) {
-      actions.push({ id: 'setup-1', code:'due_bill', level: 'p3', text: 'Your income is set up. Now add your recurring bills and expenses so we can build your full action plan.' });
+    if (transactions.some(t=>t.type==='bill'||t.type==='expense'||t.type==='loan')) {
+      actions.push({id:'review-records',code:'due_expense',level:'p3',text:snap.stageReason==='spending_unknown'?'Your calendar is set up. Add everyday spending as it happens so your estimates can include it. You can review the records you have already entered.':'Review the income and payments on your calendar. Estimates depend on keeping these records up to date.'});
+    } else if (hasIncome) {
+      actions.push({ id: 'setup-1', code:'due_bill', level: 'p3', text: 'Your income is set up. Add the bills and expenses you need to cover next.' });
     } else {
       el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:10px 0;">Start with your paycheck, then add bills and expenses.<div style="margin-top:10px;"><button class="btn btn-outline" onclick="fpOpenPriority(\'income\')">Add income</button></div></div>';
       return;
@@ -5521,6 +5523,7 @@ function renderBillsView() {
     return dateA.localeCompare(dateB);
   });
   const el = document.getElementById('bill-list-view');
+  const expanded = el ? Array.from(el.querySelectorAll('details[open]')).map(x=>x.dataset.billId) : [];
   const tot = document.getElementById('bills-total');
 
   // Paid marks are remembered on this device (localStorage) in addition to this session's flags
@@ -5550,8 +5553,14 @@ function renderBillsView() {
       + '<div class="bill-info"><div class="bill-name">' + fpEscHtml(b.description) + '</div><div class="bill-due">Due ' + dueLabel + urgency + '</div></div>'
       + '<div class="bill-amt">' + (isPaid ? 'Cleared' : '-$' + fmt(row.openTotal)) + '</div>'
       + '</div>'
-      + '<details class="bill-payment-details"><summary>Payment dates'+(isPaid?' · Undo this month’s marks using the check above':' · The check marks '+fpDateLabel(next.due))+'</summary>'
-      + row.dates.map(function(due){const open=row.open.find(function(p){return p.due===due;});return '<div class="bill-occurrence"><span>'+fpDateLabel(due)+'</span><span>'+(open?'$'+fmt(open.amount)+' due':'Paid / recorded')+'</span></div>';}).join('')+'</details>';
+      + '<details class="bill-payment-details" data-bill-id="'+fpEscHtml(b.id)+'"'+(expanded.includes(String(b.id))?' open':'')+'><summary>Payment dates'+(isPaid?' · Undo this month’s marks using the check above':' · The check marks '+fpDateLabel(next.due))+'</summary>'
+      + row.dates.map(function(due){
+        const open=row.open.find(function(p){return p.due===due;});
+        const paid=fpBillPaidFor(b,due,fpIso(today),transactions,fpReadPaidMarks());
+        const canUndo=paid&&paid.by==='mark';
+        const action=open||canUndo?'<button class="btn btn-outline bill-date-action"'+(!_fpBillMarksReady||_fpBillMarkBusy?' disabled':'')+' aria-label="'+(canUndo?'Undo paid mark for ':'Mark paid for ')+fpEscHtml(b.description)+' on '+due+'" onclick="fpSetBillPaymentStatus(\''+b.id+'\',\''+due+'\','+(!canUndo)+')">'+(canUndo?'Undo':'Mark paid')+'</button>':'';
+        return '<div class="bill-occurrence"><span>'+fpDateLabel(due)+'</span><span>'+(open?'$'+fmt(open.amount)+' due':canUndo?'Marked paid':'Recorded payment')+'</span>'+action+'</div>';
+      }).join('')+'</details>';
   }
 
   const unpaid = sorted.filter(function(row){return row.open.length>0});
@@ -5567,6 +5576,19 @@ function renderBillsView() {
     html += paid.map(b => billRow(b, true)).join('');
   }
   el.innerHTML = html;
+}
+
+async function fpSetBillPaymentStatus(billId,due,paid) {
+  if(!currentUser||_fpBillMarkBusy)return false;
+  if(!_fpBillMarksReady){showToast('Refresh paid status before changing a mark.','error');return false;}
+  const today=new Date(),row=fpBillStatusRows(today).find(x=>String(x.bill.id)===String(billId));
+  if(!row||!row.dates.includes(due)||typeof paid!=='boolean')return false;
+  const state=fpBillPaidFor(row.bill,due,fpIso(today),transactions,fpReadPaidMarks());
+  if(paid&&state)return false;
+  if(!paid&&(!state||state.by!=='mark')){showToast('This payment is recorded as an expense. Edit the payment record to change its status.');return false;}
+  const uid=currentUser.id;
+  if(!await fpSaveBillMarks([{bill_id:row.bill.id,due_date:due,paid:paid,marked_at:fpIso(today)}])||!currentUser||currentUser.id!==uid)return false;
+  showToast((paid?'Marked paid: ':'Undid paid mark: ')+fpDateLabel(due));renderBillsView();renderPriorityReport();updateBillBadge();return true;
 }
 
 async function toggleBillPaid(billId) {
