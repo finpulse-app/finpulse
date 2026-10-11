@@ -1,0 +1,23 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');const html=fs.readFileSync(process.argv[2]||'finpulse-v2-150.html','utf8');function grab(n){let i=html.indexOf('function '+n+'(');if(i<0)throw Error(n);let a=html.indexOf('{',i),d=0,j=a;for(;j<html.length;j++){if(html[j]==='{')d++;else if(html[j]==='}'&&!--d)break;}return html.slice(i,j+1);}
+const c=vm.createContext({Date,Map,Set,Math,Number,String});const names=['fpPad2','fpIso','parseImportDate','parseCsvText','findColumn','fpImportAmount','categorizeImportedRow','fpParseStatement','fpStatementIdentity','fpStatementDate','fpStatementCardDetails','fpDetectStatementCSV','fpParseStatementPDF','fpPaidOffDate'];vm.runInContext(names.map(grab).join('\n'),c);let passed=0;function test(n,fn){fn();console.log('PASS '+n);passed++;}
+const card='Chase credit card\nAccount ending in 1234\nStatement closing date 09/30/2026\nNew Balance $1,203.45\nMinimum Payment Due $35.00\nPayment Due Date 10/20/2026\nPurchases APR 24.99%\nTransactions\n09/05 Coffee 4.50\n09/20 Electric bill 70.00\n09/25 Payment Thank You -50.00\n';
+test('card metadata name and last four',()=>{const d=c.fpStatementCardDetails(card,'statement.pdf');assert.equal(d.name,'Chase ending 1234');assert.equal(d.balance,1203.45);assert.equal(d.minimum,35);assert.equal(d.apr,24.99);assert.equal(d.due,'2026-10-20');assert.equal(d.asOf,'2026-09-30');});
+test('missing amounts stay unknown',()=>{const d=c.fpStatementCardDetails('Capital One credit card','export.csv');assert.equal(d.balance,null);assert.equal(d.minimum,null);assert.equal(d.apr,null);});
+test('confirmed zero APR stays zero',()=>assert.equal(c.fpStatementCardDetails('Credit card\nPurchases APR 0.00%','a.pdf').apr,0));
+test('multiple purchase rates do not guess APR',()=>assert.equal(c.fpStatementCardDetails('Credit card\nPurchases APR 10%\nPurchases APR 20%','a.pdf').apr,null));
+test('no transaction total used as balance',()=>assert.equal(c.fpStatementCardDetails('Credit card\nPurchases $900.00\nCredit limit $5000.00','a.pdf').balance,null));
+test('payroll CSV recognized as bank',()=>assert.equal(c.fpDetectStatementCSV('Date,Description,Amount\n2026-10-01,Payroll,1000\n2026-10-02,Shop,-20','bank.csv').mode,'bank'));
+test('positive card purchase from payment evidence',()=>assert.equal(c.fpDetectStatementCSV('Date,Description,Amount\n2026-10-01,Payment Thank You,-100\n2026-10-02,Coffee,5','card.csv').mode,'card'));
+test('negative card purchase from payment evidence',()=>assert.equal(c.fpDetectStatementCSV('Date,Description,Amount\n2026-10-01,Payment Thank You,100\n2026-10-02,Coffee,-5','card.csv').mode,'card-negative'));
+test('purchase type directs signed card amount',()=>assert.equal(c.fpDetectStatementCSV('Date,Description,Amount,Type\n2026-10-02,Coffee,-5,Sale','a.csv').mode,'card-negative'));
+test('ambiguous file requires one quick check',()=>assert.equal(c.fpDetectStatementCSV('Date,Description,Amount\n2026-10-02,Coffee,5','unknown.csv').mode,null));
+test('conflicting payment signs stay ambiguous',()=>assert.equal(c.fpDetectStatementCSV('Date,Description,Amount\n2026-10-01,Payment Thank You,100\n2026-10-02,Payment Thank You,-5','a.csv').mode,null));
+test('month name date',()=>assert.equal(c.fpStatementDate('September 30, 2026'),'2026-09-30'));
+test('impossible date rejected',()=>assert.equal(c.fpStatementDate('February 30, 2026'),null));
+const file={card:c.fpStatementCardDetails(card,'card.pdf'),pages:[card.split('\n').map(text=>({text,items:[]}))]};
+test('PDF card transactions retain cents and exclude card payment',()=>{const r=c.fpParseStatementPDF(file,'card');assert.equal(r.rows.length,2);assert.equal(r.rows[0].date,'2026-09-05');assert.equal(r.rows[0].amount,4.5);assert.equal(r.cardCredits,1);});
+test('short dates require statement year',()=>{const f={card:{asOf:null},pages:[[{text:'09/05 Coffee 4.50',items:[]}]]};assert.equal(c.fpParseStatementPDF(f,'card').rows.length,0);});
+test('December transaction in January statement uses previous year',()=>{const f={card:{asOf:'2026-01-15'},pages:[[{text:'12/20 Coffee 4.50',items:[]}]]};assert.equal(c.fpParseStatementPDF(f,'card').rows[0].date,'2025-12-20');});
+test('bank PDF refuses unknown unsigned direction',()=>{const f={card:{asOf:'2026-09-30'},pages:[[{text:'09/05 Coffee 4.50',items:[]}]]};assert.equal(c.fpParseStatementPDF(f,'bank').rows.length,0);});
+test('paid off date is retained and validated',()=>{assert.equal(c.fpPaidOffDate({lender:'Credit Card | paid_off:2026-10-05'}),'2026-10-05');assert.equal(c.fpPaidOffDate({lender:'Credit Card | paid_off:2026-02-30'}),null);});
+console.log('STATEMENT AUTO TOTAL pass='+passed+' fail=0');

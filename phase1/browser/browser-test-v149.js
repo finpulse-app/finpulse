@@ -79,7 +79,7 @@ const loan = id => txns().find(t => t.id === id);
   seed();
   const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--no-sandbox'] });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: TZID });
-  await ctx.route('**/cdn.jsdelivr.net/**', r => r.fulfill({ contentType: 'application/javascript', body: fs.readFileSync(path.join(__dirname, 'mock-client.js'), 'utf8') }));
+  await ctx.route('**/cdn.jsdelivr.net/**', r => { const url=r.request().url();if(url.includes('/pdfjs-dist@')){const name=url.split('/').pop();return r.fulfill({contentType:'application/javascript',headers:{'Access-Control-Allow-Origin':'*'},body:fs.readFileSync(require.resolve('pdfjs-dist/build/'+name))});}return r.fulfill({ contentType: 'application/javascript', body: fs.readFileSync(path.join(__dirname, 'mock-client.js'), 'utf8') }); });
   await ctx.route(/fonts\.(googleapis|gstatic)\.com|cdnjs|chart/, r => r.fulfill({ status: 200, contentType: 'text/css', body: '' }));
   const page = await ctx.newPage();
   await page.clock.setFixedTime(new Date(2026, 9, 8, 12, 0, 0));
@@ -798,6 +798,38 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>fpReviewRecurringBills(transactions));
   ok('Recurring review does not offer an already scheduled bill',!await page.isVisible('#recurring-review-amount'),'repeated suggestion');
   await page.evaluate(()=>closeConnectAccounts());
+
+  // Upload-first mixed statement flow: actual text PDF reader plus a bank CSV.
+  seed();await load();await hideStage();
+  await page.evaluate(()=>{openConnectAccounts();document.getElementById('import-account-type').value='auto';});
+  ok('Auto upload hides account and sign selectors',!await page.isVisible('#import-account-type')&&!await page.isVisible('#import-card-format'),'technical selector visible');
+  const statementPDF=require('./statement-pdf-fixture');const pdfPath='/tmp/finpulse-fictional-card.pdf',bankPath='/tmp/finpulse-fictional-bank.csv';
+  fs.writeFileSync(pdfPath,statementPDF(['Chase credit card','Account ending in 1234','Statement closing date 09/30/2026','New Balance $1,203.45','Minimum Payment Due $35.00','Payment Due Date 10/20/2026','Purchases APR 24.99%','Transactions','09/05 Coffee 4.50','09/20 Electric bill 70.00','09/25 Payment Thank You -50.00']));
+  fs.writeFileSync(bankPath,'Date,Description,Amount\n2026-09-01,Payroll,1000\n2026-09-25,Chase credit card payment,-50\n');
+  await page.setInputFiles('#import-csv-input',[pdfPath,bankPath]);await page.waitForFunction(()=>document.getElementById('import-totals'));
+  ok('Auto mixed PDF and CSV preview identifies card and excludes its credit payment',/Chase ending 1234/.test(await page.textContent('#import-preview'))&&/Importing 4/.test(await page.textContent('#import-totals'))&&/1 card payment/.test(await page.textContent('#import-preview')),await page.textContent('#import-preview'));
+  await page.click('#import-confirm-btn');await page.waitForTimeout(900);
+  ok('Auto import prepares detected card balance minimum rate and due date',await page.inputValue('#detected-card-name')==='Chase ending 1234'&&await page.inputValue('#detected-card-balance')==='1203.45'&&await page.inputValue('#detected-card-minimum')==='35'&&await page.inputValue('#detected-card-apr')==='24.99'&&await page.inputValue('#detected-card-due')==='2026-10-20','card fields incorrect');
+  ok('Auto import preserves account source and marks bank card payment as transfer',db.transactions.filter(t=>String(t.lender||'').startsWith('import:card:')).length===2&&db.transactions.some(t=>t.category==='card_transfer'&&t.amount===50),'account or transfer not retained');
+  const split=await page.evaluate(()=>({map:fpDayEvents(2026,8),spend:fpMonthlySpendingBreakdown(2026,8)}));
+  ok('Card purchase does not reduce bank cash twice',split.map[5].expenses.length===0&&split.map[25].expenses.some(t=>t.category==='card_transfer'),'card cash handling');
+  ok('Bank card payment is not counted again as spending',split.spend.varTotal===74.5,'spending '+JSON.stringify(split.spend));
+  writeFault='reject';await page.click('#import-preview button.save-btn');await page.waitForTimeout(250);
+  ok('Rejected detected card save preserves prefilled details',await page.isVisible('#detected-card-name')&&await page.inputValue('#detected-card-balance')==='1203.45'&&!db.transactions.some(t=>t.description==='Chase ending 1234'),'card draft lost');
+  await page.click('#import-preview button.save-btn');await page.waitForTimeout(500);
+  const detectedCard=db.transactions.find(t=>t.description==='Chase ending 1234'&&t.type==='loan');
+  ok('Detected card saves under Credit Card loans with its actual balance',!!detectedCard&&detectedCard.category==='Credit Card'&&detectedCard.balance===1203.45&&detectedCard.min_payment===35&&detectedCard.apr===24.99,'card loan missing');
+  await page.evaluate(()=>closeConnectAccounts());await page.clock.setFixedTime(new Date(2026,9,18,12));await page.evaluate(()=>renderPriorityReport());
+  ok('Priority list names recognized card when payment comes due',/Chase ending 1234/.test(await page.textContent('#priority-report')),await page.textContent('#priority-report'));
+  await page.evaluate(id=>fpOpenPaidOff(id),detectedCard.id);await page.fill('#paid-off-date','2026-10-19');await page.click('#paid-off-save');await page.waitForTimeout(200);
+  ok('Paid off rejects future date without changing balance',loan(detectedCard.id).balance===1203.45,'future payoff saved');
+  await page.fill('#paid-off-date','2026-10-17');writeFault='reject';await page.click('#paid-off-save');await page.waitForTimeout(200);
+  ok('Rejected payoff keeps balance and date draft',loan(detectedCard.id).balance===1203.45&&await page.inputValue('#paid-off-date')==='2026-10-17','payoff draft lost');
+  await page.click('#paid-off-save');await page.waitForTimeout(400);
+  ok('Paid off saves zero balance and selected date',loan(detectedCard.id).balance===0&&loan(detectedCard.id).lender.endsWith('paid_off:2026-10-17'),'payoff not saved');
+  await page.evaluate(()=>{renderLoans();renderPriorityReport();});
+  ok('Paid off card displays its date and leaves payment priorities',/Paid off/.test(await page.textContent('#loans-list'))&&!/Chase ending 1234/.test(await page.textContent('#priority-report')),'payoff display or priorities');
+  await page.clock.setFixedTime(new Date(2026,9,8,12));
 
   // ---- T28 Shared paid status and account-owned confirmations
   seed();db.transactions=[{id:'shared-bill',user_id:'user-A',type:'bill',description:'Shared bill',amount:25,date:'2026-10-09',anchor_date:'2026-10-09',frequency:'monthly',recurring:true}];
