@@ -701,8 +701,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       </div>
 
       <!-- Fixed vs Variable explainer -->
-      <div id="fv-explainer" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;margin-bottom:18px;cursor:pointer;" onclick="toggleFvExplainer()">
-        <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div id="fv-explainer" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;margin-bottom:18px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="toggleFvExplainer()">
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="width:32px;height:32px;background:var(--accent-light);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;">&#9878;&#65039;</div>
             <div>
@@ -845,8 +845,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
           <button class="btn btn-outline" style="padding:12px 16px;" onclick="closeLoanModal()">Cancel</button>
         </div>
       </div>
-      <div id="snowball-explainer" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;margin-bottom:18px;cursor:pointer;" onclick="toggleSnowball()">
-        <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div id="snowball-explainer" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;margin-bottom:18px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="toggleSnowball()">
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="width:32px;height:32px;background:var(--accent-light);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;">&#10052;&#65039;</div>
             <div>
@@ -5541,7 +5541,7 @@ function renderBillsView() {
     const b = row.bill;
     const next = row.open[0];
     const daysUntil = next ? fpDaysBetween(today, fpParseIso(next.due)) : null;
-    let dueLabel = fpExpenseRecordLabel(b) + (next ? ' · Next open: ' + fpDateLabel(next.due) + ' · ' + row.open.length + ' payment' + (row.open.length===1?'':'s') + ' open' : ' · Scheduled payments cleared');
+    let dueLabel = fpExpenseRecordLabel(b).split(' · from ')[0] + (next ? ' · ' + fpDateLabel(next.due) + (row.open.length>1?' · '+row.open.length+' open':'') : ' · Scheduled payments cleared');
     let urgency = '';
     if (!isPaid && next) {
       if (daysUntil < 0) urgency = ' &middot; <span style="color:var(--danger);font-weight:600;">overdue</span>';
