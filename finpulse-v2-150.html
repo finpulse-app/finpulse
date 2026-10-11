@@ -435,6 +435,23 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 @media(max-width:800px){.main{padding:18px 14px;}.topbar h2{font-size:25px;}.card-header{flex-wrap:wrap;gap:8px;}.goal-editor .form-row{grid-template-columns:1fr;}.goal-headline{font-size:28px;}.goal-actions{flex-wrap:wrap;}}
 .expense-tools{display:flex;align-items:flex-end;gap:10px;}.goal-tile{font:inherit;background:var(--surface);color:var(--text);}.goal-tile:focus-visible,.cal-day:focus-visible{outline:3px solid var(--accent);outline-offset:2px;}
 @media(max-width:800px){.expense-tools{flex-wrap:wrap;}.expense-tools>div{flex-basis:100%!important;}}
+
+/* Everyday clarity: one next step, direct actions, then the month in context. */
+:root{--bg:#f6f5f1;--surface2:#f9f8f5;--border:#e4e5de;--border2:#ced3c8;--accent:#245e46;--accent-light:#eef4ed;--text:#202b24;--text2:#59645b;--text3:#69746a;--radius:16px;--radius-sm:10px;--shadow:0 2px 8px rgba(32,43,36,.025);}
+.sidebar{box-shadow:none;background:#fcfcf9;}.sidebar-top{padding:26px 18px 20px;}.logo-wrap{gap:10px;}.logo-icon{width:34px;height:34px;background:var(--accent);border-radius:10px;}.logo{font-size:23px;}.logo-tagline{font-size:10px;font-style:normal;margin-top:10px;margin-bottom:26px;}.nav-label{font-size:10px;letter-spacing:1px;margin:22px 0 8px;}.nav-item{min-height:44px;padding:11px 12px;gap:10px;font-size:13px;}.nav-item.active{background:#e8efe5;}.nav-dot{width:6px;height:6px;}.sidebar-footer{padding:16px 18px;}
+.main{padding:36px 36px 48px;min-width:0;}.topbar{margin-bottom:24px;padding-bottom:22px;gap:20px;}.topbar h2{font-size:32px;line-height:1.2;}.topbar p{font-size:13px;max-width:580px;}.topbar .eyebrow{margin-bottom:8px;}.home-topbar{align-items:center;}.home-tools{flex-wrap:wrap;justify-content:flex-end;}.btn{min-height:42px;padding:10px 16px;font-size:13px;}.btn-outline{box-shadow:none;}.btn-outline:hover{border-color:var(--accent);background:var(--surface2);}.btn-solid{box-shadow:0 2px 4px rgba(36,94,70,.08);}.card{box-shadow:none;}.card-header{padding:20px 22px;gap:12px;}.card-body{padding:22px;}.card-title{font-size:18px;}.card-meta{font-size:12px;line-height:1.5;}.form-input{min-height:44px;}.toast{max-width:calc(100vw - 32px);}
+.today-focus{padding:26px 28px;gap:28px;border-left:4px solid var(--accent);box-shadow:none;margin-bottom:18px;}.today-focus h3{font-size:28px;letter-spacing:-.5px;max-width:650px;}.today-focus p{font-size:13px;max-width:650px;}.today-focus .eyebrow{font-size:11px;letter-spacing:.8px;margin:0;}.today-focus-action{max-width:240px;}.today-focus-action>button{min-height:46px;}.today-focus-action p{font-size:12px;}.today-focus[data-tone="attention"]{border-left-color:var(--warning);}.today-focus[data-tone="urgent"]{border-left-color:var(--danger);}.today-focus-secondary button{min-height:40px;}
+.home-quick-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:28px;}.home-quick-actions>button{display:flex;align-items:center;gap:12px;min-width:0;padding:18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font:500 13px 'Inter',sans-serif;text-align:left;cursor:pointer;transition:background .12s,border-color .12s;}.home-quick-actions>button:hover{background:var(--accent-light);border-color:#b4c8b7;}.home-quick-actions small{display:block;margin-top:5px;color:var(--text2);font-size:11px;font-weight:400;line-height:1.4;}.quick-action-icon{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:32px;height:32px;background:var(--accent-light);border-radius:10px;color:var(--accent);font-size:20px;font-weight:400;}.quick-action-arrow{margin-left:auto;color:var(--text3);font-size:17px;}
+.month-summary{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:28px;overflow:hidden;}.month-summary .breathing-room{border:0;border-radius:0;box-shadow:none;margin:0;padding:24px 26px;gap:20px;}.month-summary .br-label{font-size:11px;letter-spacing:.5px;}.month-summary .br-amount{font-size:38px;line-height:1.2;margin-top:8px;color:var(--text);font-variant-numeric:tabular-nums;}.month-summary .br-amount.low{color:var(--danger);}.month-summary .br-sub{font-size:12px;line-height:1.6;max-width:620px;margin-top:8px;}.month-summary .br-tag{padding:6px 10px;border-radius:8px;background:var(--surface2);}.month-summary .br-tag.low{background:var(--danger-light);}.month-summary .stats-row{margin:0;border-top:1px solid var(--border);gap:0;}.month-summary .stat-card{border:0;border-right:1px solid var(--border);border-radius:0;box-shadow:none;padding:18px 22px;text-align:left;font-family:'Inter',sans-serif;min-width:0;}.month-summary .stat-card:last-child{border-right:0;}.month-summary button.stat-card:hover{background:var(--surface2);}.month-summary button.stat-card:focus-visible{outline-offset:-4px;}.month-summary .stat-divider{display:none;}.month-summary .stat-label{font-size:10px;line-height:1.5;letter-spacing:.4px;}.month-summary .stat-value{font-size:24px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}.month-summary .stat-sub{font-size:11px;line-height:1.5;margin-top:6px;}.month-summary #br-coach{margin:0 24px 18px;}
+.home-calendar-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start;}.home-calendar-card{grid-column:1/-1;}.calendar-header{align-items:center;}.calendar-header .eyebrow{margin-bottom:6px;font-size:10px;}.calendar-header h3{font-family:'Playfair Display',serif;font-size:24px;font-weight:600;letter-spacing:-.3px;}.cal-btn{width:42px;height:42px;border-radius:10px;font-size:24px;}.home-calendar-card .view-toggle{margin-bottom:8px;}.view-toggle-btn{min-height:38px;}.calendar-help{font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:16px;}.cal-grid{gap:5px;}.cal-dow{font-size:10px;padding:6px 0 9px;}.cal-day{min-height:108px;padding:9px 7px 7px;border-radius:10px;background:#fafaf7;}.cal-day.past{opacity:.78;}.cal-day.today{border-width:2px;}.day-num{font-size:12px;margin-bottom:6px;}.day-balance{font-size:14px;}.day-bal-label{font-size:8px;}.day-event{font-size:10px;padding:3px 4px;}.day-section-mid{gap:3px;}.day-section-bot{padding-top:6px;}.home-priorities-card #priority-report{padding-top:12px;}.home-priorities-card .priority-text{font-size:13px;}.home-priorities-card .priority-option{font-size:12px;}.home-spending-card .ring-row{padding:12px 0;}
+@media(min-width:761px) and (max-width:1100px){.main{padding:28px 24px;}.home-topbar{align-items:flex-start;}.home-tools{max-width:180px;}.home-quick-actions>button{padding:14px;gap:8px;}.home-quick-actions small{font-size:10px;}.quick-action-arrow{display:none;}.today-focus{flex-direction:column;align-items:stretch;gap:16px;}.today-focus-action{display:flex;align-items:center;gap:16px;max-width:none;}.today-focus-action p{margin:0;}.month-summary .stat-card{padding:16px 14px;}.day-balance{font-size:12px;}}
+@media(max-width:760px){.sidebar-top{padding:14px 16px;}.logo{font-size:22px;}.mobile-menu-btn{min-height:44px;}.main{padding:22px 16px 36px;}.topbar{padding-bottom:20px;margin-bottom:20px;gap:16px;}.topbar h2{font-size:30px;}.home-tools{justify-content:flex-start;width:100%;gap:8px;}.home-tools .btn{font-size:12px;padding:10px 12px;}.home-topbar .eyebrow{font-size:10px;}.today-focus{flex-direction:column;align-items:stretch;padding:22px 20px;gap:16px;}.today-focus h3{font-size:25px;}.today-focus-action{max-width:none;}.today-focus-action>button{width:100%;}.today-focus-action p{margin-top:10px;}.home-quick-actions{grid-template-columns:1fr;gap:8px;margin-bottom:24px;}.home-quick-actions>button{padding:13px 16px;min-height:68px;}.home-quick-actions small{margin-top:3px;font-size:11px;}.month-summary{margin-bottom:24px;}.month-summary .breathing-room{padding:20px;gap:12px;}.month-summary .br-left{flex-basis:100%;}.month-summary .br-right{text-align:left;}.month-summary .br-amount{font-size:36px;}.month-summary .stat-card{padding:16px;}.month-summary .stat-card:nth-child(2){border-right:0;}.month-summary .stat-card:nth-child(n+3){border-top:1px solid var(--border);}.month-summary .stat-value{font-size:23px;}.home-calendar-layout{grid-template-columns:minmax(0,1fr);gap:18px;}.home-calendar-card{grid-column:auto;}.card-header{padding:18px;}.card-body,#view-calendar .card-body{padding:18px;}.home-calendar-card .card-body{padding:14px 10px;}.card-title{font-size:17px;}.calendar-header h3{font-size:22px;}.calendar-header{gap:8px;}.cal-nav{gap:6px;}.cal-btn{width:38px;height:42px;}.cal-grid{gap:3px;}.cal-day{padding:5px 2px;min-height:94px;border-radius:6px;}.day-num{font-size:11px;}.day-balance{font-size:clamp(8px,2.5vw,12px);overflow:hidden;text-overflow:ellipsis;}.day-event{font-size:8px;padding:2px 1px;}.day-bal-label{font-size:7px;letter-spacing:0;}.cal-dow{font-size:9px;letter-spacing:0;}.calendar-help{font-size:11px;margin-bottom:12px;}.bs-modal{padding:22px 18px;max-width:100%;}.bs-close{width:40px;height:40px;}.toast{right:16px;bottom:16px;}.saved-card{flex-wrap:wrap;}}
+.summary-month{padding:18px 26px 0;color:var(--text2);font-size:12px;font-weight:500;}.month-summary .breathing-room{padding-top:16px;}
+@media(max-width:760px){.summary-month{padding:18px 20px 0;}.home-quick-actions{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}.home-quick-actions>button{flex-direction:column;align-items:flex-start;gap:10px;padding:14px 10px;font-size:12px;line-height:1.4;min-height:110px;}.home-quick-actions small,.quick-action-arrow{display:none;}.quick-action-icon{width:28px;height:28px;font-size:18px;}.agenda-row{font-size:13px;}.agenda-heading{font-size:14px;}}
+.agenda-quiet-days{margin-top:14px;}.agenda-quiet-days>summary{padding:14px 0;min-height:44px;font-size:12px;color:var(--text2);cursor:pointer;}.month-summary .stat-card:disabled{color:var(--text);opacity:1;}.month-summary .stat-card:disabled:hover{background:var(--surface);}
+@media(max-width:600px){.bs-cat-grid{grid-template-columns:repeat(3,minmax(0,1fr));}.bs-cat-btn{min-width:0;min-height:64px;}.bs-ai-input,.bs-amount-input{min-width:0;}.bs-ai-bar{padding:10px;gap:6px;}.bs-ai-input:focus-visible{outline:none;}.bs-ai-bar:focus-within{outline:2px solid var(--accent);outline-offset:2px;}}
+.stat-label{font-size:10px;line-height:1.5;}.stat-value{font-size:24px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}.stat-sub{font-size:11px;line-height:1.5;}.stat-card{padding:16px 18px;box-shadow:none;}.bs-amount-input:focus-visible{outline:none;box-shadow:0 0 0 2px var(--accent-light);}
+@media(max-width:760px){.main #exp-stats-row{grid-template-columns:repeat(2,minmax(0,1fr))!important;}.main #exp-stats-row>.stat-card:last-child{grid-column:1/-1;}.stat-card{padding:14px;}.stat-value{font-size:23px;}}
 </style>
 </head>
 <body>
@@ -552,18 +569,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 
     <!-- CALENDAR VIEW -->
     <div id="view-calendar">
-      <div class="topbar">
+      <div class="topbar home-topbar">
         <div>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <button class="cal-btn" onclick="prevMonth()" style="width:30px;height:30px;font-size:16px;">&#8249;</button>
-            <h2 id="cal-heading" style="min-width:160px;text-align:center;">January 2026</h2>
-            <button class="cal-btn" onclick="nextMonth()" style="width:30px;height:30px;font-size:16px;">&#8250;</button>
-          </div>
-          <p style="text-align:center;margin-top:2px;">Track every dollar. See every ripple.</p>
+          <div class="eyebrow">A little clarity, every day</div>
+          <h2>Your money</h2>
+          <p>See what needs attention. Take the next step.</p>
         </div>
-        <div class="topbar-actions" style="flex-direction:column;align-items:flex-end;gap:6px;">
+        <div class="topbar-actions home-tools">
           <button class="btn btn-outline" id="edit-income-btn" onclick="openEditIncome()">Edit Income</button>
-          <button class="btn btn-outline" onclick="openConnectAccounts()" style="font-size:12px;padding:8px 14px;">Import statements</button>
+          <button class="btn btn-outline" onclick="openConnectAccounts()">Import statements</button>
           <button class="btn btn-solid" id="setup-btn" onclick="openSetup()" style="display:none;">&#9881; Setup</button>
         </div>
       </div>
@@ -573,6 +587,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
         <div class="today-focus-main"><div class="eyebrow" id="today-focus-date">Your next step</div><h3 id="today-focus-title">Getting your plan ready</h3><p id="today-focus-description">Your saved numbers will show what needs attention first.</p><div id="today-focus-secondary"></div></div>
         <div class="today-focus-action"><button class="btn btn-solid" id="today-focus-button" type="button" hidden>Review</button><p id="today-focus-payday"></p></div>
       </section>
+
+      <div class="home-quick-actions" role="group" aria-label="Everyday money actions">
+        <button id="home-add-expense" type="button" onclick="showView('calendar',null);openBottomSheet(null);"><span class="quick-action-icon" aria-hidden="true">+</span><span>Add expense<small>Something you spent</small></span><span class="quick-action-arrow" aria-hidden="true">&#8599;</span></button>
+        <button id="home-add-bill" type="button" onclick="showView('calendar',null);openBottomSheet(null,'bill');"><span class="quick-action-icon" aria-hidden="true">&#8801;</span><span>Add bill<small>A payment to plan for</small></span><span class="quick-action-arrow" aria-hidden="true">&#8599;</span></button>
+        <button id="home-check-purchase" type="button" onclick="showView('dreams',null);"><span class="quick-action-icon" aria-hidden="true">?</span><span>Before you buy<small>See what it could become</small></span><span class="quick-action-arrow" aria-hidden="true">&#8599;</span></button>
+      </div>
 
       <!-- SAVED PURCHASES CARD (shown once user has passed on at least one purchase) -->
       <div id="saved-purchases-card" style="display:none;" class="saved-card">
@@ -596,9 +616,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
         </div>
       </div>
 
+      <section class="month-summary" aria-label="Calendar month summary">
+      <div class="summary-month" id="summary-month-label"></div>
       <div class="breathing-room" id="breathing-room">
         <div class="br-left">
-          <div class="br-label">Breathing Room</div>
+          <div class="br-label">Month-end estimate</div>
           <div class="br-amount good" id="br-amount">$0</div>
           <div class="br-sub" id="br-sub">Add your income and bills to see this</div>
         </div>
@@ -609,25 +631,31 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <div id="br-coach" style="display:none;background:var(--danger-light);border:1px solid #f5c4bb;border-left:3px solid var(--danger);border-radius:var(--radius-sm);padding:12px 16px;font-size:13px;color:#7a1f1f;line-height:1.6;margin-bottom:16px;"></div>
 
       <div class="stats-row">
-        <div class="stat-card" id="stat-start-card" style="cursor:pointer;" onclick="handleStartBalClick()" title="Click to edit">
+        <button type="button" class="stat-card" id="stat-start-card" onclick="handleStartBalClick()" title="Review starting balance">
           <div class="stat-divider neu"></div>
           <div class="stat-label">Starting Balance</div>
           <div class="stat-value neu" id="stat-start">$0</div>
-          <div class="stat-sub" id="stat-start-sub" style="color:var(--accent);font-size:9.5px;">tap to edit</div>
-        </div>
+          <div class="stat-sub" id="stat-start-sub" style="color:var(--accent);">tap to edit</div>
+        </button>
         <div class="stat-card"><div class="stat-divider pos"></div><div class="stat-label">Cash In</div><div class="stat-value pos" id="stat-in">$0</div><div class="stat-sub">This month</div></div>
         <div class="stat-card"><div class="stat-divider neg"></div><div class="stat-label">Cash Out</div><div class="stat-value neg" id="stat-out">$0</div><div class="stat-sub">This month</div></div>
         <div class="stat-card"><div class="stat-divider neu"></div><div class="stat-label">End Balance</div><div class="stat-value neu" id="stat-end">$0</div><div class="stat-sub">Projected</div></div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 260px;gap:14px;align-items:start;">
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Your calendar</span>
-            <span class="card-meta" style="color:var(--text);font-weight:700;font-size:12.5px;">Click any day to add income, expenses, or bills</span>
+      </section>
+
+      <div class="home-calendar-layout">
+        <div class="card home-calendar-card">
+          <div class="card-header calendar-header">
+            <div><div class="eyebrow">Your calendar</div><h3 id="cal-heading">January 2026</h3></div>
+            <div class="cal-nav" role="group" aria-label="Browse calendar months">
+              <button type="button" class="cal-btn" onclick="prevMonth()" aria-label="Previous month">&#8249;</button>
+              <button type="button" class="cal-btn" onclick="nextMonth()" aria-label="Next month">&#8250;</button>
+            </div>
           </div>
           <div class="card-body">
             <div class="view-toggle" role="group" aria-label="Calendar display"><button class="view-toggle-btn active" id="calendar-month-btn" onclick="fpSetCalendarMode('month')" aria-pressed="true">Month</button><button class="view-toggle-btn" id="calendar-agenda-btn" onclick="fpSetCalendarMode('agenda')" aria-pressed="false">Agenda</button></div>
+            <p class="calendar-help">Choose a day to see or add income, expenses, and bills.</p>
             <div class="cal-grid" id="cal-grid"></div><div id="cal-agenda" style="display:none;"></div>
             <div class="ripple-bar" id="ripple-bar" style="display:none;">
               
@@ -635,9 +663,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
             </div>
           </div>
         </div>
-        <div class="card">
+        <div class="card home-priorities-card">
           <div class="card-header">
-            <span class="card-title">This Week's Priorities</span>
+            <span class="card-title">This week's priorities</span>
             <span class="card-meta" id="priority-date"></span>
           </div>
           <div style="padding:2px 16px 6px;"><span id="priority-stage-badge" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;" onclick="showStageModal()"></span></div>
@@ -645,11 +673,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
             <div style="color:var(--text3);font-size:12px;text-align:center;padding:10px 0;">Add your income and expenses to get your personalized priority report.</div>
           </div>
         </div>
-      </div>
 
-      <div class="card" style="margin-top:14px;max-width:520px;">
-        <div class="card-header"><span class="card-title">Fixed vs Variable</span><span class="card-meta" id="spending-rings-meta"></span></div>
+      <div class="card home-spending-card">
+        <div class="card-header"><span class="card-title">Your spending</span><span class="card-meta" id="spending-rings-meta"></span></div>
         <div class="card-body" id="spending-rings"><div style="color:var(--text3);font-size:12px;text-align:center;padding:10px 0;">Add expenses to see breakdown.</div></div>
+      </div>
       </div>
     </div>
 
@@ -1357,7 +1385,8 @@ let _fpSettingsVersion = 0;
 let _fpSettingsBusy = false;
 let _fpSignOutBusy = false;
 let _fpGoals=[], _fpGoalsReady=false, _fpGoalBusy=false, _fpGoalDraftId=null, _fpGoalVersion=0;
-let _fpCalendarMode='month';
+function fpInitialCalendarMode(){return typeof window.matchMedia==='function'&&window.matchMedia('(max-width:600px)').matches?'agenda':'month';}
+let _fpCalendarMode=fpInitialCalendarMode();
 let _fpExpenseQuery='';
 let _fpManualLoanPayment=false;
 let currentYear = new Date().getFullYear();
@@ -1704,7 +1733,7 @@ function fpResetAccountState() {
   _fpSettingsVersion++;
   _fpSettingsBusy = false;
   _fpGoals=[];_fpGoalsReady=false;_fpGoalBusy=false;_fpGoalDraftId=null;_fpGoalVersion++;
-  _fpCalendarMode="month";_fpExpenseQuery="";_fpManualLoanPayment=false;_fpDreamSkippedSignature=null;_fpPurchaseCheckActive=false;_fpPurchaseAfterPayday=false;_fpPurchaseSnapshotCache=null;
+  _fpCalendarMode=fpInitialCalendarMode();_fpExpenseQuery="";_fpManualLoanPayment=false;_fpDreamSkippedSignature=null;_fpPurchaseCheckActive=false;_fpPurchaseAfterPayday=false;_fpPurchaseSnapshotCache=null;
   const loanForm=document.getElementById("loan-add-form");if(loanForm)loanForm.style.display="none";
   const search=document.getElementById("expense-search");if(search)search.value="";
   const goalEditor=document.getElementById("goal-editor");if(goalEditor)goalEditor.style.display="none";
@@ -2639,6 +2668,7 @@ function renderCalendar() {
   const grid = document.getElementById('cal-grid');
   if (!grid) return;
   document.getElementById('cal-heading').textContent = new Date(currentYear, currentMonth).toLocaleString('default', { month: 'long', year: 'numeric' });
+  const summaryMonth=document.getElementById('summary-month-label');if(summaryMonth)summaryMonth.textContent=document.getElementById('cal-heading').textContent+' · Calendar estimates';
   const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   let html = dows.map(d => '<div class="cal-dow">' + d + '</div>').join('');
   const firstDay = new Date(currentYear, currentMonth, 1).getDay();
@@ -2670,7 +2700,7 @@ function renderCalendar() {
   updateRippleAlert(dayMap);
 }
 
-function fmt(n) { return Math.abs(parseFloat(n)).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+function fmt(n) { const amount=Math.round(Math.abs(parseFloat(n))*100)/100;return amount.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(amount)?0:2, maximumFractionDigits: 2 }); }
 function fpLoanBalanceAmount(loan) { return Math.max(0,parseFloat(loan.balance == null || loan.balance === '' ? loan.amount : loan.balance) || 0); }
 function fpIsPaycheckRecord(txn) { return txn.category === 'paycheck' || /\b(?:paycheck|payroll|salary|wages|pay deposit)\b/i.test(txn.description || ''); }
 
@@ -4072,6 +4102,7 @@ function updateStats() {
   if (startSub) startSub.textContent = isCurrentMonth ? 'tap to edit' : 'From last month';
   if (startSub) startSub.style.color = isCurrentMonth ? 'var(--accent)' : 'var(--text3)';
   if (startCard) startCard.style.cursor = isCurrentMonth ? 'pointer' : 'default';
+  if (startCard) { startCard.disabled=!isCurrentMonth;startCard.title=isCurrentMonth?'Review starting balance':'Starting balance for the viewed month'; }
   document.getElementById('stat-end').textContent = (endBal < 0 ? '-$' : '$') + fmt(Math.abs(endBal));
   document.getElementById('stat-end').className = 'stat-value ' + (endBal >= 0 ? 'pos' : 'neg');
   document.getElementById('stat-out').textContent = '-$' + fmt(totalOut);
@@ -5715,11 +5746,15 @@ function fpRenderAgenda() {
   ['month','agenda'].forEach(m=>{const b=document.getElementById('calendar-'+m+'-btn');b.classList.toggle('active',m===_fpCalendarMode);b.setAttribute('aria-pressed',String(m===_fpCalendarMode))});
   if(!agenda)return;
   const map=buildDayMap(currentYear,currentMonth);
-  el.innerHTML=Object.keys(map).map(day=>{
+  const today=new Date(),sameMonth=currentYear===today.getFullYear()&&currentMonth===today.getMonth();
+  const days=Object.keys(map).map(day=>{
     const e=map[day],date=new Date(currentYear,currentMonth,Number(day));
     const rows=e.income.map(t=>({name:t.description||'Income',amount:Number(t.amount)||0,sign:'+'})).concat(e.expenses.concat(e.bills,e.loans).map(t=>({name:t.description,amount:fpAmountDue(t),sign:'−'})));
-    return '<button class="agenda-day" aria-label="Open '+date.toLocaleDateString('en-US',{month:'long',day:'numeric'})+'" onclick="openDayPanel('+Number(day)+')"><div class="agenda-heading"><span>'+date.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</span><span>'+rows.length+' item'+(rows.length===1?'':'s')+'</span></div>'+rows.map(t=>'<div class="agenda-row"><span>'+fpEscHtml(t.name)+'</span><span>'+t.sign+'$'+fmt(t.amount)+'</span></div>').join('')+'<div class="agenda-balance">Projected balance '+(e.balance<0?'−':'')+'$'+fmt(e.balance)+'</div></button>';
-  }).join('');
+    const html='<button class="agenda-day" aria-label="Open '+date.toLocaleDateString('en-US',{month:'long',day:'numeric'})+'" onclick="openDayPanel('+Number(day)+')"><div class="agenda-heading"><span>'+date.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</span><span>'+rows.length+' item'+(rows.length===1?'':'s')+'</span></div>'+rows.map(t=>'<div class="agenda-row"><span>'+fpEscHtml(t.name)+'</span><span>'+t.sign+'$'+fmt(t.amount)+'</span></div>').join('')+'<div class="agenda-balance">Projected balance '+(e.balance<0?'−':'')+'$'+fmt(e.balance)+'</div></button>';
+    return {html,show:rows.length>0||(sameMonth&&Number(day)===today.getDate())};
+  });
+  const quiet=days.filter(d=>!d.show);
+  el.innerHTML=days.filter(d=>d.show).map(d=>d.html).join('')+(quiet.length?'<details class="agenda-quiet-days"><summary>Days without items ('+quiet.length+')</summary>'+quiet.map(d=>d.html).join('')+'</details>':'');
 }
 
 function renderInsights() {

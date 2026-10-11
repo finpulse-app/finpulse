@@ -5,6 +5,16 @@ security configuration and public launch setup are deferred at the user's reques
 
 ## Working additions
 
+- The home screen leads with the Today action and direct Add expense, Add bill
+  and Before you buy shortcuts. Entry shortcuts retain today's date and the
+  correct one-time or monthly default without saving until confirmed. A quieter
+  month summary names the viewed month; month controls sit with the calendar.
+  Starting balance uses a keyboard-accessible button only in the current month.
+- Phone sessions begin with Agenda. Scheduled days and today appear first;
+  quiet dates remain available in a simple expandable list. Month is one tap
+  away and a chosen view survives navigation. Desktop sessions begin with Month.
+  Cards, controls and forms use more readable spacing and consistent surfaces.
+  Fractional dollar amounts display both cent digits.
 - Statement previews show categories and allow corrections to description, date,
   amount, expense/income direction and expense category before saving. Corrections
   recheck duplicates, preserve unrelated selection and update totals. Invalid or
