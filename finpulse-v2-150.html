@@ -2700,7 +2700,7 @@ function renderCalendar() {
   updateRippleAlert(dayMap);
 }
 
-function fmt(n) { const amount=Math.round(Math.abs(parseFloat(n))*100)/100;return amount.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(amount)?0:2, maximumFractionDigits: 2 }); }
+function fmt(n) { const amount=Math.abs(parseFloat(n));return amount.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(Math.round(amount*100)/100)?0:2, maximumFractionDigits: 2 }); }
 function fpLoanBalanceAmount(loan) { return Math.max(0,parseFloat(loan.balance == null || loan.balance === '' ? loan.amount : loan.balance) || 0); }
 function fpIsPaycheckRecord(txn) { return txn.category === 'paycheck' || /\b(?:paycheck|payroll|salary|wages|pay deposit)\b/i.test(txn.description || ''); }
 
