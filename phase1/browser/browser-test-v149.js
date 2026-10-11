@@ -996,6 +996,22 @@ const loan = id => txns().find(t => t.id === id);
   await page.fill('#ei-payday','2026-10-12');await page.locator('#edit-income-overlay .save-btn').click();await page.waitForTimeout(300);
   ok('T46 corrected paycheck saves exact cents and chosen payday',db.user_settings[0].pay_amount===1400.25&&db.user_settings[0].payday==='2026-10-12'&&!await page.isVisible('#edit-income-overlay'),'valid correction did not save');
 
+  seed();await load();
+  ok('T47 next step is visible before the calendar and uses a dated balance action',/Start with your bank balance/.test(await page.textContent('#today-focus-title'))&&await page.locator('#today-focus').evaluate(el=>el.getBoundingClientRect().top<document.getElementById('cal-grid').getBoundingClientRect().top),'next step not prominent');
+  await page.evaluate(()=>{currentYear=2025;currentMonth=0;renderCalendar();updateStats()});
+  ok('T47 today focus stays on today while browsing an older calendar',/Oct 8, 2026/.test(await page.textContent('#today-focus-date')),'focus followed viewed month');
+  await page.click('#today-focus-button');
+  ok('T47 primary balance action opens the current balance editor in one click',await page.isVisible('#edit-balance-overlay')&&await page.evaluate(()=>currentYear===2026&&currentMonth===9),'wrong editor or month');
+  await page.locator('#edit-balance-overlay button:has-text("Cancel")').click();
+  await page.evaluate(()=>{const snap={asOf:'2026-10-08',balanceBasis:{status:'ok'},monthNet:0,upcoming:[],loans:[],nextPayday:null};fpRenderTodayFocus(snap)});await page.click('#today-focus-button');
+  ok('T47 no-income bill shortcut opens a monthly obligation directly',await page.isVisible('#bottom-sheet')&&await page.evaluate(()=>bsRecurring&&bsEntryKind==='bill'),'bill shortcut required extra navigation');await page.evaluate(()=>closeBottomSheet());
+  await page.evaluate(()=>fpRenderTodayFocus({asOf:'2026-10-08',balanceBasis:{status:'ok'},unconfirmedIncome:[{amount:500}],firstNegative:{date:'2026-10-12'},nextPayday:null}));
+  ok('T47 unconfirmed income explains a possible shortfall before reviewing spending',/Check your scheduled paycheck/.test(await page.textContent('#today-focus-title'))&&/possible shortfall/.test(await page.textContent('#today-focus-description'))&&await page.textContent('#today-focus-button')==='Update balance','income uncertainty hidden');
+  await page.evaluate(()=>fpRenderTodayFocus({asOf:'2026-10-08',balanceBasis:{status:'undated'},overdue:[{kind:'bill',dueDate:'2026-10-05'},{kind:'loan',dueDate:'2026-09-20'}],nextPayday:null}));await page.locator('#today-focus-secondary button').click();
+  ok('T47 overdue reminder opens the oldest payment type without recording a payment',await page.isVisible('#view-loans')&&db.bill_paid_marks.length===0,'wrong payment shortcut or mutation');await page.evaluate(()=>showView('calendar',null));
+  await page.setViewportSize({width:312,height:900});
+  ok('T47 next-step action fits a narrow screen',await page.locator('#today-focus-button').evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth}), 'primary action clipped');
+
   await page.setViewportSize({width:312,height:900});
   for(const view of ['insights','expenses','bills','plan','settings','dreams','loans','calendar']) {
     await page.evaluate(v=>showView(v,null),view);

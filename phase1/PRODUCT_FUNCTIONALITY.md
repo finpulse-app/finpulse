@@ -5,6 +5,12 @@ security configuration and public launch setup are deferred at the user's reques
 
 ## Working additions
 
+- A Today card before the calendar gives one next action: confirm a dated balance,
+  review an overdue payment, confirm income, inspect a shortfall, add a bill or
+  check a purchase. It stays tied to today's records when browsing another month.
+  Missing balance dates keep the overdue reminder visible. Unconfirmed pay is
+  explained before a possible shortfall is attributed to spending. Shortcuts
+  open the working editors and views without saving or moving money.
 - Quick expense entry recognizes the full amount in `Rent $1,200`, preserves
   merchant numbers such as `7-eleven $6.50`, and rejects ambiguous prices or
   fractional cents while keeping the entered text. Category and item entry use
