@@ -1009,6 +1009,8 @@ const loan = id => txns().find(t => t.id === id);
   ok('T47 unconfirmed income explains a possible shortfall before reviewing spending',/Check your scheduled paycheck/.test(await page.textContent('#today-focus-title'))&&/possible shortfall/.test(await page.textContent('#today-focus-description'))&&await page.textContent('#today-focus-button')==='Update balance','income uncertainty hidden');
   await page.evaluate(()=>fpRenderTodayFocus({asOf:'2026-10-08',balanceBasis:{status:'undated'},overdue:[{kind:'bill',dueDate:'2026-10-05'},{kind:'loan',dueDate:'2026-09-20'}],nextPayday:null}));await page.locator('#today-focus-secondary button').click();
   ok('T47 overdue reminder opens the oldest payment type without recording a payment',await page.isVisible('#view-loans')&&db.bill_paid_marks.length===0,'wrong payment shortcut or mutation');await page.evaluate(()=>showView('calendar',null));
+  await page.evaluate(()=>fpRenderTodayFocus({asOf:'2026-10-08',weekEnd:'2026-10-10',balanceBasis:{status:'ok'},upcomingOneTime:[{description:'Car repair',amount:250.25,date:'2026-10-09'}],nextPayday:null}));await page.locator('#today-focus-button').click();
+  ok('T47 a scheduled one-time expense opens spending review directly',await page.isVisible('#view-expenses'),'scheduled expense omitted from next step');await page.evaluate(()=>showView('calendar',null));
   await page.setViewportSize({width:312,height:900});
   ok('T47 next-step action fits a narrow screen',await page.locator('#today-focus-button').evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth}), 'primary action clipped');
 
