@@ -1097,7 +1097,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
     </div>
     <div class="form-group" id="import-card-format-group" style="display:none;">
       <label class="form-label" for="import-card-format">How does a purchase appear in your CSV?</label>
-      <select class="form-select" id="import-card-format" onchange="cancelStatementImport()">
+      <select class="form-select" id="import-card-format" onchange="cancelStatementImport(false)">
         <option value="">Choose the example that matches your file</option>
         <option value="card">$25.00</option>
         <option value="card-negative">−$25.00 (with a minus sign)</option>
@@ -6028,7 +6028,7 @@ async function saveStartingBalance() {
 
 function changeStatementAccountType() {
   if (_importSaving) return;
-  cancelStatementImport();
+  cancelStatementImport(false);
   document.getElementById('import-card-format-group').style.display = document.getElementById('import-account-type').value === 'card' ? 'block' : 'none';
 }
 function openConnectAccounts() {
@@ -6049,7 +6049,7 @@ function closeConnectAccounts() {
   _pendingImportRows = []; _importEditIndex=-1;
   document.getElementById('connect-accounts-overlay').style.display = 'none';
 }
-function cancelStatementImport() {
+function cancelStatementImport(notify) {
   if (_importSaving) return;
   _importReadVersion++;
   _pendingImportRows = []; _importEditIndex=-1;
@@ -6057,7 +6057,7 @@ function cancelStatementImport() {
   document.getElementById('import-confirm-btn').style.display = 'none';
   document.getElementById('import-cancel-btn').style.display = 'none';
   document.getElementById('import-csv-input').value = '';
-  showToast('Import cancelled, nothing was saved');
+  if (notify !== false) showToast('Import cancelled, nothing was saved');
 }
 
 // ── STATEMENT CSV IMPORT ─────────────────────────────────────────
