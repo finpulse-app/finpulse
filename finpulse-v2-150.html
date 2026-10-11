@@ -6286,7 +6286,7 @@ function fpDetectStatementCSV(text,name) {
   let mode=null;
   const signs=[];
   if(amt>=0)csv.slice(1).forEach(row=>{const n=fpImportAmount(row[amt]),d=String(row[desc]||'');if(n!==null&&n!==0&&/\b(payment received|payment thank you|thank you|autopay|automatic payment|payment -|payment online)\b/i.test(d))signs.push(Math.sign(n));});
-  if(signs.length&&signs.every(x=>x===signs[0])){id.kind='card';mode=signs[0]<0?'card':'card-negative';}
+  if(id.kind!=='bank'&&signs.length&&signs.every(x=>x===signs[0])){id.kind='card';mode=signs[0]<0?'card':'card-negative';}
   if(id.kind==='bank')mode='bank';
   if(debit>=0||credit>=0){if(id.kind==='card')mode='card-negative';else if(id.kind==='bank')mode='bank';}
   if(type>=0&&amt>=0){const purchaseSigns=csv.slice(1).filter(r=>/^(sale|purchase)$/i.test(String(r[type]||'').trim())).map(r=>Math.sign(fpImportAmount(r[amt])||0)).filter(Boolean);if(purchaseSigns.length&&purchaseSigns.every(x=>x===purchaseSigns[0])){id.kind='card';mode=purchaseSigns[0]>0?'card':'card-negative';}}
@@ -6366,7 +6366,7 @@ function fpBuildStatementPreview() {
     meta.unreadable+=result.unreadable;meta.cardCredits+=result.cardCredits;if(!result.rows.length)meta.emptyFiles++;
     const card=f.identity.kind==='card',detail=f.card||fpStatementCardDetails(f.statementText||f.text,f.name);
     if(f.identity.last4){detail.last4=f.identity.last4;detail.name=(f.identity.issuer||'Credit card')+' ending '+detail.last4;}
-    const label=(card?detail.name:(f.identity.issuer||'Bank account'));
+    const label=(card?detail.name:(f.identity.issuer||'Bank account')+(f.identity.last4?' ending '+f.identity.last4:''));
     // Only last four digits and an issuer label are retained, never a full account number.
     const source=card?'import:card:'+label:'import:bank:'+label;
     meta.accounts.push(label+' · '+f.name);
