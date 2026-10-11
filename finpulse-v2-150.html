@@ -6254,12 +6254,13 @@ let _fpStatementFiles=[], _fpStatementOwner=null, _fpDetectedCards=[], _fpCardRe
 function fpStatementIdentity(text,name) {
   const summary=String(text||'').slice(0,14000), hint=summary+'\n'+String(name||'');
   const issuers=[['American Express',/american express|\bamex\b/i],['Capital One',/capital\s*one/i],['Bank of America',/bank of america/i],['Chase',/\bchase\b|jpmorgan/i],['Citi',/\bciti(?:bank)?\b/i],['Discover',/\bdiscover\b/i],['Wells Fargo',/wells fargo/i],['Barclays',/barclays/i],['Synchrony',/synchrony/i],['US Bank',/u\.?s\.? bank/i]];
-  const found=issuers.find(x=>x[1].test(hint));
+  const identityHeader=summary.split(/\r?\n/).slice(0,18).filter(line=>!/^\s*\d{1,4}[\/-]\d/.test(line)).join('\n')+'\n'+String(name||'');
+  const found=issuers.map(x=>({value:x,match:identityHeader.match(x[1])})).filter(x=>x.match).sort((a,b)=>a.match.index-b.match.index)[0]?.value;
   const last=summary.match(/(?:ending(?:\s+in)?|last\s+(?:four|4)(?:\s+digits)?|account\s*(?:number|#)?\s*[:#]?)\s*(?:[xX*•\s-]*\d[\d\s-]{5,}|[xX*•\s-]*)(\d{4})\b/i);
   const card=/credit\s*card|minimum\s+(?:payment|amount)\s+due|payment\s+due\s+date|purchase\s+apr|annual percentage rate.*purchases|\b(?:sapphire|quicksilver|venture|freedom unlimited|blue cash|savor)\b/i.test(hint);
-  const bank=/checking|savings account|beginning balance|ending balance|direct deposit|payroll/i.test(summary);
+  const bank=/beginning balance|ending balance|direct deposit|payroll/i.test(summary);
   const cardSummary=/minimum\s+(?:payment|amount)\s+due|payment\s+due\s+date|purchases?\s+apr|annual percentage rate.*purchases/i.test(summary);
-  const bankHeader=summary.split(/\r?\n/).slice(0,15).some(line=>/\b(checking|savings)\b/i.test(line)&&!/payment|transfer|\bfrom\b|linked|drawn|credit\s*card/i.test(line));
+  const bankHeader=summary.split(/\r?\n/).slice(0,15).some(line=>!/^\s*\d{1,4}[\/-]\d/.test(line)&&/\b(checking|savings)\b/i.test(line)&&!/payment|transfer|\bfrom\b|linked|drawn|credit\s*card/i.test(line));
   return {issuer:found?found[0]:null,last4:last?last[1]:null,kind:cardSummary?'card':bankHeader?'bank':card?'card':bank?'bank':null};
 }
 function fpStatementDate(text) {
@@ -6298,7 +6299,7 @@ function fpDetectStatementCSV(text,name) {
   if(id.kind==='bank')mode='bank';
   if(debit>=0||credit>=0){if(id.kind==='card')mode='card-negative';else if(id.kind==='bank')mode='bank';}
   if(type>=0&&amt>=0){const purchaseSigns=csv.slice(1).filter(r=>/^(sale|purchase)$/i.test(String(r[type]||'').trim())).map(r=>Math.sign(fpImportAmount(r[amt])||0)).filter(Boolean);if(purchaseSigns.length&&purchaseSigns.every(x=>x===purchaseSigns[0])){id.kind='card';mode=purchaseSigns[0]>0?'card':'card-negative';}}
-  if(!mode&&amt>=0){const income=csv.slice(1).some(r=>/payroll|direct deposit|salary/i.test(String(r[desc]||''))&&(fpImportAmount(r[amt])||0)>0);if(income){id.kind='bank';mode='bank';}}
+  if(!mode&&id.kind!=='card'&&amt>=0){const income=csv.slice(1).some(r=>/payroll|direct deposit|salary/i.test(String(r[desc]||''))&&(fpImportAmount(r[amt])||0)>0);if(income){id.kind='bank';mode='bank';}}
   return {mode,identity:id,text,statementText:originalText,format:'csv'};
 }
 async function fpReadStatementPDF(file) {

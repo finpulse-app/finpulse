@@ -30,4 +30,6 @@ test('card remittance checking reference does not override card summary',()=>ass
 test('rewards percentages never become purchase APR',()=>assert.equal(c.fpStatementCardDetails('Credit card\nEarn 5% cashback on purchases','card.pdf').apr,null));
 test('APR table rows support real purchase rates',()=>assert.equal(c.fpStatementCardDetails('Credit card\nInterest Charge Calculation\nAnnual Percentage Rate (APR)\nPurchases 24.99% 500.00','card.pdf').apr,24.99));
 test('multiple purchase APRs are explicitly ambiguous',()=>assert.equal(c.fpStatementCardDetails('Credit card\nPurchases APR 10%\nPurchases APR 20%','card.pdf').aprAmbiguous,true));
+test('another issuer in a purchase does not rename the card',()=>assert.equal(c.fpStatementIdentity('Chase credit card\nAccount ending in 1234\n09/20/2026 American Express Travel 50.00','statement.pdf').issuer,'Chase'));
+test('merchant checking wording cannot become an account header',()=>assert.equal(c.fpStatementIdentity('Date,Description,Amount\n2026-09-20,Checking supplies,20.00','unknown.csv').kind,null));
 console.log('STATEMENT AUTO TOTAL pass='+passed+' fail=0');
