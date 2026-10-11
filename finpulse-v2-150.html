@@ -1086,6 +1086,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 <div id="connect-accounts-overlay" style="position:fixed;inset:0;background:rgba(26,25,22,0.55);backdrop-filter:blur(4px);z-index:400;display:none;align-items:center;justify-content:center;padding:20px;">
   <div style="background:var(--surface);border-radius:20px;padding:26px;width:440px;max-width:95vw;max-height:88vh;overflow-y:auto;box-shadow:var(--shadow-md);">
     <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:600;margin-bottom:4px;">Import statements</div>
+    <div id="import-upload-section">
     <div style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:18px;">Start with your latest full month, or upload 3 months for a clearer view of your spending. Use the same date range for your bank and credit cards. Upload CSV exports (up to 20 files), then review before saving. This does not connect to your bank.</div>
     <div class="form-group">
       <label class="form-label" for="import-account-type">This batch is from a</label>
@@ -1108,6 +1109,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <label class="form-label" for="import-csv-input">Upload statement CSVs</label>
       <input type="file" id="import-csv-input" accept=".csv" multiple style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;font-size:13px;font-family:Inter,sans-serif;" onchange="handleStatementFiles(this.files)">
       <div style="font-size:11px;color:var(--text3);margin-top:4px;">CSV exports only for now, most banks offer this under "Download transactions."</div>
+    </div>
     </div>
     <div id="import-preview" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px;margin-top:10px;"></div>
     <button id="import-confirm-btn" class="save-btn" style="display:none;margin-top:10px;" onclick="confirmStatementImport()">Import Transactions</button>
@@ -6034,6 +6036,7 @@ function changeStatementAccountType() {
 function openConnectAccounts() {
   if (_importSaving || _fpRecurringSaving) return;
   _fpRecurringSuggestions=[];
+  document.getElementById('import-upload-section').style.display='block';
   _importReadVersion++;
   document.getElementById('import-preview').style.display = 'none';
   document.getElementById('import-confirm-btn').style.display = 'none';
@@ -6054,6 +6057,7 @@ function closeConnectAccounts() {
 function cancelStatementImport(notify) {
   if (_importSaving || _fpRecurringSaving) return;
   _fpRecurringSuggestions=[];
+  document.getElementById('import-upload-section').style.display='block';
   _importReadVersion++;
   _pendingImportRows = []; _importEditIndex=-1;
   document.getElementById('import-preview').style.display = 'none';
@@ -6512,6 +6516,7 @@ function fpReviewRecurringBills(imported) {
 function fpRenderRecurringReview() {
   if(!currentUser||currentUser.id!==_fpRecurringOwner){_fpRecurringSuggestions=[];return;}
   const box=document.getElementById('import-preview');
+  document.getElementById('import-upload-section').style.display=_fpRecurringSuggestions.length?'none':'block';
   if(!_fpRecurringSuggestions.length){box.style.display='none';return;}
   const r=_fpRecurringSuggestions[0];box.style.display='block';
   box.innerHTML='<h3 style="margin:0 0 8px;font-size:17px;">Does this repeat?</h3><p style="font-size:12px;line-height:1.5;">We found '+r.count+' payments to <strong>'+fpEscHtml(r.description)+'</strong> about '+(r.frequency==='monthly'?'once a month':r.frequency==='weekly'?'once a week':'every two weeks')+'. Confirm it to add upcoming bills to your calendar.</p><label class="form-label" for="recurring-review-amount">Expected amount'+(r.variable?' (your latest payment)':'')+'</label><input class="form-input" id="recurring-review-amount" inputmode="decimal" value="'+r.amount.toFixed(2)+'"><label class="form-label" for="recurring-review-date" style="margin-top:10px;">Next payment date</label><input class="form-input" id="recurring-review-date" type="date" value="'+r.date+'"><p style="font-size:11px;line-height:1.5;color:var(--text2);">'+(r.variable?'Amounts varied. Adjust the estimate if needed. ':'')+'Past transactions stay as recorded. This adds a future schedule; it does not pay the bill.</p><button class="save-btn" onclick="fpConfirmRecurringBill()">Yes, add this bill</button><button class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="fpSkipRecurringBill()">No, skip it</button><p style="font-size:11px;margin-bottom:0;">'+_fpRecurringSuggestions.length+' suggestion'+(_fpRecurringSuggestions.length===1?'':'s')+' left to review</p>';
