@@ -558,7 +558,8 @@ const loan = id => txns().find(t => t.id === id);
   const nov = await page.evaluate(() => ({ start: getStartingBalanceForMonth(2026, 10), card: document.getElementById('stat-start').textContent, roll: document.getElementById('rollover-overlay').style.display, stored: userSettings.startingBalance }));
   ok('T19 on Nov 2 the November calendar starts at 2,000 (1,000 on Oct 25 + the Oct 30 paycheck), not October\'s stored -600; no rollover prompt', near(nov.start, 2000) && nov.card === '$2,000' && nov.roll !== 'flex' && near(nov.stored, -600), JSON.stringify(nov));
   const monthCheck=/Start this month with a balance check/.test(await page.textContent('#today-focus-title'));await page.locator('#today-focus-button').click();
-  ok('T19 the new-month card opens a current balance check without forcing an explanation',monthCheck&&await page.isVisible('#edit-balance-overlay')&&await page.inputValue('#edit-balance-date')==='2026-11-02','wrong month balance action');await page.locator('#edit-balance-overlay button:text-is("Cancel")').click();
+  ok('T19 the new-month card opens a current balance check without forcing an explanation',monthCheck&&await page.isVisible('#edit-balance-overlay')&&await page.inputValue('#edit-balance-date')==='2026-11-02','wrong month balance action');
+  ok('T19 an older bank balance is a dated reference rather than prefilled as current',await page.inputValue('#edit-balance-input')===''&&/Oct 25/.test(await page.textContent('#edit-balance-last')),'older balance relabeled as today');await page.locator('#edit-balance-overlay button:text-is("Cancel")').click();
   await page.clock.setFixedTime(new Date(2026, 9, 8, 12, 0, 0));
   seed(); await load(); await hideStage();
 

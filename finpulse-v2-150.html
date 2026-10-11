@@ -987,7 +987,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   <div style="background:var(--surface);border-radius:16px;padding:28px;width:360px;max-width:95vw;box-shadow:var(--shadow-md);">
     <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:600;margin-bottom:4px;">Your Bank Balance</div>
     <div style="font-size:13px;color:var(--text2);margin-bottom:6px;">What does your bank account show? Enter a negative number if you're overdrawn. FinPulse works out this month's starting balance from it.</div>
-    <input class="form-input" type="number" id="edit-balance-input" placeholder="e.g. 2500" style="font-size:22px;padding:14px;margin-bottom:10px;">
+    <p id="edit-balance-last" class="goal-note" style="margin:8px 0 12px;" hidden></p>
+    <input class="form-input" type="number" id="edit-balance-input" aria-label="Current bank balance" step="0.01" placeholder="e.g. 2500" style="font-size:22px;padding:14px;margin-bottom:10px;">
     <label class="form-label" for="edit-balance-date">Balance as of (this month)</label>
     <input class="form-input" type="date" id="edit-balance-date" style="margin-bottom:12px;" onchange="fpRefreshPayQuestion('edit-balance')">
     <div id="edit-balance-pay-wrap" style="display:none;margin-bottom:12px;">
@@ -5781,8 +5782,11 @@ function fpPayAnswer(prefix) {
 function fpBadBalanceDateMessage() { return 'Choose a date in this month, no later than today.'; }
 
 function openEditBalance() {
-  const a = fpBalanceAnchor(fpIso(new Date()));
-  document.getElementById('edit-balance-input').value = (a.status === 'ok' || a.status === 'stale') ? a.amount : '';
+  const todayIso=fpIso(new Date()),a=fpBalanceAnchor(todayIso),hasRecord=a.status==='ok'||a.status==='stale',sameDay=hasRecord&&a.asOf===todayIso;
+  document.getElementById('edit-balance-input').value=sameDay?a.amount:'';
+  const previous=document.getElementById('edit-balance-last');
+  previous.hidden=!hasRecord||sameDay;
+  previous.textContent=hasRecord&&!sameDay?'Last recorded: '+(a.amount<0?'−$':'$')+fmt(a.amount)+' · '+fpDateLabel(a.asOf)+'. Enter your current balance below.':'';
   fpPrefillBalanceDate('edit-balance-date');
   fpRefreshPayQuestion('edit-balance');
   document.getElementById('edit-balance-overlay').style.display = 'flex';

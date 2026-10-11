@@ -11,6 +11,8 @@ security configuration and public launch setup are deferred at the user's reques
   show a delayed explanation popup. A balance from an earlier month offers a
   direct check on the Today card. Explicit corrections use the existing dated
   balance editor, preserve prior records and retain missed-payment reminders.
+  An older bank balance is shown with its date as a reference; only a balance
+  already recorded today is prefilled. A new current amount must be entered.
   Calendar projections and recurring schedules include the full requested range
   instead of silently stopping after sixty or forty months.
 - A Today card before the calendar gives one next action: confirm a dated balance,
