@@ -839,6 +839,8 @@ const loan = id => txns().find(t => t.id === id);
   ok('Paid off saves zero balance and selected date',loan(detectedCard.id).balance===0&&loan(detectedCard.id).lender.endsWith('paid_off:2026-10-17'),'payoff not saved');
   await page.evaluate(()=>{renderLoans();renderPriorityReport();});
   ok('Paid off card displays its date and leaves payment priorities',/Paid off/.test(await page.textContent('#loans-list'))&&!/Chase ending 1234/.test(await page.textContent('#priority-report')),'payoff display or priorities');
+  await page.evaluate(()=>{_fpDetectedCards=[{name:'Chase ending 1234',issuer:'Chase',last4:'1234',sourceAccount:'import:card:Chase ending 1234',fileName:'pre-payoff-statement.pdf',asOf:'2026-10-10',balance:400,minimum:30,apr:24.99,due:'2026-10-20'}];fpStartDetectedCardReview([]);});
+  ok('A statement from before payoff cannot reopen the paid card',loan(detectedCard.id).balance===0&&await page.evaluate(()=>_fpCardReview.length===0),'old statement revived paid card');
   await page.clock.setFixedTime(new Date(2026,9,8,12));
 
   // ---- T28 Shared paid status and account-owned confirmations

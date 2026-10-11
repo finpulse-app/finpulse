@@ -6394,6 +6394,8 @@ function fpStartDetectedCardReview(imported) {
     const existing=transactions.find(t=>t.type==='loan'&&(String(t.lender||'').includes('| account:'+card.sourceAccount+' |')||fpImportDesc(t.description)===fpImportDesc(card.name)||(card.last4&&card.issuer&&String(t.description).includes('ending '+card.last4)&&fpImportDesc(t.description).includes(fpImportDesc(card.issuer)))));
     if(!existing)return true;
     const stamp=String(existing.lender||'').match(/\| statement:(\d{4}-\d{2}-\d{2})/);
+    const payoff=fpPaidOffDate(existing);
+    if(payoff&&(!card.asOf||card.asOf<=payoff))return false;
     if(card.balance===null||(stamp&&(!card.asOf||card.asOf<=stamp[1]))||(!stamp&&Number(existing.balance)===card.balance))return false;
     card.existingId=existing.id;card.name=existing.description;
     if(card.minimum===null)card.minimum=Number(existing.min_payment)||null;
