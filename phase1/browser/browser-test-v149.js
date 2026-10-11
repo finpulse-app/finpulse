@@ -787,6 +787,18 @@ const loan = id => txns().find(t => t.id === id);
   ok('T27 canceled pending read cannot repopulate import preview',await page.evaluate(()=>_pendingImportRows.length===0&&document.getElementById('import-preview').style.display==='none'),'stale read repopulated');
   await page.evaluate(()=>closeConnectAccounts());
 
+  // Recurring statement review uses a disposable backend only.
+  seed();await load();await hideStage();
+  db.transactions=[{id:'past-rent-a',user_id:'user-A',type:'expense',description:'Rent',amount:900,date:'2026-08-20',category:'home',recurring:false},{id:'past-rent-b',user_id:'user-A',type:'expense',description:'Rent',amount:950,date:'2026-09-20',category:'home',recurring:false}];
+  await page.evaluate(async()=>{await loadUserData();openConnectAccounts();fpReviewRecurringBills(transactions);});
+  ok('Recurring import review offers a variable bill with latest amount',await page.isVisible('#recurring-review-amount')&&await page.inputValue('#recurring-review-amount')==='950.00',await page.textContent('#import-preview'));
+  await page.fill('#recurring-review-amount','925.00');await page.fill('#recurring-review-date','2026-10-22');
+  await page.click('#import-preview button.save-btn');await page.waitForTimeout(700);
+  ok('Recurring confirmation adds one future schedule and preserves historical expenses',db.transactions.length===3&&db.transactions.filter(t=>t.type==='expense').length===2&&db.transactions.some(t=>t.type==='bill'&&t.recurring&&t.amount===925&&t.date==='2026-10-22'&&t.anchor_date==='2026-10-22'),'schedule or history incorrect');
+  await page.evaluate(()=>fpReviewRecurringBills(transactions));
+  ok('Recurring review does not offer an already scheduled bill',!await page.isVisible('#recurring-review-amount'),'repeated suggestion');
+  await page.evaluate(()=>closeConnectAccounts());
+
   // ---- T28 Shared paid status and account-owned confirmations
   seed();db.transactions=[{id:'shared-bill',user_id:'user-A',type:'bill',description:'Shared bill',amount:25,date:'2026-10-09',anchor_date:'2026-10-09',frequency:'monthly',recurring:true}];
   await load();await hideStage();await page.evaluate(()=>showView('bills',null));await page.waitForTimeout(300);

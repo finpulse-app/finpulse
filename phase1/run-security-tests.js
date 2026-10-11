@@ -13,7 +13,7 @@ function make(names, extra={}) {
   const element = id => els[id] || (els[id]={value:'',style:{},textContent:'',innerHTML:'',classList:{remove(){},toggle(){}}});
   const c = vm.createContext(Object.assign({console,Date,Math,JSON,parseFloat,isNaN,setTimeout(){},
     currentUser:{id:'A'},userSettings:{startingBalance:100,payAmount:0},monthBalances:{},transactions:[],
-    _dataLoadVersion:0,_activeUserId:'A', savedPurchases:[],_importReadVersion:0,_importEditIndex:-1,_importSaving:false,fpImportLocked:()=>false,fpLockImportControls(){},_fpSettingsVersion:0,_fpSettingsBusy:false,_fpSignOutBusy:false,fpReadTransactions:async()=>({data:[],error:null}),
+    _dataLoadVersion:0,_activeUserId:'A', savedPurchases:[],_importReadVersion:0,_importEditIndex:-1,_importSaving:false,_fpRecurringSaving:false,_fpRecurringSuggestions:[],fpReviewRecurringBills(){},fpImportLocked:()=>false,fpLockImportControls(){},_fpSettingsVersion:0,_fpSettingsBusy:false,_fpSignOutBusy:false,fpReadTransactions:async()=>({data:[],error:null}),
     fpLoadGoals:async()=>true,_fpGoals:[],_fpGoalsReady:true,_fpGoalBusy:false,_fpGoalDraftId:null,_fpGoalVersion:0,fpRenderAgenda(){},_fpExpenseQuery:'',
     _fpBillMarkRows:[],_fpBillMarksReady:true,_fpBillMarkBusy:false,_fpBillMarkVersion:0,fpRefreshBillMarks:async()=>true,renderPriorityReport(){},dRenderCashImpact(){},
     window:{},document:{getElementById:element,querySelector(){return element('modal')},querySelectorAll(){return []}},

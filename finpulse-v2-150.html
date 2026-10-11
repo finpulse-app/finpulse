@@ -6027,12 +6027,13 @@ async function saveStartingBalance() {
 }
 
 function changeStatementAccountType() {
-  if (_importSaving) return;
+  if (_importSaving || _fpRecurringSaving) return;
   cancelStatementImport(false);
   document.getElementById('import-card-format-group').style.display = document.getElementById('import-account-type').value === 'card' ? 'block' : 'none';
 }
 function openConnectAccounts() {
-  if (_importSaving) return;
+  if (_importSaving || _fpRecurringSaving) return;
+  _fpRecurringSuggestions=[];
   _importReadVersion++;
   document.getElementById('import-preview').style.display = 'none';
   document.getElementById('import-confirm-btn').style.display = 'none';
@@ -6043,14 +6044,16 @@ function openConnectAccounts() {
   fpLockImportControls();
 }
 function closeConnectAccounts() {
-  if (_importSaving) return;
+  if (_importSaving || _fpRecurringSaving) return;
+  _fpRecurringSuggestions=[];
   _importReadVersion++;
   // Closing without confirming saves nothing
   _pendingImportRows = []; _importEditIndex=-1;
   document.getElementById('connect-accounts-overlay').style.display = 'none';
 }
 function cancelStatementImport(notify) {
-  if (_importSaving) return;
+  if (_importSaving || _fpRecurringSaving) return;
+  _fpRecurringSuggestions=[];
   _importReadVersion++;
   _pendingImportRows = []; _importEditIndex=-1;
   document.getElementById('import-preview').style.display = 'none';
@@ -6232,7 +6235,8 @@ function fpEscHtml(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;')
 let _importMeta = { files: 0, fileNames: [], unreadable: 0, cardCredits: 0, emptyFiles: 0 };
 
 async function handleStatementFiles(fileList) {
-  if (fpImportLocked()) return;
+  if (fpImportLocked() || _fpRecurringSaving) return;
+  _fpRecurringSuggestions=[];
   _importEditIndex = -1;
   const files = Array.from(fileList || []);
   if (files.length === 0) return;
@@ -6457,6 +6461,75 @@ async function confirmStatementImport() {
   fpFinishStatementImport();
   showToast(count + ' transaction' + (count===1?'':'s') + ' imported' + (skippedDups > 0 ? ', ' + skippedDups + ' unselected row' + (skippedDups===1?'':'s') + ' skipped' : ''));
   renderCalendar(); updateStats(); renderExpensesView();
+  fpReviewRecurringBills(records);
+}
+
+
+// Suggestions never change statement history. Only a confirmed future schedule is saved.
+let _fpRecurringSuggestions = [], _fpRecurringOwner = null, _fpRecurringSaving = false;
+function fpRecurringMerchant(text) {
+  return String(text||'').toLowerCase().replace(/\b\d{4,}\b/g,' ').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+}
+function fpSuggestRecurringBills(rows, today) {
+  const groups = new Map(), scheduled = new Set(rows.filter(r=>r.recurring&&(r.type==='bill'||r.type==='expense')).map(r=>fpRecurringMerchant(r.description)));
+  rows.forEach(r=>{
+    if(r.type!=='expense'||r.recurring||!fpParseIso(r.date)||r.date>today||!Number.isFinite(r.amount)||r.amount<=0||r.category==='loan_payment')return;
+    const key=fpRecurringMerchant(r.description);
+    if(key.length<3||scheduled.has(key)||/\b(payment|transfer|refund|withdrawal)\b/.test(key))return;
+    if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r);
+  });
+  const result=[];
+  groups.forEach(group=>{
+    const byDate=new Map();group.forEach(r=>{if(!byDate.has(r.date))byDate.set(r.date,r);});
+    const entries=Array.from(byDate.values()).sort((a,b)=>a.date.localeCompare(b.date));
+    if(entries.length<2)return;
+    const recent=entries.slice(-4), latest=recent[recent.length-1], dates=recent.map(r=>fpParseIso(r.date));
+    const gaps=dates.slice(1).map((d,i)=>Math.round((Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())-Date.UTC(dates[i].getFullYear(),dates[i].getMonth(),dates[i].getDate()))/86400000));
+    let frequency=null;
+    if(gaps.every(g=>g>=26&&g<=35))frequency='monthly';
+    else if(recent.length>=3&&gaps.every(g=>g>=6&&g<=8))frequency='weekly';
+    else if(recent.length>=3&&gaps.every(g=>g>=13&&g<=15))frequency='biweekly';
+    if(!frequency)return;
+    const billLike=/\b(rent|mortgage|electric|energy|water|internet|wifi|phone|xfinity|comcast|utility|utilities|insurance|netflix|hulu|disney|spotify|subscription|gym|fitness)\b/.test(fpRecurringMerchant(latest.description));
+    const amounts=recent.map(r=>r.amount), min=Math.min(...amounts), max=Math.max(...amounts);
+    if(!billLike&&(recent.length<3||max-min>Math.max(1,max*0.03)||['food','shopping','transport','personal','pets'].includes(latest.category)))return;
+    const anchor=fpParseIso(latest.date);let next;
+    if(frequency==='monthly')next=new Date(anchor.getFullYear(),anchor.getMonth()+1,Math.min(anchor.getDate(),new Date(anchor.getFullYear(),anchor.getMonth()+2,0).getDate()),12);
+    else next=fpAddDays(anchor,frequency==='weekly'?7:14);
+    // Old history is useful for review, but cannot imply an active bill indefinitely.
+    if(fpIso(next)<today)return;
+    result.push({description:latest.description,amount:latest.amount,category:latest.category||'other',frequency,date:fpIso(next),count:recent.length,variable:max-min>0.01});
+  });
+  return result.sort((a,b)=>a.date.localeCompare(b.date));
+}
+function fpReviewRecurringBills(imported) {
+  if(!currentUser)return;
+  const merchants=new Set(imported.filter(r=>r.type==='expense').map(r=>fpRecurringMerchant(r.description)));
+  _fpRecurringSuggestions=fpSuggestRecurringBills(transactions,fpIso(new Date())).filter(r=>merchants.has(fpRecurringMerchant(r.description)));
+  _fpRecurringOwner=currentUser.id;
+  fpRenderRecurringReview();
+}
+function fpRenderRecurringReview() {
+  if(!currentUser||currentUser.id!==_fpRecurringOwner){_fpRecurringSuggestions=[];return;}
+  const box=document.getElementById('import-preview');
+  if(!_fpRecurringSuggestions.length){box.style.display='none';return;}
+  const r=_fpRecurringSuggestions[0];box.style.display='block';
+  box.innerHTML='<h3 style="margin:0 0 8px;font-size:17px;">Does this repeat?</h3><p style="font-size:12px;line-height:1.5;">We found '+r.count+' payments to <strong>'+fpEscHtml(r.description)+'</strong> about '+(r.frequency==='monthly'?'once a month':r.frequency==='weekly'?'once a week':'every two weeks')+'. Confirm it to add upcoming bills to your calendar.</p><label class="form-label" for="recurring-review-amount">Expected amount'+(r.variable?' (your latest payment)':'')+'</label><input class="form-input" id="recurring-review-amount" inputmode="decimal" value="'+r.amount.toFixed(2)+'"><label class="form-label" for="recurring-review-date" style="margin-top:10px;">Next payment date</label><input class="form-input" id="recurring-review-date" type="date" value="'+r.date+'"><p style="font-size:11px;line-height:1.5;color:var(--text2);">'+(r.variable?'Amounts varied. Adjust the estimate if needed. ':'')+'Past transactions stay as recorded. This adds a future schedule; it does not pay the bill.</p><button class="save-btn" onclick="fpConfirmRecurringBill()">Yes, add this bill</button><button class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="fpSkipRecurringBill()">No, skip it</button><p style="font-size:11px;margin-bottom:0;">'+_fpRecurringSuggestions.length+' suggestion'+(_fpRecurringSuggestions.length===1?'':'s')+' left to review</p>';
+}
+function fpSkipRecurringBill() {if(_fpRecurringSaving)return;_fpRecurringSuggestions.shift();fpRenderRecurringReview();}
+async function fpConfirmRecurringBill() {
+  if(_fpRecurringSaving||!currentUser||currentUser.id!==_fpRecurringOwner||!_fpRecurringSuggestions.length)return;
+  const r=_fpRecurringSuggestions[0], amount=fpParseMoney(document.getElementById('recurring-review-amount').value),date=document.getElementById('recurring-review-date').value;
+  if(amount===null||amount<=0){showToast('Enter an amount greater than zero, with up to two decimal places.','error');return;}
+  if(!fpParseIso(date)||date<fpIso(new Date())){showToast('Choose today or a future date for the next payment.','error');return;}
+  _fpRecurringSaving=true;
+  document.querySelectorAll('#import-preview input, #import-preview button, #import-close-btn, #import-account-type, #import-card-format, #import-csv-input').forEach(el=>el.disabled=true);
+  let saved=false;
+  try{saved=await saveTxn({type:'bill',description:r.description,amount,date,anchor_date:date,category:r.category,recurring:true,frequency:r.frequency});}
+  finally{_fpRecurringSaving=false;document.getElementById('import-close-btn').disabled=false;fpLockImportControls();document.querySelectorAll('#import-preview input, #import-preview button').forEach(el=>el.disabled=false);}
+  if(!currentUser||currentUser.id!==_fpRecurringOwner)return;
+  if(!saved)return;
+  _fpRecurringSuggestions.shift();fpRenderRecurringReview();renderCalendar();updateStats();renderExpensesView();renderBillsView();showToast('Recurring bill added');
 }
 
 // ── CARD FINDER ────────────────────────────────────────────────

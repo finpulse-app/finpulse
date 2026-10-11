@@ -20,6 +20,7 @@ jobs:
           node-version: '22'
       - run: node phase1/run-security-tests.js finpulse-v2-150.html
       - run: node phase1/run-current-formulas.js finpulse-v2-150.html
+      - run: node phase1/run-recurring-tests.js finpulse-v2-150.html
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 15
