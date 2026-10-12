@@ -6295,11 +6295,13 @@ function fpStatementIdentity(text,name) {
   const identityHeader=summary.split(/\r?\n/).slice(0,18).filter(line=>!/^\s*\d{1,4}[\/-]\d/.test(line)).join('\n')+'\n'+String(name||'');
   const found=issuers.map(x=>({value:x,match:identityHeader.match(x[1])})).filter(x=>x.match).sort((a,b)=>a.match.index-b.match.index)[0]?.value;
   const last=summary.match(/(?:ending(?:\s+in)?|last\s+(?:four|4)(?:\s+digits)?|account\s*(?:number|#)?\s*[:#]?)\s*(?:[xX*•\s-]*\d[\d\s-]{5,}|[xX*•\s-]*)(\d{4})\b/i);
+  const ending=summary.match(/(?:account\s*)?ending(?:\s+in)?\s*[:#]?\s*([\dxX*•][\dxX*• -]{3,30})/i);
+  const endingDigits=ending?ending[1].replace(/\D/g,''):'';
   const card=/credit\s*card|minimum\s+(?:payment|amount)\s+due|payment\s+due\s+date|purchase\s+apr|annual percentage rate.*purchases|\b(?:sapphire|quicksilver|venture|freedom unlimited|blue cash|savor)\b/i.test(identityHeader);
   const bank=/beginning balance|ending balance|direct deposit|payroll/i.test(summary);
   const cardSummary=/minimum\s+(?:payment|amount)\s+due|payment\s+due\s+date|purchases?\s+apr|annual percentage rate.*purchases/i.test(summary);
   const bankHeader=summary.split(/\r?\n/).slice(0,15).some(line=>!/^\s*\d{1,4}[\/-]\d/.test(line)&&/\b(checking|savings)\b/i.test(line)&&!/payment|transfer|\bfrom\b|linked|drawn|credit\s*card/i.test(line));
-  return {issuer:found?found[0]:null,last4:last?last[1]:null,kind:cardSummary?'card':bankHeader?'bank':card?'card':bank?'bank':null};
+  return {issuer:found?found[0]:null,last4:last?last[1]:endingDigits.length>=4?endingDigits.slice(-4):null,kind:cardSummary?'card':bankHeader?'bank':card?'card':bank?'bank':null};
 }
 function fpStatementDate(text) {
   const value=String(text||'').trim();let d=parseImportDate(value);if(d)return fpIso(d);
@@ -6325,7 +6327,8 @@ function fpStatementCardDetails(text,name) {
   const rates=[];let rateTable=false;
   lines.forEach(l=>{
     if(/annual percentage rate|interest charge calculation|interest rates? and interest charges/i.test(l))rateTable=true;
-    if(/purchase/i.test(l)&&!/cash\s*back|rewards?|points|\bearn\b/i.test(l)&&(/\bAPR\b|annual percentage rate|interest rate/i.test(l)||(rateTable&&/^\s*purchases?\b/i.test(l)))){
+    const amexRate=id.issuer==='American Express'&&rateTable&&/^\s*pay over time(?: select)?\s+(?:\d{1,2}\/\d{1,2}\/\d{2,4}\s+)?\d{1,3}(?:\.\d+)?\s*%/i.test(l);
+    if((amexRate||/purchase/i.test(l)&&(/\bAPR\b|annual percentage rate|interest rate/i.test(l)||(rateTable&&/^\s*purchases?\b/i.test(l))))&&!/cash\s*back|rewards?|points|\bearn\b/i.test(l)){
       for(const m of l.matchAll(/(\d{1,3}(?:\.\d+)?)\s*%/g))if(Number(m[1])<=100)rates.push(Number(m[1]));
     }
   });
@@ -6362,6 +6365,14 @@ async function fpReadStatementPDF(file) {
     const text=pages.flat().map(l=>l.text).join('\n');if(text.trim().length<50)throw Error('This PDF is a scan with no readable text. Upload its CSV export instead.');return {text,pages,format:'pdf',identity:fpStatementIdentity(text,file.name),card:fpStatementCardDetails(text,file.name)};
   }catch(e){if(e.name==='PasswordException')throw Error('This PDF is password protected. Upload an unlocked copy or a CSV export.');throw e;}finally{await task.destroy();}
 }
+function fpStatementPDFSection(text) {
+  const value=String(text||'').trim().replace(/\s+/g,' ').replace(/\s*\(?continued\)?\s*$/i,'').trim();
+  if(/^(?:payments?(?: and credits?)?|credits?)(?: (?:summary|details?|amount))?$/i.test(value))return /^credits?/i.test(value)?'credits':'payments';
+  if(/^(?:new charges|purchases?(?: and adjustments?)?|transactions?|account activity)(?: (?:summary|details?|amount))?$/i.test(value))return 'purchases';
+  if(/^fees(?: charged)?(?: (?:summary|details?|amount))?$/i.test(value))return 'fees';
+  if(/^interest charged(?: (?:summary|details?|amount))?$/i.test(value))return 'interest';
+  return null;
+}
 function fpParseStatementPDF(file,kind) {
   const rows=[], result={rows,unreadable:0,cardCredits:0};const end=file.card.asOf;
   const privateValues=fpStatementPrivateValues(file.text||file.pages.flat().map(function(line){return line.text;}).join('\n'));
@@ -6369,9 +6380,9 @@ function fpParseStatementPDF(file,kind) {
   let section='',columns=null;
   file.pages.forEach(page=>page.forEach(line=>{
     const text=line.text.trim();
-    if(/^(payments?(?: and credits?)?|credits?|purchases?(?: and adjustments?)?|transactions?|account activity|fees(?: charged)?|interest charged)\s*$/i.test(text)){section=text.toLowerCase();return;}
+    const nextSection=fpStatementPDFSection(text);if(nextSection){section=nextSection;return;}
     const header=line.items.filter(i=>/^(amount|debit|credit|withdrawals?|deposits?|balance)$/i.test(i.text.trim()));if(header.length){columns=header;return;}
-    const m=text.match(/^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\d{4}-\d{2}-\d{2})\s+(.*)$/);if(!m)return;
+    const m=text.match(/^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\d{4}-\d{2}-\d{2})\s*[*†]?\s+(.*)$/);if(!m)return;
     const date=dated(m[1]);if(!date){result.unreadable++;return;}
     const body=m[2].replace(/^\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\s+/,'');const values=Array.from(body.matchAll(/(?:^|\s)(\(?-?\$?\d[\d,]*\.\d{2}\)?)(?:\s*(CR))?(?=\s|$)/g));
     if(!values.length){result.unreadable++;return;}
@@ -6379,7 +6390,7 @@ function fpParseStatementPDF(file,kind) {
     if(kind==='card'){
       if(values.length!==1){result.unreadable++;return;}
       amount=fpImportAmount(values[0][1]);if(amount===null)return;
-      if(/payment|credit|refund/i.test(section)||/\b(payment|refund|credit)\b/i.test(description)||values[0][2]||amount<0){result.cardCredits++;return;}
+      if(section==='payments'||section==='credits'||/^(?:payment\s+(?:received|thank you|online|from|to)|(?:mobile|automatic|online) payment|autopay|refund|credit(?: adjustment| received))\b/i.test(description)||values[0][2]||amount<0){result.cardCredits++;return;}
     }else{
       if(!columns){result.unreadable++;return;}
       const monetary=line.items.filter(i=>/^\(?-?\$?\d[\d,]*\.\d{2}\)?$/.test(i.text.trim()));

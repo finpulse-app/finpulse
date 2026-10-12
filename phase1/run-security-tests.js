@@ -23,7 +23,7 @@ function make(names, extra={}) {
     fpPendingOperation:()=>null,fpRenderTransactionState(){},fpUpdatePendingNotice(){},panelOpen:false,
     showToast:(...m)=>messages.push(m),renderCalendar(){},renderLoans(){},renderBillsView(){},updateStats(){},dUpdate(){},updateTopbarButtons(){},openSetup(){},loadSavedPurchases(){},shouldShowStageModal(){return false},checkMonthRollover:async()=>{},
     _els:els,_cache:cache,_messages:messages},extra));
-  ['fpPrivateText','fpSafeTransactionRecord','fpStatementPrivateValues','fpPrivateStatementDescription','fpParseBalance','fpCreditCardPaymentEstimate','fpRestoreExpenseEditor','fpLoanRateKnown','fpRound2','fpParseMoney','fpLoanBalanceAmount','fpIsPaycheckRecord','fpPad2','fpIso','fpParseIso','fpInitialCalendarMode'].concat(names).forEach(n=>vm.runInContext(grab(n),c)); return c;
+  ['fpStatementPDFSection','fpPrivateText','fpSafeTransactionRecord','fpStatementPrivateValues','fpPrivateStatementDescription','fpParseBalance','fpCreditCardPaymentEstimate','fpRestoreExpenseEditor','fpLoanRateKnown','fpRound2','fpParseMoney','fpLoanBalanceAmount','fpIsPaycheckRecord','fpPad2','fpIso','fpParseIso','fpInitialCalendarMode'].concat(names).forEach(n=>vm.runInContext(grab(n),c)); return c;
 }
 function backend({writeError=null,readError=null,rows=true,throwWrite=false}={}) {
   let written=null;
