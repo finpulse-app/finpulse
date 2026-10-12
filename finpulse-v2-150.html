@@ -1100,15 +1100,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       </select>
       <div style="font-size:11px;color:var(--text2);margin-top:6px;">Upload bank and credit card statements separately. You'll review everything before saving.</div>
     </div>
-    <div class="form-group" id="import-card-format-group" style="display:none;">
-      <label class="form-label" for="import-card-format">How does a purchase appear in your CSV?</label>
-      <select class="form-select" id="import-card-format" onchange="cancelStatementImport(false)">
-        <option value="">Choose the example that matches your file</option>
-        <option value="card">$25.00</option>
-        <option value="card-negative">−$25.00 (with a minus sign)</option>
-      </select>
-      <div style="font-size:11px;color:var(--text2);margin-top:6px;">Check one purchase in your file. This helps us separate purchases from payments and refunds. If your file has separate Debit and Credit columns, either example works.</div>
-    </div>
+    <input type="hidden" id="import-card-format" value="">
     <div class="form-group">
       <label class="form-label" for="import-csv-input">Upload your statements</label>
       <p style="font-size:11px;color:var(--text2);line-height:1.5;">Your files are read on this device and aren't uploaded. Recognizable private identifiers are removed from descriptions. Review the financial entries before saving them to your account.</p>
@@ -6086,7 +6078,6 @@ async function saveStartingBalance() {
 function changeStatementAccountType() {
   if (_importSaving || _fpRecurringSaving || _fpCardSaving) return;
   cancelStatementImport(false);
-  document.getElementById('import-card-format-group').style.display = document.getElementById('import-account-type').value === 'card' ? 'block' : 'none';
 }
 function openConnectAccounts() {
   if (_importSaving || _fpRecurringSaving) return;
@@ -6411,7 +6402,8 @@ function fpAskStatementQuestion() {
     const csv=parseCsvText(file.text),header=csv[0]||[],a=findColumn(header,['amount','transaction amount']),d=findColumn(header,['description','merchant','payee','name']);
     if(a<0){file.mode='card-negative';fpAskStatementQuestion();return;}
     const examples=csv.slice(1).filter(r=>fpImportAmount(r[a])!==null&&fpImportAmount(r[a])!==0).slice(0,5);
-    examples.forEach((r,i)=>box.innerHTML+='<button class="btn btn-outline" style="width:100%;text-align:left;margin-top:8px;" onclick="fpAnswerStatementPurchase('+i+')">'+fpEscHtml(r[d]||'Transaction')+' · '+fpEscHtml(r[a])+'</button>');
+    const privateValues=fpStatementPrivateValues(file.statementText||file.text);
+    examples.forEach((r,i)=>box.innerHTML+='<button class="btn btn-outline" style="width:100%;text-align:left;margin-top:8px;" onclick="fpAnswerStatementPurchase('+i+')">'+fpEscHtml(fpPrivateStatementDescription(r[d]||'Transaction',privateValues))+' · $'+fmt(Math.abs(fpImportAmount(r[a])))+'</button>');
     if(!examples.length){file.error='No readable transaction amounts found.';file.mode='skip';fpAskStatementQuestion();return;}
     file.examples=examples.map(r=>fpImportAmount(r[a]));
   }
@@ -6638,7 +6630,7 @@ function fpRenderImportRow(r,i) {
   return '<div style="display:flex;align-items:center;gap:6px;padding:7px 0;font-size:12px;">'
     +'<label style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer;"><input type="checkbox" data-import-idx="'+i+'"'+(r.include?' checked':'')+' onchange="toggleImportRow('+i+',this.checked)">'
     +'<span style="min-width:0;overflow-wrap:anywhere;">'+fpEscHtml(r.description)+'<span style="display:block;font-size:10.5px;color:var(--text2);">'+fpEscHtml(r.date)+' · '+fpEscHtml(category)+why+'<span style="display:block;">'+fpEscHtml(r.fileName)+'</span></span></span></label>'
-    +'<span style="font-weight:600;white-space:nowrap;">'+(r.type==='income'?'+':'-')+'$'+fmt(r.amount)+'</span>'
+    +'<span style="font-weight:600;white-space:nowrap;text-align:right;"><span style="display:block;font-size:10.5px;color:var(--text2);">'+(r.type==='income'?'Received':r.category==='card_transfer'?'Card payment':'Spent')+'</span>$'+fmt(r.amount)+'</span>'
     +'<button type="button" data-import-edit="'+i+'" aria-label="Edit transaction '+(i+1)+'" onclick="openImportRowEdit('+i+')" style="background:none;border:none;color:var(--accent);padding:8px 2px;font:600 12px Inter,sans-serif;cursor:pointer;">Edit</button></div>';
 }
 function openImportRowEdit(i) {
@@ -6712,7 +6704,8 @@ function updateImportSummary() {
   const totals = document.getElementById('import-totals');
   const exp = inc.filter(function(r) { return r.type === 'expense'; }).reduce(function(s,r){ return s+r.amount; }, 0);
   const incm = inc.filter(function(r) { return r.type === 'income'; }).reduce(function(s,r){ return s+r.amount; }, 0);
-  if (totals) totals.textContent = inc.length === 0 ? 'Nothing selected to import' : 'Importing ' + inc.length + ': -$' + fmt(exp) + ' in expenses' + (incm>0 ? ', +$' + fmt(incm) + ' in income' : '');
+  const cardPayments=inc.filter(function(r){return r.type==='expense'&&r.category==='card_transfer';}).reduce(function(s,r){return s+r.amount;},0);
+  if (totals) totals.textContent = inc.length === 0 ? 'Nothing selected to import' : 'Importing ' + inc.length + ': Spent $' + fmt(exp-cardPayments) + (cardPayments>0 ? ', card payments $'+fmt(cardPayments) : '') + (incm>0 ? ', received $' + fmt(incm) : '');
   confirmBtn.style.display = 'block';
   confirmBtn.disabled = inc.length === 0 || _importSaving || _importEditIndex !== -1;
   fpLockImportControls();
