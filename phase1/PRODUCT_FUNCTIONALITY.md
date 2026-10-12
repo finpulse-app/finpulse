@@ -159,3 +159,7 @@ Cash projections retain every open bill or loan occurrence within the existing
 45-day overdue review window. Paying the newest occurrence does not hide an older
 one. Amounts owed before the dated balance are deducted once, and separate overdue
 occurrences have distinct priority-action IDs.
+
+## Onboarding and empty-state clarity
+
+Setup now asks for a bank balance in plain language, explains negative balances and optional regular income, and avoids the Financial Triage label. An empty debt list offers the existing statement-upload flow alongside manual debt entry. Search-empty messages distinguish no matches from no saved records without changing monthly totals. A period with no scheduled bills says No scheduled bills, reserving All cleared for an actual payment checklist. These changes do not import, save or alter financial records until the user confirms an existing flow.

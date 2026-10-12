@@ -868,8 +868,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
         <div class="empty-state">
           <div class="empty-state-icon" style="color:var(--accent);display:flex;justify-content:center;"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.5 2.5 5-6"/></svg></div>
           <h3>No debt added yet</h3>
-          <p>Add your loans, credit cards, Affirm, Klarna or other debt. We'll organize your balances and help you focus on one at a time.</p>
-          <button class="btn btn-solid" onclick="openLoanModal()">Add Your First Debt</button>
+          <p>Upload a credit-card statement to review its balance and payment details, or add any debt yourself.</p>
+          <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+            <button class="btn btn-solid" onclick="openConnectAccounts()">Upload card statements</button>
+            <button class="btn btn-outline" onclick="openLoanModal()">Add debt manually</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1170,8 +1173,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 <!-- SETUP MODAL -->
 <div id="setup-overlay" style="position:fixed;inset:0;background:rgba(26,25,22,0.5);backdrop-filter:blur(4px);z-index:300;display:none;align-items:center;justify-content:center;">
   <div style="background:var(--surface);border-radius:16px;padding:28px;width:420px;box-shadow:var(--shadow-md);">
-    <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:600;margin-bottom:4px;">Your Financial Triage</div>
-    <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">Before we can help, we need to understand where you stand. 60 seconds.</div>
+    <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:600;margin-bottom:4px;">Start with your bank balance</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">Use the balance your bank shows today, including a minus sign if you're overdrawn. Add a regular paycheck if you have one. You can update these details anytime.</div>
     <div class="form-group">
       <label class="form-label" for="setup-balance">What does your bank account show?</label>
       <input class="form-input" type="number" id="setup-balance" placeholder="e.g. 2500" style="font-size:18px;padding:12px;">
@@ -1200,6 +1203,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
     <div class="form-group">
       <label class="form-label" for="setup-payamount">How much do you take home each paycheck?</label>
       <input class="form-input" type="number" id="setup-payamount" placeholder="e.g. 1400" oninput="fpRefreshPayQuestion('setup-balance')">
+      <p class="goal-note" style="font-size:11px;margin-top:6px;">No regular paycheck? Leave this blank or enter 0. You can add other income later.</p>
     </div>
     <div style="display:flex;gap:8px;margin-top:4px;">
       <button class="save-btn" style="flex:1;" onclick="saveSetup()">Let's Go &rarr;</button>
@@ -3005,8 +3009,8 @@ function renderExpensesView() {
   const varListEl = document.getElementById('fv-variable-list');
   const fixedTotalEl = document.getElementById('fv-fixed-total');
   const varTotalEl = document.getElementById('fv-variable-total');
-  if (fixedListEl) fixedListEl.innerHTML = buildFvRows(recurring) || '<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0;">No fixed costs yet. Add subscriptions, rent, or bills.</div>';
-  if (varListEl) varListEl.innerHTML = buildFvRows(onetime) || '<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0;">No variable spending tracked yet.</div>';
+  if (fixedListEl) fixedListEl.innerHTML = buildFvRows(recurring) || '<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0;">'+(query?'No recurring items or loan payments match your search.':'No recurring items or loan payments saved yet.')+'</div>';
+  if (varListEl) varListEl.innerHTML = buildFvRows(onetime) || '<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0;">'+(query?'No one-time expenses match your search.':'No one-time expenses saved yet.')+'</div>';
   if (fixedTotalEl) fixedTotalEl.textContent = recurring.length + ' saved record' + (recurring.length === 1 ? '' : 's');
   if (varTotalEl) varTotalEl.textContent = onetime.length + ' saved record' + (onetime.length === 1 ? '' : 's');
 }
@@ -5552,7 +5556,7 @@ function renderBillsView() {
   const unpaidTotal = sorted.reduce(function(s,row){return s+row.openTotal},0);
   const unpaidCount = sorted.reduce(function(s,row){return s+row.open.length},0);
 
-  if (tot) tot.textContent = unpaidCount > 0 ? '$' + fmt(unpaidTotal) + ' still due' : 'All cleared ✓';
+  if (tot) tot.textContent = sorted.length===0 ? 'No scheduled bills' : unpaidCount > 0 ? '$' + fmt(unpaidTotal) + ' still due' : 'All cleared ✓';
   if (!el) return;
   if (sorted.length === 0) {
     el.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;">No bills scheduled in this period.</div>';
