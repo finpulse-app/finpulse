@@ -1108,6 +1108,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
     </div>
     <div class="form-group">
       <label class="form-label" for="import-csv-input">Upload your statements</label>
+      <p style="font-size:11px;color:var(--text2);line-height:1.5;">Your files are read on this device and aren't uploaded. Recognizable private identifiers are removed from descriptions. Review the financial entries before saving them to your account.</p>
       <input type="file" id="import-csv-input" accept=".csv,.pdf,application/pdf,text/csv" multiple style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;font-size:13px;font-family:Inter,sans-serif;" onchange="handleStatementFiles(this.files)">
       <div style="font-size:11px;color:var(--text3);margin-top:4px;">PDF statements or CSV exports. Files are read in your browser; nothing is saved until you confirm.</div>
     </div>
@@ -1783,6 +1784,7 @@ function fpResetAccountState() {
   _lastDeletedRestoreInfo = null;
   _editExpenseTxnId = null;
   _pendingImportRows = []; _importEditIndex=-1;
+  _fpStatementFiles=[];_fpDetectedCards=[];_fpCardReview=[];_fpCardImported=[];_fpStatementOwner=null;
   _ripplePending = null;
   bsPendingTxn = null;
   bsSelectedDay = null;
@@ -2044,12 +2046,47 @@ async function loadUserData() {
   // available explicitly; it must not interrupt navigation with a delayed modal.
 }
 
+// Text from a statement can contain identifiers even inside a merchant memo.
+// These guards run before browser retry storage and before database writes.
+// Pattern matching cannot identify every arbitrary person's name or address.
+function fpPrivateText(value) {
+  if (value == null) return value;
+  return String(value)
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,'[email removed]')
+    .replace(/\b(?:\d[ .-]?){8,}\d\b/g,'[number removed]')
+    .replace(/(?:\+?1[ .-]?)?\(?\b\d{3}\)?[ .-]\d{3}[ .-]\d{4}\b/g,'[phone removed]')
+    .replace(/\b(?:account|card|routing|social security|ssn)\s*(?:number|no\.?|#)?\s*[:#=]\s*[\dxX*• -]{5,}/gi,'[identifier removed]')
+    .replace(/\b(?:cardholder|account holder|customer|holder)\s*(?:name)?\s*[:=]\s*[^\n;|]+/gi,'[name removed]')
+    .replace(/\b(?:mailing|billing|home|street)?\s*address\s*[:=]\s*[^\n;|]+/gi,'[address removed]')
+    .replace(/\b\d{1,6}\s+(?:[A-Z0-9.'-]+\s+){1,5}(?:street|st\.?|avenue|ave\.?|road|rd\.?|lane|ln\.?|drive|dr\.?|boulevard|blvd\.?|court|ct\.?|way)\b/gi,'[address removed]')
+    .replace(/\b(?:password|passcode|pin|cvv|cvc|security code)\s*[:=]\s*[^\s;|]+/gi,'[credential removed]')
+    .replace(/\s+/g,' ').trim();
+}
+function fpSafeTransactionRecord(record) {
+  const safe={};
+  const fields=['user_id','type','description','amount','date','category','recurring','frequency','anchor_date','apr','min_payment','balance','original_balance','original_min_payment','lender','principal_applied','loan_id'];
+  fields.forEach(function(key){if(Object.hasOwn(record,key))safe[key]=['description','lender','category'].includes(key)?fpPrivateText(record[key]):record[key];});
+  return safe;
+}
+function fpStatementPrivateValues(text) {
+  // Only explicit identity fields, outside dated transactions, supply names to remove.
+  return String(text||'').split(/\r?\n/).filter(function(line){return !/^\s*\d{1,4}[\/-]\d/.test(line);}).flatMap(function(line){
+    const m=line.match(/^\s*(?:(?:cardholder|account holder|customer|holder)\s*(?:name)?|name|(?:mailing|billing|home|street)\s+address)\s*[:=]\s*(.+)$/i);
+    return m&&m[1].trim().length>=4?[m[1].trim()]:[];
+  });
+}
+function fpPrivateStatementDescription(description,values) {
+  let safe=String(description||'');
+  (values||[]).forEach(function(value){safe=safe.split(value).join('[personal detail removed]');});
+  return fpPrivateText(safe);
+}
+
 // New rows keep their UUIDs until the server confirms the entire batch. An
 // ambiguous response can be retried after reload without creating duplicate rows.
 async function fpInsertTransactions(records) {
   if (!currentUser || _fpMutationBusy) return false;
   const userId = currentUser.id, version = ++_fpMutationVersion;
-  const payload = records.map(function(r) { return Object.assign({}, r, { user_id: userId }); });
+  const payload = records.map(function(r) { return Object.assign(fpSafeTransactionRecord(r), { user_id: userId }); });
   const key = 'insert', storageKey = fpOperationStorageKey(key);
   _fpMutationBusy = true;
   try {
@@ -2106,6 +2143,8 @@ async function fpInsertTransactions(records) {
 
 async function fpUpdateTransaction(id, changes) {
   if (!currentUser || _fpMutationBusy) return false;
+  changes=fpSafeTransactionRecord(changes);
+  delete changes.user_id;
   const userId=currentUser.id, version=++_fpMutationVersion;
   const existing=transactions.find(function(t){return String(t.id)===String(id);});
   if (existing && existing.category==='loan_payment'
@@ -6064,6 +6103,8 @@ function closeConnectAccounts() {
   _importReadVersion++;
   // Closing without confirming saves nothing
   _pendingImportRows = []; _importEditIndex=-1;
+  _fpStatementFiles=[];_fpDetectedCards=[];_fpCardReview=[];_fpCardImported=[];_fpStatementOwner=null;
+  document.getElementById('import-csv-input').value='';
   document.getElementById('connect-accounts-overlay').style.display = 'none';
 }
 function cancelStatementImport(notify) {
@@ -6072,6 +6113,7 @@ function cancelStatementImport(notify) {
   document.getElementById('import-upload-section').style.display='block';
   _importReadVersion++;
   _pendingImportRows = []; _importEditIndex=-1;
+  _fpStatementFiles=[];_fpDetectedCards=[];_fpCardReview=[];_fpCardImported=[];_fpStatementOwner=null;
   document.getElementById('import-preview').style.display = 'none';
   document.getElementById('import-confirm-btn').style.display = 'none';
   document.getElementById('import-cancel-btn').style.display = 'none';
@@ -6125,6 +6167,7 @@ function fpImportAmount(raw) {
 
 function fpParseStatement(text, accountType) {
   const rows = parseCsvText(text), result = { rows: [], unreadable: 0, cardCredits: 0 };
+  const privateValues=fpStatementPrivateValues(text);
   if (rows.length < 2) return result;
   const header = rows[0];
   const dateIdx = findColumn(header, ['transaction date','posting date','date']);
@@ -6135,7 +6178,7 @@ function fpParseStatement(text, accountType) {
   const creditIdx = moneyColumn(['credit','credit amount','deposit','deposits']);
   if (dateIdx < 0 || descIdx < 0 || (amtIdx < 0 && debitIdx < 0 && creditIdx < 0)) return result;
   for (let i = 1; i < rows.length; i++) {
-    const row = rows[i], description = String(row[descIdx] || '').trim();
+    const row = rows[i], description = fpPrivateStatementDescription(String(row[descIdx] || '').trim(),privateValues);
     const date = parseImportDate(row[dateIdx]);
     let rawAmount;
     if (amtIdx >= 0) rawAmount = fpImportAmount(row[amtIdx]);
@@ -6326,6 +6369,7 @@ async function fpReadStatementPDF(file) {
 }
 function fpParseStatementPDF(file,kind) {
   const rows=[], result={rows,unreadable:0,cardCredits:0};const end=file.card.asOf;
+  const privateValues=fpStatementPrivateValues(file.text||file.pages.flat().map(function(line){return line.text;}).join('\n'));
   const dated=function(raw){let d=parseImportDate(raw);if(d)return fpIso(d);if(!end||!/^\d{1,2}\/\d{1,2}$/.test(raw))return null;d=parseImportDate(raw+'/'+end.slice(0,4));if(d&&fpIso(d)>end)d=parseImportDate(raw+'/'+(Number(end.slice(0,4))-1));return d?fpIso(d):null;};
   let section='',columns=null;
   file.pages.forEach(page=>page.forEach(line=>{
@@ -6347,6 +6391,7 @@ function fpParseStatementPDF(file,kind) {
       for(const item of monetary){const nearest=columns.slice().sort((a,b)=>Math.abs((a.x+a.width)-(item.x+item.width))-Math.abs((b.x+b.width)-(item.x+item.width)))[0];if(/balance/i.test(nearest.text))continue;const n=fpImportAmount(item.text);if(n===null)continue;if(amount!==null){amount=null;break;}amount=n;if(/debit|withdrawal/i.test(nearest.text))amount=-Math.abs(n);else if(/credit|deposit/i.test(nearest.text))amount=Math.abs(n);else if(!/[+-]/.test(item.text)){amount=null;break;}}
       if(amount===null){result.unreadable++;return;}income=amount>0;
     }
+    description=fpPrivateStatementDescription(description,privateValues);
     if(!description||!amount){result.unreadable++;return;}
     rows.push({type:income?'income':'expense',description,amount:Math.abs(amount),date,category:income?null:categorizeImportedRow(description),recurring:false});
   }));return result;
@@ -6392,12 +6437,16 @@ function fpBuildStatementPreview() {
     // Only last four digits and an issuer label are retained, never a full account number.
     const source=card?'import:card:'+label:'import:bank:'+label;
     meta.accounts.push(label+' · '+f.name);
+    const privateValues=fpStatementPrivateValues(f.statementText||f.text);
     result.rows.forEach(row=>{
+      row.description=fpPrivateStatementDescription(row.description,privateValues);
       if(!card&&row.type==='expense'&&/credit\s*card.*(?:payment|autopay)|card\s*payment|(?:chase|citi|capital\s*one|discover|american express).*\b(?:payment|autopay)\b/i.test(row.description))row.category='card_transfer';
       rows.push(Object.assign(row,{fileIdx:i,fileName:f.name,sourceAccount:source}));
     });
     if(card)_fpDetectedCards.push(Object.assign(detail,{sourceAccount:source,fileName:f.name}));
   });
+  _fpStatementFiles=[]; // Discard raw text/page objects once the review has been prepared.
+  document.getElementById('import-csv-input').value='';
   _importMeta=meta;_pendingImportRows=rows;if(rows.length)fpClassifyImportRows(rows,transactions);renderImportPreview();
   if(!rows.length&&_fpDetectedCards.length)fpStartDetectedCardReview([]);
 }
@@ -6611,7 +6660,7 @@ function updateImportEditType() {
   if(group)group.hidden=document.getElementById('import-edit-type').value==='income';
 }
 function fpImportCorrection(draft) {
-  const description=String(draft.description||'').trim(),date=String(draft.date||''),parsedDate=fpParseIso(date);
+  const description=fpPrivateText(String(draft.description||'').trim()),date=String(draft.date||''),parsedDate=fpParseIso(date);
   if(!description)return {error:'Enter a description.'};
   if(!parsedDate || fpIso(parsedDate)!==date)return {error:'Choose a valid date.'};
   const amount=fpImportAmount(draft.amount);
@@ -6639,7 +6688,7 @@ function cancelImportRowEdit() {
   _importEditIndex=-1; const editor=document.getElementById('import-row-editor');if(editor)editor.replaceChildren();updateImportSummary();
 }
 function fpStatementImportRecords() {
-  return _pendingImportRows.filter(function(r){return r.include!==false;}).map(function(row){return {user_id:currentUser.id,type:row.type,description:row.description,amount:row.amount,date:row.date,category:row.category||null,recurring:false,frequency:null,anchor_date:null,apr:null,min_payment:null,balance:null,original_balance:null,lender:row.sourceAccount||null};});
+  return _pendingImportRows.filter(function(r){return r.include!==false;}).map(function(row){return fpSafeTransactionRecord({user_id:currentUser.id,type:row.type,description:row.description,amount:row.amount,date:row.date,category:row.category||null,recurring:false,frequency:null,anchor_date:null,apr:null,min_payment:null,balance:null,original_balance:null,lender:row.sourceAccount||null});});
 }
 function fpStatementImportMatches(records) {
   return !!currentUser && _pendingImportRows.length>0 && JSON.stringify(fpStatementImportRecords())===JSON.stringify(records);

@@ -805,13 +805,16 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>{openConnectAccounts();document.getElementById('import-account-type').value='auto';});
   ok('Auto upload hides account and sign selectors',!await page.isVisible('#import-account-type')&&!await page.isVisible('#import-card-format'),'technical selector visible');
   const statementPDF=require('./statement-pdf-fixture');const pdfPath='/tmp/finpulse-fictional-card.pdf',bankPath='/tmp/finpulse-fictional-bank.csv',bankPdfPath='/tmp/finpulse-fictional-bank.pdf';
-  fs.writeFileSync(pdfPath,statementPDF(['Chase credit card','Account ending in 1234','Statement closing date 09/30/2026','New Balance $1,203.45','Minimum Payment Due $35.00','Payment Due Date 10/20/2026','Purchases APR 24.99%','Transactions','09/05 Coffee 4.50','09/20 Electric bill 70.00','09/25 Payment Thank You -50.00']));
-  fs.writeFileSync(bankPath,'Date,Description,Amount\n2026-09-01,Payroll,1000\n2026-09-25,Chase credit card payment,-50\n');
+  fs.writeFileSync(pdfPath,statementPDF(['Chase credit card','Account ending in 1234','Statement closing date 09/30/2026','New Balance $1,203.45','Minimum Payment Due $35.00','Payment Due Date 10/20/2026','Purchases APR 24.99%','Transactions','Cardholder name: Jane Sample','Billing address: 123 Main Street','09/05 Coffee 1111222233334444 4.50','09/20 Electric bill 70.00','09/25 Payment Thank You -50.00']));
+  fs.writeFileSync(bankPath,'Date,Description,Amount\n2026-09-01,Payroll,1000\n2026-09-25,Chase credit card payment 1111222233334444,-50\n');
   fs.writeFileSync(bankPdfPath,statementPDF(['Bank of America checking account','Account ending in 5678','Statement date 09/30/2026',[{text:'Date',x:50},{text:'Description',x:160},{text:'Withdrawal',x:360},{text:'Deposit',x:440},{text:'Balance',x:520}],[{text:'09/15/2026',x:50},{text:'Payroll deposit',x:160},{text:'1000.00',x:440},{text:'1500.00',x:520}],[{text:'09/16/2026',x:50},{text:'Groceries',x:160},{text:'20.00',x:360},{text:'1480.00',x:520}],[{text:'09/25/2026',x:50},{text:'Chase credit card payment',x:160},{text:'50.00',x:360},{text:'1430.00',x:520}]]));
   await page.setInputFiles('#import-csv-input',[pdfPath,bankPath,bankPdfPath]);await page.waitForFunction(()=>document.getElementById('import-totals'));
   ok('Auto mixed PDF and CSV preview identifies card and excludes its credit payment',/Chase ending 1234/.test(await page.textContent('#import-preview'))&&/Importing 7/.test(await page.textContent('#import-totals'))&&/1 card payment/.test(await page.textContent('#import-preview')),await page.textContent('#import-preview'));
   ok('Bank PDF separates deposit withdrawal and running balance',/Payroll deposit/.test(await page.textContent('#import-preview'))&&/Groceries/.test(await page.textContent('#import-preview')),'bank PDF rows missing');
+  ok('Private identifiers are absent from the prepared preview',!(await page.textContent('#import-preview')).includes('1111222233334444')&&!(await page.textContent('#import-preview')).includes('Jane Sample'),'statement identity leaked into preview');
+  ok('Raw statement text is released after preparing the preview',await page.evaluate(()=>_fpStatementFiles.length===0&&document.getElementById('import-csv-input').files.length===0),'raw file retained');
   await page.click('#import-confirm-btn');await page.waitForTimeout(900);
+  ok('Database import payload and retry cache omit raw identifiers',!JSON.stringify(db.transactions).includes('1111222233334444')&&!JSON.stringify(db.transactions).includes('Jane Sample')&&!await page.evaluate(()=>JSON.stringify(localStorage).includes('1111222233334444')),'private identifier persisted');
   ok('Auto import prepares detected card balance minimum rate and due date',await page.inputValue('#detected-card-name')==='Chase ending 1234'&&await page.inputValue('#detected-card-balance')==='1203.45'&&await page.inputValue('#detected-card-minimum')==='35'&&await page.inputValue('#detected-card-apr')==='24.99'&&await page.inputValue('#detected-card-due')==='2026-10-20','card fields incorrect');
   ok('Auto import preserves account source and marks bank card payment as transfer',db.transactions.filter(t=>String(t.lender||'').startsWith('import:card:')).length===2&&db.transactions.some(t=>t.category==='card_transfer'&&t.amount===50),'account or transfer not retained');
   const split=await page.evaluate(()=>({map:fpDayEvents(2026,8),spend:fpMonthlySpendingBreakdown(2026,8)}));
@@ -1245,6 +1248,17 @@ const loan = id => txns().find(t => t.id === id);
   ok('T54 removing a loan needs only a confirmation, not an unused reason',!await page.isDisabled('#ld-confirm-btn')&&!await page.locator('#ld-reasons').count(),'unnecessary reason required');await page.keyboard.press('Escape');
   await page.evaluate(()=>{transactions[0].balance=1000.01;transactions[0].original_balance=1000.01;transactions[0].apr=12;transactions[0].min_payment=200;renderLoans();});
   ok('T54 payoff total keeps cents and identifies itself as an estimate',await page.locator('.loan-card').filter({hasText:'Test Car Loan'}).textContent().then(t=>/Estimated total repayment/.test(t)&&/\$1,031\.13/.test(t)),'estimated total rounded away cents');
+
+  const privateWrite=await page.evaluate(async()=>{
+    const ok=await fpInsertTransactions([{type:'expense',description:'Privacy memo 1111222233334444',amount:5,date:'2026-10-08',category:'other',recurring:false,rawText:'Jane Sample',address:'123 Main Street',fileName:'private.pdf'}]);
+    const row=transactions.find(t=>String(t.description).startsWith('Privacy memo'));
+    const updated=row&&await fpUpdateTransaction(row.id,{description:'Edited memo SSN 111-22-3333',lender:'Card 1111222233334444',rawText:'Jane Sample'});
+    return {ok,updated,id:row&&row.id};
+  });
+  const privateRow=db.transactions.find(t=>t.id===privateWrite.id);
+  ok('Insert and edited transaction writes filter identifiers and extra document fields',privateWrite.ok&&privateWrite.updated&&!!privateRow&&!JSON.stringify(privateRow).includes('1111222233334444')&&!JSON.stringify(privateRow).includes('111-22-3333')&&!JSON.stringify(privateRow).includes('Jane Sample')&&!Object.hasOwn(privateRow,'rawText')&&!Object.hasOwn(privateRow,'address')&&!Object.hasOwn(privateRow,'fileName'),'unsafe transaction payload');
+  const discarded=await page.evaluate(()=>{_fpStatementFiles=[{text:'Jane Sample'}];fpResetAccountState();return _fpStatementFiles.length===0&&_fpStatementOwner===null;});
+  ok('Account reset discards statement text and its owner',discarded,'raw statement retained across accounts');
 
   const offline=await browser.newContext();
   await offline.route('**/cdn.jsdelivr.net/**',r=>r.fulfill({contentType:'application/javascript',body:''}));
