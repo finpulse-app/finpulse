@@ -5740,7 +5740,12 @@ function fpGoalFinancialModel(asOf) {
   const A=fpParseIso(fpIso(asOf)),cfg=fpPriorityConfig(),marks=fpReadPaidMarks(),snap=fpPrioritySnapshot(A,{paidMarks:marks});
   const end=fpGoalDepositDate(A,12),start=snap.projectedToday,rows=[],missing=[],risks=[];
   const codeText={spending_data_invalid:'Check the unreadable spending dates or amounts.',no_income:'Add your income and payday.',pay_schedule_unclear:'Confirm your payday schedule.',no_next_payday:'Confirm your next payday.',unconfirmed_income:'Update your bank balance to include pay that has arrived.',income_inclusion_unknown:'Confirm whether recent pay is included in your balance.',undated_items:'Add missing bill or debt due dates.',apr_missing:'Add the missing interest rates under Loans & Debt.',loan_data_missing:'Add missing debt balances and minimum payments.',payment_unmatched:'Confirm whether the matching bill payments were already paid.'};
+  const incomeSources=transactions.filter(t=>t.type==='income'&&t.recurring&&Number(t.amount)>0);
+  const usableSources=incomeSources.filter(t=>{const anchor=fpParseIso(fpObligationStart(t));return anchor&&['weekly','biweekly','monthly','twicemonthly','yearly'].includes(t.frequency)&&(t.frequency!=='twicemonthly'||fpTwiceMonthlyDays(anchor,A.getFullYear(),A.getMonth()).certain)&&fpOccurrences(t,fpIso(fpAddDays(A,1)),end).length;});
+  if(usableSources.length!==incomeSources.length)missing.push('Confirm the dates and repeat schedule for your additional income.');
+  if(snap.unconfirmedIncome.length)missing.push(codeText.unconfirmed_income);
   snap.cash.blockers.forEach(code=>{
+    if(code==='no_income'&&usableSources.length)return;
     if(code.startsWith('balance_'))missing.push('Update your bank balance and its date.');
     else if(codeText[code])missing.push(codeText[code]);
     else if(['overdue','unverified_obligation','partial_payment'].includes(code))risks.push('Resolve outstanding payments in Bills and Loans & Debt first.');
