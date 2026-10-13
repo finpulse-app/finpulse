@@ -5456,6 +5456,38 @@ function payoffTime(months) {
   return yrs + ' year' + (yrs === 1 ? '' : 's') + ' and ' + mos + ' month' + (mos === 1 ? '' : 's');
 }
 
+function fpLinkedCardParts(loan, loans) {
+  const source = function(l) { const m = (l.lender || '').match(/(?:^|\|)\s*account:([^|]+)/); return m ? m[1].trim() : ''; };
+  const key = source(loan);
+  if (!key.startsWith('import:card:')) return null;
+  const base = key.replace(/:installments$/, '');
+  const regular = loans.find(function(l) { return l.type === 'loan' && source(l) === base; });
+  const financing = loans.find(function(l) { return l.type === 'loan' && source(l) === base + ':installments' && /(?:^|\|)\s*financing:0%(?:\s*\||\s*$)/.test(l.lender || ''); });
+  if (!regular || !financing) return null;
+  return { regular: regular, financing: financing, name: (regular.description || base.slice(12)).replace(/\s*·\s*purchases$/, '') };
+}
+
+function fpRenderLinkedCard(parts) {
+  const regularBalance = fpLoanBalanceAmount(parts.regular), financedBalance = fpLoanBalanceAmount(parts.financing);
+  const payment = function(l) { return fpLoanBalanceAmount(l) > 0 ? Math.max(0, parseFloat(l.min_payment == null ? l.amount : l.min_payment) || 0) : 0; };
+  const total = fpRound2(regularBalance + financedBalance), minimum = fpRound2(payment(parts.regular) + payment(parts.financing));
+  const statement = (parts.regular.lender || '').match(/(?:^|\|)\s*statement:(\d{4}-\d{2}-\d{2})/);
+  const dueDates = [parts.regular, parts.financing].filter(function(l) { return fpLoanBalanceAmount(l) > 0; }).map(function(l) { return l.date; }).filter(Boolean);
+  const sameDue = dueDates.length && dueDates.every(function(d) { return d === dueDates[0]; });
+  const rows = [parts.regular, parts.financing].map(function(l, i) {
+    const bal = fpLoanBalanceAmount(l), rate = fpLoanRateKnown(l) ? fmt(parseFloat(l.apr) || 0) + '%' : 'Not provided';
+    return '<section style="border-top:1px solid var(--border);padding:16px 0;"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;"><strong>' + (i ? '0% financing' : 'Regular purchases') + '</strong><strong>$' + fmt(bal) + '</strong></div>'
+      + '<p class="goal-note" style="margin:8px 0;">' + (bal > 0 ? 'APR: ' + rate + ' · Payment due: $' + fmt(payment(l)) + (l.date ? ' · ' + fpEscHtml(fpDateLabel(l.date)) : '') : 'Paid off' + (fpPaidOffDate(l) ? ' · ' + fpEscHtml(fpDateLabel(fpPaidOffDate(l))) : '')) + '</p>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:8px;">' + (bal > 0 ? '<button class="btn btn-outline" onclick="recordLoanPayment(\'' + l.id + '\')">Record payment</button>' : '')
+      + '<button class="btn btn-outline" onclick="fpOpenPaidOff(\'' + l.id + '\')">' + (bal > 0 ? 'Paid off?' : 'Set payoff date') + '</button>'
+      + '<button class="btn btn-outline" onclick="openLoanEdit(\'' + l.id + '\')">Update details</button></div></section>';
+  }).join('');
+  return '<article class="loan-card" data-linked-card="true" style="margin-bottom:14px;"><div class="loan-header"><div class="loan-name">' + fpEscHtml(parts.name) + '</div><div class="loan-type-badge">Credit card</div></div>'
+    + '<p class="goal-note">One card, with regular purchases and 0% financing.' + (statement ? ' Statement dated ' + fpEscHtml(fpDateLabel(statement[1])) + '.' : '') + '</p>'
+    + '<div class="loan-stats"><div class="loan-stat"><div class="loan-stat-label">Total card balance</div><div class="loan-stat-val">$' + fmt(total) + '</div></div><div class="loan-stat"><div class="loan-stat-label">' + (sameDue ? 'Combined minimum due' : 'Combined minimum payments') + '</div><div class="loan-stat-val">$' + fmt(minimum) + '</div></div><div class="loan-stat"><div class="loan-stat-label">Payment due</div><div class="loan-stat-val">' + (sameDue ? fpEscHtml(fpDateLabel(dueDates[0])) : total > 0 ? 'See details below' : 'Paid off') + '</div></div></div>'
+    + rows + '<p class="goal-note">Already made a payment? Record it or update the balance so FinPulse reflects what you owe now.</p></article>';
+}
+
 function renderLoans() {
   const loans = transactions.filter(function(t) { return t.type === 'loan'; });
   const container = document.getElementById('loans-list');
@@ -5471,9 +5503,11 @@ function renderLoans() {
   const consumerLoans = loans.filter(function(l) { return !isStudLoan(l); }).sort(function(a,b) { return fpLoanBalanceAmount(a) - fpLoanBalanceAmount(b); });
   const studentLoans = loans.filter(function(l) { return isStudLoan(l); });
   const sorted = consumerLoans.concat(studentLoans);
-  const focusLoan = sorted.find(l=>fpLoanBalanceAmount(l)>0);
+  const focusLoan = sorted.find(l=>fpLoanBalanceAmount(l)>0 && !fpLinkedCardParts(l, loans));
 
   container.innerHTML = sorted.map(function(l, idx) {
+    const cardParts = fpLinkedCardParts(l, loans);
+    if (cardParts) return l.id === cardParts.regular.id ? fpRenderLinkedCard(cardParts) : '';
     const bal = fpLoanBalanceAmount(l) || 0;
     if (bal === 0) return '<div class="loan-card"><div class="loan-title">' + fpEscHtml(l.description) + '</div><div style="font-size:24px;color:var(--accent);margin:12px 0;">$0 balance · Paid off'+(fpPaidOffDate(l)?' · '+fpEscHtml(fpDateLabel(fpPaidOffDate(l))):'')+'</div><button class="btn btn-outline" onclick="fpOpenPaidOff(\''+l.id+'\')">Set payoff date</button><button class="btn btn-outline" onclick="openLoanEdit(\''+l.id+'\')">Edit loan</button><button class="btn btn-outline" onclick="openLoanDeleteConfirm(\''+l.id+'\')">Remove loan</button></div>';
     const rateKnown = fpLoanRateKnown(l);
