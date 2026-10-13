@@ -220,7 +220,7 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   });
   for (const end of [-50,50]) await test('month-end estimate '+end+' avoids unsupported bank-balance claims',()=>{
     const dm={};for(let d=1;d<=31;d++)dm[d]={income:[],expenses:[],bills:[],loans:[],balance:end};
-    const c=make(['updateStats','fmt'],{currentYear:2026,currentMonth:9,buildDayMap:()=>dm,getStartingBalanceForMonth:()=>end,fpAllocationEnabled:()=>false,renderSpendingRings(){},renderPriorityReport(){},updateBillBadge(){},detectStage(){return null},clearTimeout(){}});
+    const c=make(['updateStats','fmt','fpMoneyMathRows','fpEscHtml'],{currentYear:2026,currentMonth:9,buildDayMap:()=>dm,getStartingBalanceForMonth:()=>end,fpAllocationEnabled:()=>false,renderSpendingRings(){},renderPriorityReport(){},updateBillBadge(){},detectStage(){return null},clearTimeout(){}});
     c.updateStats();assert.equal(c._els.modal.textContent,'Month-end estimate');assert.equal(c._els['br-tag'].textContent,end<0?'Projected shortfall':'Estimate');assert(c._els['br-sub'].textContent.includes('Not a confirmed bank balance'));assert(!c._els['br-tag'].textContent.includes('owe'));if(end<0)assert(c._els['br-coach'].textContent.includes('Confirm your current bank balance'));
   });
   await test('delete confirmation escapes the stored name',async()=>{

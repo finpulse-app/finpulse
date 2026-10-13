@@ -1317,7 +1317,7 @@ const loan = id => txns().find(t => t.id === id);
   db.financial_goals=[{id:'wi-goal',user_id:'user-A',name:'Trip',target_amount:1200,saved_amount:200,monthly_amount:75,target_date:null,archived:false}];
   await load();await hideStage();await page.evaluate(()=>showView('loans',null));
   const wiWritesBefore=JSON.stringify(db);await page.locator('.loan-card button[onclick^="openWhatIf"]').first().click();
-  const wiStates=await page.evaluate(()=>{const b=fpWhatIfBudget(currentWhatIfLoan),found={};for(let p=100;p<=3000;p+=5){const a=fpPaymentAssessment(b,p);if(!found[a.status])found[a.status]=p;}return {found,missing:b.missing,reserved:b.reservedSavings,goals:b.goalTotal};});
+  const wiStates=await page.evaluate(()=>{const b=fpWhatIfBudget(currentWhatIfLoan),found={};for(let p=105;p<=3000;p+=5){const a=fpPaymentAssessment(b,p);if(!found[a.status])found[a.status]=p;}return {found,missing:b.missing,reserved:b.reservedSavings,goals:b.goalTotal};});
   ok('T55 dated income, bills, historical spending and goals produce all three payment ranges',!!wiStates.found.green&&!!wiStates.found.amber&&!!wiStates.found.red&&wiStates.reserved===200&&wiStates.goals===900,JSON.stringify(wiStates));
   ok('T55 opening and moving a comparison writes nothing',JSON.stringify(db)===wiWritesBefore,'comparison mutated finances');
   for(const state of ['green','amber','red']){await page.fill('#whatif-amount',String(wiStates.found[state]||100));ok('T55 exact amount changes visible '+state+' verdict with text and icon',await page.getAttribute('#whatif-coach','data-state')===state&&await page.textContent('#wi-zone-label').then(t=>t.length>8)&&await page.getAttribute('#whatif-slider','aria-valuetext').then(t=>t.includes('per month')),await page.textContent('#whatif-coach'));}
@@ -1339,6 +1339,36 @@ const loan = id => txns().find(t => t.id === id);
   ok('T55 reducing a previous commitment back to the minimum works',loan('loan-car').min_payment===100,'reduction unavailable');
   await page.evaluate(()=>{openWhatIf('loan-car');_fpGoalsReady=false;updateWhatIf()});await page.fill('#whatif-amount','150');
   ok('T55 failed goal loading produces a grey check state and blocks an increase',await page.getAttribute('#whatif-coach','data-state')==='unknown'&&await page.isDisabled('#whatif-apply-btn')&&!await page.isHidden('#wi-check-details'),'missing data reassurance');await page.evaluate(()=>{_fpGoalsReady=true;closeWhatIf()});
+
+  // T56 Clear provenance and changing cash-flow recommendations (fictional account).
+  await page.evaluate(()=>{showView('loans',null);openWhatIf('loan-car')});
+  ok('T56 required minimum stays neutral without disguising the household forecast',await page.getAttribute('#whatif-coach','data-state')==='minimum'&&await page.textContent('#wi-zone-label')==='Minimum payment','minimum marked as optional affordability');
+  await page.click('[aria-label="Explain this monthly payment"]');
+  ok('T56 payment badge explains minimum plus optional extra without a write',await page.isVisible('#wi-number-explanation')&&/Saved minimum payment/.test(await page.textContent('#wi-number-explanation'))&&/Extra you are comparing/.test(await page.textContent('#wi-number-explanation'))&&loan('loan-car').min_payment===100,'missing explanation or write');
+  await page.fill('#whatif-amount','150');
+  ok('T56 open payment explanation updates with the selected amount',/\$50/.test(await page.textContent('#wi-number-explanation'))&&/\$150/.test(await page.textContent('#wi-number-explanation')),'stale receipt');
+  await page.click('[aria-label="Explain total repayment"]');
+  ok('T56 repayment badge shows balance plus future interest equals repayment',/Current saved balance/.test(await page.textContent('#wi-number-explanation'))&&/Estimated future interest/.test(await page.textContent('#wi-number-explanation'))&&/Estimated total repayment/.test(await page.textContent('#wi-number-explanation')),'total lacks arithmetic');
+  await page.click('[aria-label="Explain the budget forecast"]');
+  const forecastReceipt=await page.textContent('#wi-number-explanation');
+  ok('T56 household forecast receipt shows dated inputs, protected savings and spending divisor',/Scheduled income/.test(forecastReceipt)&&/This debt’s payments/.test(forecastReceipt)&&/calendar days/.test(forecastReceipt)&&/25%/.test(forecastReceipt)&&/not a bill from this lender/.test(forecastReceipt),'opaque forecast');
+  await page.evaluate(()=>closeWhatIf());await page.click('.loan-card [aria-label="Explain this payment plan"]');
+  ok('T56 common loan card badge explains the saved payment plan in context',/Saved minimum/.test(await page.textContent('#loan-number-loan-car'))&&/Planned extra/.test(await page.textContent('#loan-number-loan-car')),'card explanation absent');
+  await page.evaluate(()=>showView('calendar',null));await page.click('[aria-label="Explain the month-end estimate"]');
+  ok('T56 calendar estimate badge shows starting cash plus income minus outflows',await page.isVisible('#month-number-explanation')&&/Starting balance/.test(await page.textContent('#month-number-explanation'))&&/Scheduled income/.test(await page.textContent('#month-number-explanation'))&&/Scheduled outflows/.test(await page.textContent('#month-number-explanation')),'calendar number opaque');
+  Object.assign(db.transactions.find(t=>t.id==='loan-car'),{min_payment:900,amount:900});Object.assign(db.user_settings[0],{pay_amount:1200});await load();await hideStage();await page.evaluate(()=>showView('loans',null));
+  const recommendBefore=JSON.stringify(db),recommendText=await page.textContent('#debt-payment-review');
+  ok('T56 worsening cash flow recommends reducing extra on the focused loan',await page.isVisible('#debt-payment-review')&&/Test Car Loan/.test(recommendText)&&/900.*100/.test(recommendText)&&/focused debt/.test(recommendText)&&await page.locator('.loan-card').filter({hasText:'Test Car Loan'}).textContent().then(t=>/Focus here/.test(t)),'no focused-debt recommendation: '+recommendText);
+  await page.evaluate(()=>showView('calendar',null));
+  ok('T56 home priorities surface lower-payment recommendations without saving',/Pause extra debt payments/.test(await page.textContent('#priority-report'))&&JSON.stringify(db)===recommendBefore,'recommendation not surfaced or saved');
+  await page.click('#priority-report button:text-is("Review payment changes")');await page.click('#debt-payment-review button');
+  ok('T56 one-click review prepares the required minimum without saving',await page.inputValue('#whatif-amount')==='100.00'&&loan('loan-car').min_payment===900&&await page.getAttribute('#whatif-coach','data-state')==='minimum'&&!/26,260/.test(await page.textContent('#whatif-coach')),'review saved or blamed minimum');
+  await page.click('#whatif-apply-btn');await wait(200);
+  ok('T56 confirmed reduction saves the plan and preserves the required minimum',loan('loan-car').min_payment===100&&loan('loan-car').original_min_payment===100&&!await page.isVisible('#debt-payment-review'),'reduction failed or stale recommendation');
+  Object.assign(db.transactions.find(t=>t.id==='loan-car'),{min_payment:900,amount:900});Object.assign(db.user_settings[0],{pay_amount:3000,payday:'2026-10-09'});await load();await hideStage();await page.evaluate(()=>showView('loans',null));
+  ok('T56 improved dated cash flow removes obsolete lower-payment advice',!await page.isVisible('#debt-payment-review'),'stale lower-payment advice');
+  await page.evaluate(()=>{openWhatIf('loan-car');});await page.setViewportSize({width:312,height:900});await page.click('[aria-label="Explain the budget forecast"]');
+  ok('T56 number badges and expanded arithmetic fit a narrow phone',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&Array.from(document.querySelectorAll('#whatif-content .number-info,#wi-number-explanation .money-math')).every(e=>{const r=e.getBoundingClientRect();return !e.getClientRects().length||(r.left>=0&&r.right<=innerWidth)})),'help overflow');await page.setViewportSize({width:1280,height:900});await page.evaluate(()=>closeWhatIf());
 
   const privateWrite=await page.evaluate(async()=>{
     const ok=await fpInsertTransactions([{type:'expense',description:'Privacy memo 1111222233334444',amount:5,date:'2026-10-08',category:'other',recurring:false,rawText:'Jane Sample',address:'123 Main Street',fileName:'private.pdf'}]);
