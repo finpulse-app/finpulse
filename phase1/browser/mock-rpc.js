@@ -13,7 +13,30 @@ module.exports = function makeRpc({getDb,setDb,log,nextId}) {
    if(known){if(known.kind!==kind||JSON.stringify(known.payload)!==JSON.stringify(p))throw Error('Operation key reused');result=clone(known.result);replayed=true;}
    else {
     const db=getDb(),tx=db.transactions;
-    if(kind==='record'){
+    if(p.card_ids){
+     if(!Array.isArray(p.card_ids)||p.card_ids.length!==2||p.card_ids[0]===p.card_ids[1])throw Error('Two linked balances required');
+     const groupFault=fault;fault=null;
+     const name=r=>r.description.replace(/ *· *purchases$/,'');
+     if(kind==='undo'){
+      const deleted=receipts.get(p.delete_operation_id);if(!deleted||deleted.undone||JSON.stringify(deleted.result.deleted._cardIds)!==JSON.stringify(p.card_ids))throw Error('Card deletion unavailable');
+      for(const partId of p.card_ids){const response=await rpc({p_operation_id:id+':'+partId+':undo',p_kind:'undo',p_payload:{delete_operation_id:p.delete_operation_id+':'+partId+':delete'}});if(response.error)throw Error(response.error.message);}
+      deleted.undone=true;result={restored_id:p.card_ids[0]};
+     }else{
+      const parts=p.card_ids.map(partId=>tx.find(t=>t.id===partId&&t.user_id==='user-A'&&t.type==='loan'));if(parts.some(x=>!x))throw Error('Card not found');
+      const source=l=>(l.lender.match(/account:([^|]+)/)||[])[1]?.trim();if(!source(parts[0])?.startsWith('import:card:')||source(parts[1])!==source(parts[0])+':installments')throw Error('Unrelated balances');
+      const balance=parts.reduce((n,l)=>n+Number(l.balance||0),0),minimum=parts.reduce((n,l)=>n+(Number(l.balance)>0?Number(l.min_payment||l.amount):0),0),original=parts.reduce((n,l)=>n+Number(l.original_balance==null?l.balance:l.original_balance),0);
+      if(kind==='delete'){
+       const deleted={...clone(parts[0]),description:name(parts[0]),balance,amount:minimum,min_payment:minimum,_cardIds:p.card_ids};
+       for(const part of parts){const response=await rpc({p_operation_id:id+':'+part.id+':delete',p_kind:'delete',p_payload:{id:part.id}});if(response.error)throw Error(response.error.message);}
+       result={removed_id:p.card_ids[0],deleted,restore_info:null};
+      }else if(kind==='record'){
+       let left=Number(p.extra),interest=0,principal=0,total=0,extra=0;if(!Number.isFinite(left)||left<0||balance<=0)throw Error('Invalid payment');
+       for(const part of [...parts].sort((a,b)=>Number(b.apr)-Number(a.apr))){if(Number(part.balance)<=0)continue;if(part.apr==null)throw Error('Unknown rate');const int=p.include_monthly?Number(part.balance)*Number(part.apr)/100/12:0;const mp=p.include_monthly?Math.min(Number(part.balance),Math.max(0,Math.min(Number(part.min_payment||part.amount),Number(part.balance)+int)-int)):0;const allocated=Math.min(left,Number(part.balance)-mp);if(!p.include_monthly&&allocated<=0)continue;const response=await rpc({p_operation_id:id+':'+part.id+':record',p_kind:'record',p_payload:{loan_id:part.id,extra:allocated,include_monthly:p.include_monthly,date:p.date}});if(response.error)throw Error(response.error.message);const r=response.data;interest+=r.interest;principal+=r.principal;total+=r.total_paid;extra+=r.extra_paid;left-=r.extra_paid;}
+       if(total<=0)throw Error('No payment');result={loan_id:parts[0].id,loan_description:name(parts[0]),before_balance:balance,new_balance:balance-principal,original_balance:original,apr:parts[1].apr,minimum_payment:minimum,interest,principal,total_paid:total,extra_paid:extra};
+      }else throw Error('Unknown operation');
+     }
+     fault=groupFault;
+    }else if(kind==='record'){
      const loan=tx.find(t=>t.id===p.loan_id&&t.user_id==='user-A'&&t.type==='loan');if(!loan)throw Error('Loan not found');
      const bal=Number(loan.balance==null?loan.amount:loan.balance),min=Number(loan.min_payment==null?loan.amount:loan.min_payment),extra=Number(p.extra),rate=Number(loan.apr||0)/100/12;
      if(bal<=0||!Number.isFinite(extra)||extra<0)throw Error('Invalid payment');

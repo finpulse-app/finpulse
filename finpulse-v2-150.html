@@ -1711,7 +1711,7 @@ async function fpAtomicMutation(kind, payload, key) {
       try { localStorage.setItem(storageKey, JSON.stringify(pending)); }
       catch(e) { throw new Error('This device could not remember the change for a safe retry. Please free some browser storage and try again.'); }
     }
-    const response = await sb.rpc('fp_mutate_transaction', {
+    const response = await sb.rpc(pending.payload.card_ids ? 'fp_mutate_card' : 'fp_mutate_transaction', {
       p_operation_id: pending.id, p_kind: pending.kind, p_payload: pending.payload
     });
     if (response.error) {
@@ -1764,7 +1764,7 @@ async function deleteTxnWithUndo(id, label) {
 async function undoLastDelete() {
   if (!_lastDeleted || !_lastDeletedOperation) return;
   const operationId = _lastDeletedOperation;
-  const result = await fpAtomicMutation('undo', { delete_operation_id: operationId }, 'undo:' + operationId);
+  const result = await fpAtomicMutation('undo', { delete_operation_id: operationId,...(_lastDeleted._cardIds?{card_ids:_lastDeleted._cardIds}:{}) }, 'undo:' + operationId);
   if (!result) return;
   _lastDeleted = null;
   _lastDeletedOperation = null;
@@ -2219,7 +2219,8 @@ function removeTxnFromPanel(id) {
 }
 
 async function deleteTxn(id) {
-  return await fpAtomicMutation('delete', { id: String(id) }, 'delete:' + id);
+  const loan=fpManagedLoan(id);
+  return await fpAtomicMutation('delete', { id: String(id),...(loan&&loan._cardIds?{card_ids:loan._cardIds}:{}) }, 'delete:' + id);
 }
 
 async function saveUserSettings(s, balances) {
@@ -4789,7 +4790,7 @@ let _loanDeleteId = null;
 let _loanDeleteReason = null;
 
 function openLoanDeleteConfirm(loanId) {
-  const loan = transactions.find(function(t) { return String(t.id) === String(loanId); });
+  const loan = fpManagedLoan(loanId);
   if (!loan) return;
   _loanDeleteId = loan.id;
   _loanDeleteReason = null;
@@ -4817,7 +4818,7 @@ async function confirmLoanDelete() {
 let _loanEditId = null;
 
 function openLoanEdit(loanId) {
-  const loan = transactions.find(function(t) { return String(t.id) === String(loanId); });
+  const loan = fpManagedLoan(loanId);
   if (!loan) return;
   _loanEditId = loan.id;
   document.getElementById('le-desc').value = loan.description || '';
@@ -4846,7 +4847,7 @@ async function saveLoanEdit() {
   if (!desc || balance === null || payment === null || (apr !== null && (!/^\d+(?:\.\d+)?$/.test(aprText) || !Number.isFinite(apr) || apr < 0 || apr >= 1e6))) { showToast('Check the loan name, balance, rate and payment. Use dollars and cents for money.','error'); return; }
   const date=document.getElementById('le-date').value;
   if(!fpParseIso(date)||fpIso(fpParseIso(date))!==date){showToast('Choose a valid monthly due date.','error');return;}
-  if (!await fpUpdateTransaction(_loanEditId, { description: desc, balance, apr, min_payment: payment, amount: payment, original_min_payment:payment, date, anchor_date:date })) return;
+  if (!await fpSaveManagedLoan(fpManagedLoan(_loanEditId), { description: desc, balance, apr, min_payment: payment, amount: payment, original_min_payment:payment, date, anchor_date:date })) return;
   document.getElementById('loan-edit-overlay').style.display = 'none';
   _loanEditId = null;
   showToast('Loan updated');
@@ -4943,11 +4944,12 @@ let currentWhatIfLoan = null;
 let endBalGlobal = 0;
 
 function fpLoanRateKnown(loan) {
+  if(loan._cardParts)return loan._cardParts.every(l=>fpLoanBalanceAmount(l)<=0.005||fpLoanRateKnown(l));
   return loan.apr !== null && loan.apr !== undefined && String(loan.apr).trim() !== '' && Number.isFinite(Number(loan.apr)) && Number(loan.apr) >= 0;
 }
 
 function openWhatIf(loanId) {
-  const loan = transactions.find(function(t) { return t.id === loanId; });
+  const loan = fpManagedLoan(loanId);
   if (!loan) return;
   if (!fpLoanRateKnown(loan)) { showToast('Add the interest rate from your statement to estimate payoff time.', 'error');openLoanEdit(loan.id);return; }
   currentWhatIfLoan = loan;
@@ -4991,7 +4993,7 @@ function openWhatIf(loanId) {
 
   el.innerHTML = '<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;">'
     + '<div style="font-size:12px;color:var(--text3);margin-bottom:2px;">' + fpEscHtml(loan.description) + '</div>'
-    + '<div style="font-size:13px;color:var(--text2);">$' + fmt(bal) + ' balance &middot; ' + apr + '% APR &middot; $' + fmt(minPay) + '/mo contractual minimum'
+    + '<div style="font-size:13px;color:var(--text2);">$' + fmt(bal) + ' balance &middot; ' + fpCardRateLabel(loan) + ' &middot; $' + fmt(minPay) + '/mo contractual minimum'
     + (showCommitted ? ' &middot; <strong style="color:var(--accent);">$' + fmt(currentCommitted) + '/mo committed</strong>' : '')
     + '</div>'
     + '</div>'
@@ -5155,6 +5157,7 @@ function updateWhatIf() {
 
   // Payoff calculations
   function calcPayoff(pay) {
+    if (loan._cardParts) return fpDebtPayoff(loan,pay);
     if (pay <= 0) return { months: 999, interest: 0, canPayOff: false };
     const monthInt = bal * monthlyRate;
     if (monthlyRate > 0 && pay <= monthInt) return { months: 999, interest: Math.round(monthInt * 12), canPayOff: false };
@@ -5191,14 +5194,14 @@ function closeWhatIf() {
 
 async function applyWhatIfPayment(loanId) {
   const sliderEl=document.getElementById('whatif-slider');
-  const loan=transactions.find(function(t){return t.id===loanId;});
+  const loan=fpManagedLoan(loanId);
   if(!sliderEl || !loan) return;
   const newPayment=parseFloat(sliderEl.value);
   if(!Number.isFinite(newPayment) || newPayment<=0) return;
   const originalMin=parseFloat(loan.original_min_payment != null ? loan.original_min_payment : (loan.min_payment != null ? loan.min_payment : loan.amount)) || 0;
   const currentCommitted=parseFloat(loan.min_payment != null ? loan.min_payment : loan.amount) || 0;
   if(newPayment===currentCommitted) { closeWhatIf(); return; }
-  if(!await fpUpdateTransaction(loanId, {min_payment:newPayment,amount:newPayment,original_min_payment:originalMin})) return;
+  if(!await fpSaveManagedLoan(fpManagedLoan(loanId), {min_payment:newPayment,amount:newPayment,original_min_payment:originalMin})) return;
   closeWhatIf();
   renderLoans(); renderCalendar(); updateStats();
   showToast('Calendar payment plan set to $'+fmt(newPayment));
@@ -5231,6 +5234,7 @@ function fpLoanMonthPayments(loan,date) {
   return {total,regular,complete:minimum>0&&regular>=minimum-0.005};
 }
 function fpLoanPaymentStatus(loan,date) {
+  if(loan._cardParts){const parts=loan._cardParts.filter(l=>fpLoanBalanceAmount(l)>0).map(l=>fpLoanPaymentStatus(l,date));return {total:parts.reduce((n,p)=>n+p.total,0),regular:parts.reduce((n,p)=>n+p.regular,0),complete:!parts.length||parts.every(p=>p.complete)};}
   const status=fpLoanMonthPayments(loan,date),day=fpParseIso(date);if(!day)return status;
   const from=fpIso(new Date(day.getFullYear(),day.getMonth(),1,12));
   const to=fpIso(new Date(day.getFullYear(),day.getMonth()+1,0,12));
@@ -5240,7 +5244,7 @@ function fpLoanPaymentStatus(loan,date) {
 }
 function rpRefreshPaymentDate() {
   if(_rpHasPending)return;
-  const loan=transactions.find(function(t){return t.id===_rpLoanId;});if(!loan)return;
+  const loan=fpManagedLoan(_rpLoanId);if(!loan)return;
   const status=fpLoanPaymentStatus(loan,document.getElementById('rp-date').value);
   _rpIncludeMonthly=!status.complete;
   const el=document.getElementById('rp-already-paid');el.style.display=status.complete||status.total>0?'block':'none';
@@ -5251,7 +5255,7 @@ function rpRefreshPaymentDate() {
 }
 
 function recordLoanPayment(loanId) {
-  const loan = transactions.find(function(t) { return t.id === loanId; });
+  const loan = fpManagedLoan(loanId);
   if (!loan) return;
   _rpDialogVersion++;
   _rpHasPending = false;
@@ -5301,7 +5305,7 @@ function recordLoanPayment(loanId) {
 }
 
 function updateRpBreakdown() {
-  const loan = transactions.find(function(t) { return t.id === _rpLoanId; });
+  const loan = fpManagedLoan(_rpLoanId);
   if (!loan) return;
   const extra = parseFloat(document.getElementById('rp-extra') ? document.getElementById('rp-extra').value : '') || 0;
   const el = document.getElementById('rp-breakdown');
@@ -5311,17 +5315,17 @@ function updateRpBreakdown() {
   const apr = parseFloat(loan.apr) || 0;
 
   let totalPaid, interest, principal, headline;
-  const sp = fpLoanSplit(bal, apr, minPay, extra, !_rpIncludeMonthly);
+  const sp = loan._cardParts ? Object.assign(fpDebtPaymentSplit(loan,(_rpIncludeMonthly?minPay:0)+extra,!_rpIncludeMonthly),{extraPrincipal:extra}) : fpLoanSplit(bal, apr, minPay, extra, !_rpIncludeMonthly);
   if (!_rpIncludeMonthly) {
     // Monthly unchecked: this transaction is extra-only, interest already covered elsewhere, 100% to principal
-    totalPaid = sp.extraPrincipal;
+    totalPaid = loan._cardParts?sp.totalPaid:sp.extraPrincipal;
     interest = 0;
     principal = sp.principal;
     headline = extra > 0
       ? 'You\'re paying <strong style="color:var(--accent);font-size:15px;">$' + fmt(extra) + ' extra</strong>, every dollar hits principal'
       : 'Enter an amount, every dollar goes straight to principal';
   } else {
-    totalPaid = Math.min(minPay, bal + sp.interest) + sp.extraPrincipal;
+    totalPaid = loan._cardParts?sp.totalPaid:Math.min(minPay, bal + sp.interest) + sp.extraPrincipal;
     interest = sp.interest;
     principal = sp.principal;
     headline = 'You\'re paying <strong style="color:var(--accent);font-size:15px;">$' + fmt(totalPaid) + ' total</strong>'
@@ -5365,7 +5369,7 @@ function closeRecordPayment() {
 }
 
 async function confirmRecordPayment(includeExtra) {
-  const loan = transactions.find(function(t) { return t.id === _rpLoanId; });
+  const loan = fpManagedLoan(_rpLoanId);
   if (!loan || !currentUser || _fpMutationBusy) return;
   const loanId = loan.id;
   const userId = currentUser.id;
@@ -5389,7 +5393,7 @@ async function confirmRecordPayment(includeExtra) {
   const confirmBtn = document.getElementById('rp-confirm-btn');
   if (confirmBtn) confirmBtn.disabled = true;
   const result = await fpAtomicMutation('record', {
-    loan_id: loanId, extra: requestedExtra, include_monthly: !isExtraOnly, date: dateStr
+    loan_id: loanId, extra: requestedExtra, include_monthly: !isExtraOnly, date: dateStr, ...(loan._cardIds?{card_ids:loan._cardIds}:{})
   }, 'record:' + loanId);
   if (!currentUser || currentUser.id !== userId || _rpLoanId !== loanId || dialogVersion !== _rpDialogVersion) return;
   if (!result) {
@@ -5494,31 +5498,46 @@ function fpLinkedCardParts(loan, loans) {
   return { regular: regular, financing: financing, name: (regular.description || base.slice(12)).replace(/\s*·\s*purchases$/, '') };
 }
 
-function fpRenderLinkedCard(parts) {
-  const regularBalance = fpLoanBalanceAmount(parts.regular), financedBalance = fpLoanBalanceAmount(parts.financing);
-  const payment = function(l) { return fpLoanBalanceAmount(l) > 0 ? Math.max(0, parseFloat(l.min_payment == null ? l.amount : l.min_payment) || 0) : 0; };
-  const total = fpRound2(regularBalance + financedBalance), minimum = fpRound2(payment(parts.regular) + payment(parts.financing));
-  const statement = (parts.regular.lender || '').match(/(?:^|\|)\s*statement:(\d{4}-\d{2}-\d{2})/);
-  const dueDates = [parts.regular, parts.financing].filter(function(l) { return fpLoanBalanceAmount(l) > 0; }).map(function(l) { return l.date; }).filter(Boolean);
-  const sameDue = dueDates.length && dueDates.every(function(d) { return d === dueDates[0]; });
-  const rows = [parts.regular, parts.financing].map(function(l, i) {
-    const bal = fpLoanBalanceAmount(l), rate = fpLoanRateKnown(l) ? fmt(parseFloat(l.apr) || 0) + '%' : 'Not provided';
-    return '<section style="border-top:1px solid var(--border);padding:16px 0;"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;"><strong>' + (i ? '0% financing' : 'Regular purchases') + '</strong><strong>$' + fmt(bal) + '</strong></div>'
-      + '<p class="goal-note" style="margin:8px 0;">' + (bal > 0 ? 'APR: ' + rate + ' · Payment due: $' + fmt(payment(l)) + (l.date ? ' · ' + fpEscHtml(fpDateLabel(l.date)) : '') : 'Paid off' + (fpPaidOffDate(l) ? ' · ' + fpEscHtml(fpDateLabel(fpPaidOffDate(l))) : '')) + '</p>'
-      + '<div style="display:flex;flex-wrap:wrap;gap:8px;">' + (bal > 0 ? '<button class="btn btn-outline" onclick="recordLoanPayment(\'' + l.id + '\')">Record payment</button>' : '')
-      + '<button class="btn btn-outline" onclick="fpOpenPaidOff(\'' + l.id + '\')">' + (bal > 0 ? 'Paid off?' : 'Set payoff date') + '</button>'
-      + '<button class="btn btn-outline" onclick="openLoanEdit(\'' + l.id + '\')">Update details</button>'
-      + (i && bal > 0 ? '<button class="btn btn-outline" onclick="openWhatIf(\'' + l.id + '\')">Compare payments</button>' : '')
-      + '<button class="btn btn-outline" onclick="openLoanDeleteConfirm(\'' + l.id + '\')">Remove record</button></div></section>';
-  }).join('');
-  return '<article class="loan-card" data-linked-card="true" style="margin-bottom:14px;"><div class="loan-header"><div class="loan-name">' + fpEscHtml(parts.name) + '</div><div class="loan-type-badge">Credit card</div></div>'
-    + '<p class="goal-note">One card, with regular purchases and 0% financing.' + (statement ? ' Statement dated ' + fpEscHtml(fpDateLabel(statement[1])) + '.' : '') + '</p>'
-    + '<div class="loan-stats"><div class="loan-stat"><div class="loan-stat-label">Total card balance</div><div class="loan-stat-val">$' + fmt(total) + '</div></div><div class="loan-stat"><div class="loan-stat-label">' + (sameDue ? 'Combined minimum due' : 'Combined minimum payments') + '</div><div class="loan-stat-val">$' + fmt(minimum) + '</div></div><div class="loan-stat"><div class="loan-stat-label">Payment due</div><div class="loan-stat-val">' + (sameDue ? fpEscHtml(fpDateLabel(dueDates[0])) : total > 0 ? 'See details below' : 'Paid off') + '</div></div></div>'
-    + rows + '<p class="goal-note">Already made a payment? Record it or update the balance so FinPulse reflects what you owe now.</p></article>';
+function fpManagedLoan(id) {
+  const loans = transactions.filter(t => t.type === 'loan'), loan = transactions.find(t => String(t.id) === String(id));
+  if (!loan || (loan.type && loan.type !== 'loan')) return null;
+  const parts = fpLinkedCardParts(loan, loans);
+  if (!parts) return loan;
+  const list = [parts.regular, parts.financing], sum = key => fpRound2(list.reduce((n,l) => n + Math.max(0, Number(l[key] == null ? (key === 'original_balance' ? l.balance : l.amount) : l[key]) || 0), 0));
+  const minimum = fpRound2(list.reduce((n,l) => n + (fpLoanBalanceAmount(l) > 0 ? Math.max(0, Number(l.min_payment == null ? l.amount : l.min_payment) || 0) : 0), 0));
+  return Object.assign({}, parts.regular, {id:parts.regular.id, description:parts.name, balance:sum('balance'), original_balance:sum('original_balance'), min_payment:minimum, amount:minimum, original_min_payment:sum('original_min_payment'), apr:parts.financing.apr, _cardParts:list, _cardIds:list.map(l=>l.id)});
+}
+function fpLoanDisplayEntries(loans) {
+  return loans.filter(l => { const p=fpLinkedCardParts(l,loans);return !p || l.id===p.regular.id; }).map(l => fpManagedLoan(l.id));
+}
+function fpDebtPaymentSplit(loan, payment, extraOnly) {
+  if (!loan._cardParts) { const s=fpLoanSplit(fpLoanBalanceAmount(loan),loan.apr,payment,0,extraOnly);return {interest:s.interest,principal:s.principal,newBal:s.newBal,totalPaid:extraOnly?s.principal:Math.min(payment,fpLoanBalanceAmount(loan)+s.interest)}; }
+  const parts=loan._cardParts.map(l=>({balance:fpLoanBalanceAmount(l),apr:Number(l.apr)||0,minimum:fpLoanBalanceAmount(l)>0?Math.max(0,Number(l.min_payment == null?l.amount:l.min_payment)||0):0})).sort((a,b)=>b.apr-a.apr);
+  let left=Math.max(0,payment),interest=0,principal=0;
+  parts.forEach(l=>{const i=extraOnly?0:l.balance*l.apr/100/12;interest+=i;const paid=extraOnly?0:Math.min(left,l.minimum,l.balance+i);const applied=Math.min(l.balance,Math.max(0,paid-i));l.balance-=applied;left-=paid;principal+=applied;});
+  parts.forEach(l=>{const applied=Math.min(l.balance,left);l.balance-=applied;left-=applied;principal+=applied;});
+  return {interest,principal,newBal:fpRound2(parts.reduce((n,l)=>n+l.balance,0)),totalPaid:payment-left};
+}
+function fpDebtPayoff(loan, payment) {
+  const parts=(loan._cardParts||[loan]).map(l=>({balance:fpLoanBalanceAmount(l),apr:Number(l.apr)||0})).sort((a,b)=>b.apr-a.apr);
+  let months=0,interest=0;
+  if (!(payment>0)) return {months:999,interest:0,canPayOff:false};
+  while(parts.some(l=>l.balance>0.005)&&months<600){let left=payment,charged=0;parts.forEach(l=>{const i=l.balance*l.apr/100/12;charged+=i;l.balance+=i;});interest+=charged;if(payment<=charged)return {months:999,interest:fpRound2(interest),canPayOff:false};parts.forEach(l=>{const paid=Math.min(left,l.balance);l.balance-=paid;left-=paid;});months++;}
+  const canPayOff=parts.every(l=>l.balance<=0.005);return {months:canPayOff?months:999,interest:fpRound2(interest),canPayOff};
+}
+function fpCardRateLabel(loan) { return loan._cardParts ? (fpLoanRateKnown(loan)?fmt(Number(loan.apr)||0)+'% financing':'Add rate') : (fpLoanRateKnown(loan)?(Number(loan.apr)||0)+'%':'Add rate'); }
+async function fpSaveManagedLoan(loan, changes) {
+  if (!loan._cardParts) return fpUpdateTransaction(loan.id,changes);
+  const regular=loan._cardParts[0],financing=loan._cardParts[1];
+  const balance=changes.balance==null?loan.balance:changes.balance, regularBalance=Math.min(fpLoanBalanceAmount(regular),balance), financedBalance=Math.max(0,fpRound2(balance-regularBalance));
+  const minimum=changes.min_payment==null?loan.min_payment:changes.min_payment, regularMin=Math.min(regularBalance,Math.max(0,Number(regular.min_payment)||0),minimum), financeMin=Math.max(0,fpRound2(minimum-regularMin));
+  const name=changes.description==null?loan.description:changes.description;
+  const rows=loan._cardParts.map((part,i)=>Object.assign({},fpSafeTransactionRecord(part),{id:part.id,description:name+(i?' · 0% financing':' · purchases'),balance:i?financedBalance:regularBalance,amount:i?financeMin:regularMin,min_payment:i?financeMin:regularMin,apr:i&&Object.prototype.hasOwnProperty.call(changes,'apr')?changes.apr:part.apr},changes.date?{date:changes.date,anchor_date:changes.date}:{},changes.lender?{lender:String(part.lender||'').replace(/\s*\| paid_off:\d{4}-\d{2}-\d{2}$/,'')+' | paid_off:'+fpPaidOffDate(changes)}:{}));
+  return fpSaveCardBatch(rows);
 }
 
 function renderLoans() {
-  const loans = transactions.filter(function(t) { return t.type === 'loan'; });
+  const loans = fpLoanDisplayEntries(transactions.filter(function(t) { return t.type === 'loan'; }));
   const container = document.getElementById('loans-list');
   const empty = document.getElementById('loans-empty');
   if (!container) return;
@@ -5532,11 +5551,9 @@ function renderLoans() {
   const consumerLoans = loans.filter(function(l) { return !isStudLoan(l); }).sort(function(a,b) { return fpLoanBalanceAmount(a) - fpLoanBalanceAmount(b); });
   const studentLoans = loans.filter(function(l) { return isStudLoan(l); });
   const sorted = consumerLoans.concat(studentLoans);
-  const focusLoan = sorted.find(l=>fpLoanBalanceAmount(l)>0 && !fpLinkedCardParts(l, loans));
+  const focusLoan = sorted.find(l=>fpLoanBalanceAmount(l)>0);
 
   container.innerHTML = sorted.map(function(l, idx) {
-    const cardParts = fpLinkedCardParts(l, loans);
-    if (cardParts) return l.id === cardParts.regular.id ? fpRenderLinkedCard(cardParts) : '';
     const bal = fpLoanBalanceAmount(l) || 0;
     if (bal === 0) return '<div class="loan-card"><div class="loan-title">' + fpEscHtml(l.description) + '</div><div style="font-size:24px;color:var(--accent);margin:12px 0;">$0 balance · Paid off'+(fpPaidOffDate(l)?' · '+fpEscHtml(fpDateLabel(fpPaidOffDate(l))):'')+'</div><button class="btn btn-outline" onclick="fpOpenPaidOff(\''+l.id+'\')">Set payoff date</button><button class="btn btn-outline" onclick="openLoanEdit(\''+l.id+'\')">Edit loan</button><button class="btn btn-outline" onclick="openLoanDeleteConfirm(\''+l.id+'\')">Remove loan</button></div>';
     const rateKnown = fpLoanRateKnown(l);
@@ -5548,6 +5565,7 @@ function renderLoans() {
     const isFocus = !!focusLoan && l.id === focusLoan.id;
 
     function calcPayoff(payment) {
+      if (l._cardParts) return fpDebtPayoff(l,payment);
       if (payment <= 0) return {months:999, interest:0, canPayOff:false};
       const monthInt = bal * monthlyRate;
       if (monthlyRate > 0 && payment <= monthInt) return {months:999, interest:Math.round(monthInt * 12), canPayOff:false};
@@ -5600,7 +5618,8 @@ function renderLoans() {
       + '<button onclick="openLoanEdit(\'' + l.id + '\')" style="font-size:10px;font-weight:600;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 8px;cursor:pointer;font-family:Inter,sans-serif;">Edit</button>'
       + '<button class="txn-delete" onclick="openLoanDeleteConfirm(\'' + l.id + '\')" style="font-size:13px;">&#10005;</button></div></div>'
       + minNote
-      + '<div class="loan-stats"><div class="loan-stat"><div class="loan-stat-label">You owe</div><div class="loan-stat-val danger">$' + fmt(bal) + '</div></div><div class="loan-stat"><div class="loan-stat-label">Interest rate</div><div class="loan-stat-val">' + (rateKnown ? apr + '%' : 'Add rate') + '</div></div><div class="loan-stat"><div class="loan-stat-label">Monthly payment</div><div class="loan-stat-val">$' + fmt(minPay) + '</div></div></div>'
+      + (l._cardParts ? '<p class="goal-note" style="margin-bottom:12px;">Includes your financed balance and outstanding purchases. Financing APR: '+fpEscHtml(fpCardRateLabel(l))+'. Standard purchase APR: '+(fpLoanRateKnown(l._cardParts[0])?fmt(l._cardParts[0].apr)+'%':'not provided')+'. Estimates apply each rate only to its balance.</p>' : '')
+      + '<div class="loan-stats"><div class="loan-stat"><div class="loan-stat-label">You owe</div><div class="loan-stat-val danger">$' + fmt(bal) + '</div></div><div class="loan-stat"><div class="loan-stat-label">Interest rate</div><div class="loan-stat-val">' + fpCardRateLabel(l) + '</div></div><div class="loan-stat"><div class="loan-stat-label">Monthly payment</div><div class="loan-stat-val">$' + fmt(minPay) + '</div></div></div>'
       + '<div class="loan-proj" style="margin-bottom:10px;"><div class="loan-proj-title">At your current payment of $' + fmt(minPay) + '/month</div>'
       + '<div style="margin:10px 0 6px;"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:5px;"><span>Debt remaining</span><span style="color:var(--danger);font-weight:600;">$' + fmt(bal) + ' owed</span></div>'
       + '<div style="height:8px;background:var(--surface3);border-radius:99px;overflow:hidden;">'
@@ -6786,15 +6805,15 @@ async function fpConfirmDetectedCard() {
 }
 let _fpPaidOffId=null;
 function fpOpenPaidOff(loanId) {
-  const loan=transactions.find(t=>String(t.id)===String(loanId)&&t.type==='loan');if(!loan||_fpMutationBusy)return;
+  const loan=fpManagedLoan(loanId);if(!loan||_fpMutationBusy)return;
   _fpPaidOffId=loan.id;document.getElementById('paid-off-name').textContent=loan.description;document.getElementById('paid-off-date').value=fpIso(new Date());document.getElementById('paid-off-overlay').style.display='flex';
 }
 function fpClosePaidOff(){if(_fpMutationBusy)return;document.getElementById('paid-off-overlay').style.display='none';_fpPaidOffId=null;}
 async function fpConfirmPaidOff() {
-  if(!currentUser||!_fpPaidOffId||_fpMutationBusy)return;const date=document.getElementById('paid-off-date').value,loan=transactions.find(t=>String(t.id)===String(_fpPaidOffId)&&t.type==='loan');
+  if(!currentUser||!_fpPaidOffId||_fpMutationBusy)return;const date=document.getElementById('paid-off-date').value,loan=fpManagedLoan(_fpPaidOffId);
   if(!loan)return;if(!parseImportDate(date)||date>fpIso(new Date())){showToast('Choose the date you paid it off, today or earlier.','error');return;}
   const uid=currentUser.id,id=loan.id,btn=document.getElementById('paid-off-save');btn.disabled=true;let saved=false;
-  try{saved=await fpUpdateTransaction(id,{balance:0,lender:String(loan.lender||loan.category||'Credit Card').replace(/\s*\| paid_off:\d{4}-\d{2}-\d{2}$/,'')+' | paid_off:'+date});}finally{btn.disabled=false;}
+  try{saved=await fpSaveManagedLoan(loan,{balance:0,lender:String(loan.lender||loan.category||'Credit Card').replace(/\s*\| paid_off:\d{4}-\d{2}-\d{2}$/,'')+' | paid_off:'+date});}finally{btn.disabled=false;}
   if(!saved||!currentUser||currentUser.id!==uid)return;fpClosePaidOff();renderLoans();renderCalendar();updateStats();renderPriorityReport();showToast('Marked paid off');
 }
 function fpPaidOffDate(loan){const m=String(loan.lender||'').match(/\| paid_off:(\d{4}-\d{2}-\d{2})$/);return m&&parseImportDate(m[1])?m[1]:null;}
