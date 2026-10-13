@@ -832,7 +832,7 @@ const loan = id => txns().find(t => t.id === id);
   ok('Apple bank cash counts the combined minimum exactly once',await page.evaluate(()=>fpDayEvents(2026,9)[31].loans.filter(t=>/Apple Card/.test(t.description)).reduce((n,t)=>n+fpAmountDue(t),0)===45),'minimum double counted');
   ok('Single recognizable subscriptions are offered as possible and not auto-saved',/possible/i.test(await page.textContent('#import-preview'))&&!db.transactions.some(t=>t.recurring&&t.type==='bill'),'unverified subscriptions saved');
   await page.evaluate(()=>cancelStatementImport(false));await page.evaluate(()=>closeConnectAccounts());
-  await page.evaluate(()=>renderLoans());
+  await page.evaluate(()=>showView('loans',null));
   const linkedCard=page.locator('#loans-list [data-linked-card="true"]');
   ok('Apple purchases and financing appear as one credit card',await linkedCard.count()===1&&/Apple Card/.test(await linkedCard.textContent())&&!/Apple Card · purchases/.test(await linkedCard.textContent()),'separate small loan shown');
   ok('Grouped card preserves both balances and combined statement minimum',/Total card balance\$805/.test(await linkedCard.textContent())&&/Combined minimum due\$45/.test(await linkedCard.textContent())&&/Regular purchases\$5/.test(await linkedCard.textContent())&&/0% financing\$800/.test(await linkedCard.textContent()),'group totals or components incorrect');

@@ -5507,7 +5507,9 @@ function fpRenderLinkedCard(parts) {
       + '<p class="goal-note" style="margin:8px 0;">' + (bal > 0 ? 'APR: ' + rate + ' · Payment due: $' + fmt(payment(l)) + (l.date ? ' · ' + fpEscHtml(fpDateLabel(l.date)) : '') : 'Paid off' + (fpPaidOffDate(l) ? ' · ' + fpEscHtml(fpDateLabel(fpPaidOffDate(l))) : '')) + '</p>'
       + '<div style="display:flex;flex-wrap:wrap;gap:8px;">' + (bal > 0 ? '<button class="btn btn-outline" onclick="recordLoanPayment(\'' + l.id + '\')">Record payment</button>' : '')
       + '<button class="btn btn-outline" onclick="fpOpenPaidOff(\'' + l.id + '\')">' + (bal > 0 ? 'Paid off?' : 'Set payoff date') + '</button>'
-      + '<button class="btn btn-outline" onclick="openLoanEdit(\'' + l.id + '\')">Update details</button></div></section>';
+      + '<button class="btn btn-outline" onclick="openLoanEdit(\'' + l.id + '\')">Update details</button>'
+      + (i && bal > 0 ? '<button class="btn btn-outline" onclick="openWhatIf(\'' + l.id + '\')">Compare payments</button>' : '')
+      + '<button class="btn btn-outline" onclick="openLoanDeleteConfirm(\'' + l.id + '\')">Remove record</button></div></section>';
   }).join('');
   return '<article class="loan-card" data-linked-card="true" style="margin-bottom:14px;"><div class="loan-header"><div class="loan-name">' + fpEscHtml(parts.name) + '</div><div class="loan-type-badge">Credit card</div></div>'
     + '<p class="goal-note">One card, with regular purchases and 0% financing.' + (statement ? ' Statement dated ' + fpEscHtml(fpDateLabel(statement[1])) + '.' : '') + '</p>'
