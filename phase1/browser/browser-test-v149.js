@@ -1197,7 +1197,7 @@ const loan = id => txns().find(t => t.id === id);
   ok('T50 home expense shortcut opens a one-time entry for today in one click',await page.isVisible('#bottom-sheet')&&await page.evaluate(()=>currentYear===2026&&currentMonth===9&&bsSelectedDay===8&&!bsRecurring&&bsEntryKind==='expense')&&JSON.stringify(db)===homeBefore,'shortcut changed the date, repeat or finances');await page.evaluate(()=>closeBottomSheet());
   await page.click('#home-add-bill');
   ok('T50 home bill shortcut opens a monthly bill without writing a record',await page.isVisible('#bottom-sheet')&&await page.evaluate(()=>bsRecurring&&bsEntryKind==='bill')&&JSON.stringify(db)===homeBefore,'bill shortcut required another click or saved');await page.evaluate(()=>closeBottomSheet());
-  await page.click('#home-check-purchase');
+  await page.evaluate(()=>showView('calendar',null));await page.click('#home-check-purchase');
   ok('T50 before-you-buy shortcut opens the working calculator without saving',await page.isVisible('#view-dreams')&&await page.isVisible('#d-amt-input')&&JSON.stringify(db)===homeBefore,'purchase shortcut failed or wrote finances');
   await page.setViewportSize({width:312,height:900});await load();await hideStage();
   ok('T50 phone starts with readable agenda details and fitting everyday actions',await page.isVisible('#cal-agenda')&&!await page.isVisible('#cal-grid')&&await page.evaluate(()=>Array.from(document.querySelectorAll('.home-quick-actions>button')).every(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.height>=44})),'phone starts with tiny calendar details or clipped actions');
