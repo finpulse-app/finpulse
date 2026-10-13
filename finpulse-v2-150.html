@@ -5779,7 +5779,7 @@ function fpGoalCapacity(model,goals,excludeId) {
   const all=goals.filter(g=>!g.archived),others=all.filter(g=>g.id!==excludeId&&fpGoalProgress(g).remaining>0),A=fpParseIso(model.asOf),missing=model.missing.slice();
   let otherMonthly=0;
   others.forEach(g=>{const schedule=fpGoalSchedule(g,A),p=fpGoalProgress(g),amount=Math.max(Number(g.monthly_amount)||0,schedule.needed||0);if(!amount)missing.push('Choose a monthly plan for '+g.name+' so both goals can be assessed together.');otherMonthly+=Math.min(p.remaining,amount);});
-  const saved=all.reduce((n,g)=>n+Math.min(Number(g.saved_amount)||0,Number(g.target_amount)||0),0),monthly=model.monthly;
+  const saved=all.reduce((n,g)=>n+(Number(g.saved_amount)||0),0),monthly=model.monthly;
   const available=monthly.income-monthly.bills-monthly.debt-monthly.spending-monthly.other-otherMonthly;
   const deposits=Array.from({length:12},(_,i)=>fpGoalDepositDate(A,i+1)),frames=[];let base=(model.start==null?0:model.start)-saved,low=base;
   model.rows.forEach(r=>{base+=r.net;if(deposits.includes(r.date))base-=otherMonthly;low=Math.min(low,base);frames.push({date:r.date,base});});

@@ -759,6 +759,7 @@ t('delayed savings plan offers both its supported payment and corrected finish d
 t('waiting one month can offer a better completion date than pennies immediately',()=>{const m=goalModel();m.start=300;m.rows=m.rows.map((r,i)=>({...r,net:i===0?201:500}));const g={...goalBase,target_amount:600,monthly_amount:0,target_date:null},a=ctx.fpGoalAssessment(g,ctx.fpGoalCapacity(m,[g],'new'),goalToday);return a.suggested>1&&a.budget.startMonth>1&&a.months<600||'penny plan chosen';});
 t('a goal without a date does not mention a missed deadline',()=>{const g={...goalBase,monthly_amount:0,target_date:null},a=ctx.fpGoalAssessment(g,ctx.fpGoalCapacity(goalModel(),[g],'new'),goalToday);return a.status==='adjust'&&!/deadline/.test(a.text)&&!!a.date||a.text;});
 t('opening a goal the next day keeps the same monthly saving dates',()=>ctx.fpGoalDepositDate(new Date(2026,9,8,12),1)===ctx.fpGoalDepositDate(new Date(2026,9,9,12),1)||'date drifted');
+t('over-target savings stay reserved until progress is changed',()=>{const m=goalModel();m.start=1600;m.rows=m.rows.map(r=>({...r,net:0}));const g={...goalBase,id:'reserved',target_amount:1000,saved_amount:1500},b=ctx.fpGoalCapacity(m,[goalBase,g],'new');return b.reservedSavings===1500&&b.capacity===0||'recorded savings reused';});
 console.log('File: ' + file);
 if (missing.length) console.log('Functions not present in this build: ' + missing.join(', '));
 console.log(results.join('\n'));
