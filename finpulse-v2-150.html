@@ -5525,10 +5525,10 @@ function fpDebtPaymentSplit(loan, payment, extraOnly) {
   return {interest:fpRound2(interest),principal,newBal:fpRound2(parts.reduce((n,l)=>n+l.balance,0)),totalPaid:payment-left};
 }
 function fpDebtPayoff(loan, payment) {
-  const parts=(loan._cardParts||[loan]).map(l=>({balance:fpLoanBalanceAmount(l),apr:Number(l.apr)||0})).sort((a,b)=>b.apr-a.apr);
+  const parts=(loan._cardParts||[loan]).map(l=>({balance:fpLoanBalanceAmount(l),apr:Number(l.apr)||0,minimum:Math.max(0,Number(l.min_payment==null?l.amount:l.min_payment)||0)})).sort((a,b)=>b.apr-a.apr);
   let months=0,interest=0;
   if (!(payment>0)) return {months:999,interest:0,canPayOff:false};
-  while(parts.some(l=>l.balance>0.005)&&months<600){let left=payment,charged=0;parts.forEach(l=>{const i=l.balance*l.apr/100/12;charged+=i;l.balance+=i;});interest+=charged;if(payment<=charged)return {months:999,interest:fpRound2(interest),canPayOff:false};parts.forEach(l=>{const paid=Math.min(left,l.balance);l.balance-=paid;left-=paid;});months++;}
+  while(parts.some(l=>l.balance>0.005)&&months<600){let left=payment,charged=0;parts.forEach(l=>{const i=l.balance*l.apr/100/12;charged+=i;l.balance+=i;});interest+=charged;if(payment<=charged)return {months:999,interest:fpRound2(interest),canPayOff:false};if(loan._cardParts)parts.forEach(l=>{const paid=Math.min(left,l.minimum,l.balance);l.balance-=paid;left-=paid;});parts.forEach(l=>{const paid=Math.min(left,l.balance);l.balance-=paid;left-=paid;});months++;}
   const canPayOff=parts.every(l=>l.balance<=0.005);return {months:canPayOff?months:999,interest:fpRound2(interest),canPayOff};
 }
 function fpCardRateLabel(loan) { return loan._cardParts ? (fpLoanRateKnown(loan)?fmt(Number(loan.apr)||0)+'% financing':'Add rate') : (fpLoanRateKnown(loan)?(Number(loan.apr)||0)+'%':'Add rate'); }
