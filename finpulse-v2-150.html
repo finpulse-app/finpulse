@@ -955,10 +955,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
             </div>
             <div style="background:var(--accent-light);border:1px solid #c3ddd1;border-radius:var(--radius-sm);padding:12px 14px;">
               <div style="font-size:11px;color:var(--text3);margin-bottom:5px;">Keep it invested</div>
-              <div style="font-family:'DM Serif Display',serif;font-size:24px;color:var(--accent);" id="d-future">$8,154</div>
+              <div class="number-with-help"><div style="font-family:'DM Serif Display',serif;font-size:24px;color:var(--accent);" id="d-future">$8,154</div><button type="button" class="number-info" aria-label="Explain this future value" aria-controls="d-number-explanation" aria-expanded="false" onclick="dToggleCalculation(this)">?</button></div>
               <div style="font-size:11px;color:var(--accent-mid);margin-top:2px;" id="d-sub">in 5 years</div>
             </div>
           </div>
+          <div id="d-number-explanation" class="number-explanation" tabindex="-1" hidden></div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:12px;" id="d-milestones"></div>
           <div style="display:flex;gap:10px;font-size:11px;color:var(--text3);margin-bottom:7px;">
             <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:2px;background:var(--accent);display:inline-block;border-radius:2px;"></span>Hypothetical growth</span>
@@ -4963,9 +4964,8 @@ function fpLoanRateKnown(loan) {
 
 // Pure cash-flow comparison. The UI invokes it without saving any records.
 function fpPaymentMinimum(loan) {
-  const minimum=Number(loan.original_min_payment == null ? (loan.min_payment == null ? loan.amount : loan.min_payment) : loan.original_min_payment)||0;
-  const parts=loan._cardParts||[loan],owed=parts.reduce((n,l)=>n+fpLoanBalanceAmount(l)*(1+(Number(l.apr)||0)/1200),0);
-  return fpRound2(Math.max(0,Math.min(minimum,owed)));
+  const parts=loan._cardParts||[loan];
+  return fpRound2(parts.reduce((total,l)=>{const balance=fpLoanBalanceAmount(l);if(balance<=0)return total;const minimum=Number(l.original_min_payment==null?(l.min_payment==null?l.amount:l.min_payment):l.original_min_payment)||0;return total+Math.max(0,Math.min(minimum,balance*(1+(Number(l.apr)||0)/1200)));},0));
 }
 function fpPaymentBudget(model,goals,loan,events) {
   const missing=model.missing.slice(),ids=new Set(loan._cardIds||[loan.id]),parts=loan._cardParts||[loan];
@@ -7299,12 +7299,21 @@ function dFormatInput() {
   if(_fpDreamAmountValid)document.getElementById('d-amt-input').value=dFmt(dAmount);
 }
 function dClearResult(message) {
+  dRenderCalculation(false);
   ['d-future','d-purchase'].forEach(function(id){const el=document.getElementById(id);if(el)el.textContent='—';});
   const milestones=document.getElementById('d-milestones');if(milestones)milestones.textContent='';
   if(dChart){dChart.data.labels=[];dChart.data.datasets.forEach(function(set){set.data=[];});dChart.update();}
   document.getElementById('d-coach').textContent=message;
   document.getElementById('d-tradeoff').textContent='';document.getElementById('d-goal-btn').disabled=true;document.getElementById('d-skip-btn').disabled=true;
 }
+function dToggleCalculation(button) {const box=document.getElementById('d-number-explanation');if(!box)return;box.hidden=!box.hidden;button.setAttribute('aria-expanded',String(!box.hidden));if(!box.hidden)box.focus({preventScroll:true});}
+function dRenderCalculation(valid) {
+  const box=document.getElementById('d-number-explanation');if(!box)return;
+  if(!valid){box.textContent='Enter a valid amount, rate and time to see the calculation.';return;}
+  const years=Number(document.getElementById('d-yr-slider').value),monthly=_fpDreamMode==='monthly',total=fpRound2(dAmount*(monthly?years*12:1)),future=dScenario(dAmount,years),gain=fpRound2(future-total);
+  box.innerHTML='<strong>How this future value is calculated</strong>'+fpMoneyMathRows([['Amount you chose',dFmt(dAmount)+(monthly?' each month':' once')],['Time you chose',years+' years'],['Annual growth assumption',String(Math.round(RATE*1000)/10)+'%'],['Total money put in',dFmt(total)],[(gain<0?'− Illustrated loss':'+ Illustrated growth'),dFmt(Math.abs(gain))],['= Hypothetical future value',dFmt(future)]])+(monthly?'<p>We convert the annual growth assumption to an equivalent monthly rate. Each month, the existing balance grows at that rate; your contribution is added at the end of the month. This repeats for '+(years*12)+' months.</p>':'<p>'+dFmt(dAmount)+' × (1 + '+(Math.round(RATE*1000)/10)+'%) raised to '+years+' years = '+dFmt(future)+'.</p>')+'<p>The amount and time come from your inputs. The growth rate is an illustration you can change, not a promised return. Fees, taxes and inflation are excluded. Recording a skipped purchase does not create bank savings.</p>';
+}
+
 function dUpdate() {
   dRenderCashImpact();
   if(!_fpDreamAmountValid){dClearResult('Enter a valid amount between $0 and $1 billion, with up to two decimal places.');return;}
@@ -7326,7 +7335,7 @@ function dUpdate() {
   function setEl(id, val) { const e = document.getElementById(id); if(e) e.textContent = val; }
   setEl('d-yr-out', years + ' year' + (years===1?'':'s'));
   setEl('d-purchase', dFmt(total));
-  setEl('d-future', dFmt(future));
+  setEl('d-future', dFmt(future));dRenderCalculation(true);
   setEl('d-sub', 'in ' + years + ' year' + (years===1?'':'s'));
   const gain = fpRound2(future-total);
   setEl('d-tradeoff','You put in '+dFmt(total)+'. '+(gain>=0?'Illustrated growth: '+dFmt(gain)+'.':'Illustrated loss: '+dFmt(Math.abs(gain))+'.'));

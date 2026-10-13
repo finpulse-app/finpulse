@@ -1370,6 +1370,11 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>{openWhatIf('loan-car');});await page.setViewportSize({width:312,height:900});await page.click('[aria-label="Explain the budget forecast"]');
   ok('T56 number badges and expanded arithmetic fit a narrow phone',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&Array.from(document.querySelectorAll('#whatif-content .number-info,#wi-number-explanation .money-math')).every(e=>{const r=e.getBoundingClientRect();return !e.getClientRects().length||(r.left>=0&&r.right<=innerWidth)})),'help overflow');await page.setViewportSize({width:1280,height:900});await page.evaluate(()=>closeWhatIf());
 
+  await page.evaluate(()=>showView('dreams',null));await page.fill('#d-amt-input','200');await scenarioRate('10');await page.click('#d-once-btn');await page.click('button:text-is("10 years")');await page.click('[aria-label="Explain this future value"]');
+  ok('T56 Future Value badge separates contribution from hypothetical growth',/Total money put in/.test(await page.textContent('#d-number-explanation'))&&/Illustrated growth/.test(await page.textContent('#d-number-explanation'))&&/raised to 10 years/.test(await page.textContent('#d-number-explanation')),'future value opaque');await page.click('#d-monthly-btn');
+  ok('T56 monthly Future Value help follows contribution timing',/end of the month/.test(await page.textContent('#d-number-explanation'))&&/120 months/.test(await page.textContent('#d-number-explanation')),'wrong monthly calculation');await page.fill('#d-amt-input','oops');
+  ok('T56 invalid Future Value input clears the explanation too',/Enter a valid/.test(await page.textContent('#d-number-explanation'))&&!/raised to 10 years/.test(await page.textContent('#d-number-explanation')),'stale future value help');
+
   const privateWrite=await page.evaluate(async()=>{
     const ok=await fpInsertTransactions([{type:'expense',description:'Privacy memo 1111222233334444',amount:5,date:'2026-10-08',category:'other',recurring:false,rawText:'Jane Sample',address:'123 Main Street',fileName:'private.pdf'}]);
     const row=transactions.find(t=>String(t.description).startsWith('Privacy memo'));
