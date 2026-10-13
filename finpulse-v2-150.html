@@ -5723,22 +5723,20 @@ function fpGoalSchedule(goal,asOf) {
   const today=new Date(asOf.getFullYear(),asOf.getMonth(),asOf.getDate(),12);
   if(date<today)return {status:'overdue'};
   let months=(date.getFullYear()-today.getFullYear())*12+date.getMonth()-today.getMonth();
-  const depositDay=Math.min(today.getDate(),new Date(date.getFullYear(),date.getMonth()+1,0).getDate());
-  if(date.getDate()<depositDay)months--;
   if(months<1)return {status:'soon',months:0};
   const needed=Math.ceil(Math.round(progress.remaining*100)/months)/100;
   const firstMonth=new Date(today.getFullYear(),today.getMonth()+1,1,12);
-  const firstDate=new Date(firstMonth.getFullYear(),firstMonth.getMonth(),Math.min(today.getDate(),new Date(firstMonth.getFullYear(),firstMonth.getMonth()+1,0).getDate()),12);
+  const firstDate=firstMonth;
   return {status:Math.round(Number(goal.monthly_amount)*100)*months>=Math.round(progress.remaining*100)?'on_track':'needs_plan',months,needed,firstDate:fpIso(firstDate)};
 }
 // Goal estimates use the same dated balance and settlement rules as the calendar.
 function fpGoalDepositDate(asOf, months) {
   const month=new Date(asOf.getFullYear(),asOf.getMonth()+months,1,12);
-  return fpIso(new Date(month.getFullYear(),month.getMonth(),Math.min(asOf.getDate(),new Date(month.getFullYear(),month.getMonth()+1,0).getDate()),12));
+  return fpIso(month);
 }
 function fpGoalFinancialModel(asOf) {
   const A=fpParseIso(fpIso(asOf)),cfg=fpPriorityConfig(),marks=fpReadPaidMarks(),snap=fpPrioritySnapshot(A,{paidMarks:marks});
-  const end=fpGoalDepositDate(A,12),start=snap.projectedToday,rows=[],missing=[],risks=[];
+  const end=fpIso(new Date(A.getFullYear()+1,A.getMonth(),Math.min(A.getDate(),new Date(A.getFullYear()+1,A.getMonth()+1,0).getDate()),12)),start=snap.projectedToday,rows=[],missing=[],risks=[];
   const codeText={spending_data_invalid:'Check the unreadable spending dates or amounts.',no_income:'Add your income and payday.',pay_schedule_unclear:'Confirm your payday schedule.',no_next_payday:'Confirm your next payday.',unconfirmed_income:'Update your bank balance to include pay that has arrived.',income_inclusion_unknown:'Confirm whether recent pay is included in your balance.',undated_items:'Add missing bill or debt due dates.',apr_missing:'Add the missing interest rates under Loans & Debt.',loan_data_missing:'Add missing debt balances and minimum payments.',payment_unmatched:'Confirm whether the matching bill payments were already paid.'};
   const incomeSources=transactions.filter(t=>t.type==='income'&&t.recurring&&Number(t.amount)>0);
   const usableSources=incomeSources.filter(t=>{const anchor=fpObligationStart(t);return anchor&&['weekly','biweekly','monthly','twicemonthly','yearly'].includes(t.frequency)&&(t.frequency!=='twicemonthly'||fpTwiceMonthlyDays(anchor,A.getFullYear(),A.getMonth()).certain)&&fpOccurrences(t,fpIso(fpAddDays(A,1)),end).length;});
@@ -5817,7 +5815,7 @@ function fpGoalAssessment(goal,budget,asOf) {
 }
 function fpGoalAssessmentHTML(a,action) {
   const E=fpEscHtml,b=a.budget,m=b.monthly;
-  const breakdown='<details class="goal-note" style="margin-top:10px;"><summary style="cursor:pointer;">What this considers</summary><p>Monthly averages over the next year: income $'+fmt(m.income)+'; bills $'+fmt(m.bills)+'; debt and financing payments $'+fmt(m.debt)+'; everyday spending $'+fmt(m.spending)+'; other scheduled payments $'+fmt(m.other)+'; other goals $'+fmt(b.otherMonthly)+'.</p><p>We protect a $'+fmt(b.buffer)+' cash cushion and $'+fmt(b.reservedSavings)+' of recorded goal savings. Recorded savings are assumed to be included in your bank balance; if held elsewhere, this estimate is conservative. Everyday spending includes a 25% allowance, and suggested payments leave 20% of monthly room uncommitted.</p><p>Estimates use your saved information and upcoming payment dates. Debt payments stay in the budget until you update or pay off that debt. Dates beyond a year assume these costs and income continue. No investment growth or future pay rise is assumed.</p></details>';
+  const breakdown='<details class="goal-note" style="margin-top:10px;"><summary style="cursor:pointer;">What this considers</summary><p>Monthly averages over the next year: income $'+fmt(m.income)+'; bills $'+fmt(m.bills)+'; debt and financing payments $'+fmt(m.debt)+'; everyday spending $'+fmt(m.spending)+'; other scheduled payments $'+fmt(m.other)+'; other goals $'+fmt(b.otherMonthly)+'.</p><p>We protect a $'+fmt(b.buffer)+' cash cushion and $'+fmt(b.reservedSavings)+' of recorded goal savings. Recorded savings are assumed to be included in your bank balance; if held elsewhere, this estimate is conservative. Everyday spending includes a 25% allowance, and suggested payments leave 20% of monthly room uncommitted.</p><p>Savings plans use the first of each month, beginning when your cash flow supports them. Estimates use your saved information and upcoming payment dates. Debt payments stay in the budget until you update or pay off that debt. Dates beyond a year assume these costs and income continue. No investment growth or future pay rise is assumed.</p></details>';
   return '<div class="goal-check" data-goal-assessment="'+a.status+'" style="margin-top:14px;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);"><strong>'+E(a.title)+'</strong><p class="goal-note" style="margin-top:6px;">'+E(a.text)+'</p>'+(a.status==='adjust'&&a.date&&action?'<button type="button" class="btn btn-outline" onclick="'+action+'">Use $'+fmt(a.suggested)+'/month and this date</button>':'')+breakdown+'</div>';
 }
 function fpGoalEditorAssessment() {
