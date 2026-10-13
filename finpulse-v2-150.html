@@ -5261,6 +5261,7 @@ function rpRefreshPaymentDate() {
 function recordLoanPayment(loanId) {
   const loan = fpManagedLoan(loanId);
   if (!loan) return;
+  loanId = loan.id;
   _rpDialogVersion++;
   _rpHasPending = false;
   _rpLoanId = loanId;

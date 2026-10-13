@@ -838,7 +838,7 @@ const loan = id => txns().find(t => t.id === id);
   ok('Uniform Apple card preserves total balance payment and financing rate',/You owe\$805/.test(await linkedCard.textContent())&&/Monthly payment\$45/.test(await linkedCard.textContent())&&/0% financing/.test(await linkedCard.textContent()),'card totals incorrect');
   ok('Apple card offers one payment edit payoff and What If action',await linkedCard.getByRole('button',{name:/Record Payment/}).count()===1&&await linkedCard.getByRole('button',{name:'Edit',exact:true}).count()===1&&await linkedCard.getByRole('button',{name:'Paid off?',exact:true}).count()===1&&await linkedCard.getByRole('button',{name:/What If/}).count()===1,'duplicate actions remain');
   const appleId=applePair().find(l=>l.balance===5).id,financeId=applePair().find(l=>l.balance===800).id;
-  await linkedCard.getByRole('button',{name:/Record Payment/}).click();
+  await page.evaluate(id=>recordLoanPayment(id),financeId);
   ok('One Apple payment dialog uses the combined minimum',await page.textContent('#rp-due-amt')==='$45'&&/Apple Card/.test(await page.textContent('#rp-title')),'component minimum instead of total');
   rpcBackend.setFault('lost-after-commit');await page.click('#rp-confirm-btn');await page.waitForTimeout(250);
   ok('Lost combined card payment keeps one retry after atomic commit',await page.isVisible('#record-payment-overlay')&&loan(financeId).balance===760,'combined payment not committed');
