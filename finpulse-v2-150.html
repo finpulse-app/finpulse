@@ -5003,7 +5003,8 @@ function fpPaymentBands(budget,min,max) {
 }
 function fpWhatIfAmountInput(value) {
   const payment=fpParseMoney(value,true),slider=document.getElementById('whatif-slider');
-  _fpWhatIfInputInvalid=payment===null||payment<Number(slider.min);
+  const maximum=fpRound2((currentWhatIfLoan._cardParts||[currentWhatIfLoan]).reduce((n,l)=>n+fpLoanBalanceAmount(l)*(1+(Number(l.apr)||0)/1200),0));
+  _fpWhatIfInputInvalid=payment===null||payment<Number(slider.min)||payment>maximum;
   if(!_fpWhatIfInputInvalid){if(payment>Number(slider.max))slider.max=String(payment);slider.value=String(payment);}
   updateWhatIf(true);
 }
@@ -5022,7 +5023,8 @@ function openWhatIf(loanId) {
   const apr = parseFloat(loan.apr) || 0;
   // Always use the ORIGINAL minimum, not any previously applied value
   const minPay=fpPaymentMinimum(loan),currentCommitted=Number(loan.min_payment==null?loan.amount:loan.min_payment)||0;
-  const sliderMax=Math.max(minPay,Math.ceil(Math.max(minPay*4,bal/3+minPay,currentCommitted)));
+  const finalPayment=fpRound2((loan._cardParts||[loan]).reduce((n,l)=>n+fpLoanBalanceAmount(l)*(1+(Number(l.apr)||0)/1200),0));
+  const sliderMax=Math.max(minPay,Math.min(finalPayment,Math.ceil(Math.max(minPay*4,bal/3+minPay,currentCommitted))));
   _fpWhatIfInputInvalid=false;_fpPaymentBudgetCache=null;_fpWhatIfBandCache=null;
   fpWhatIfBudget(loan,true);
   const el = document.getElementById('whatif-content');
@@ -5042,7 +5044,7 @@ function openWhatIf(loanId) {
     + '<div class="wi-payment-heading"><label id="wi-payment-label" for="whatif-slider">Monthly payment</label><label class="wi-amount-field"><span aria-hidden="true">$</span><input id="whatif-amount" type="text" inputmode="decimal" aria-label="Monthly payment in dollars" value="'+sliderStartVal.toFixed(2)+'" oninput="fpWhatIfAmountInput(this.value)"></label><span id="whatif-amt" class="sr-only"></span></div>'
     + '<div class="wi-budget-legend"><span><b class="wi-green-dot" aria-hidden="true">✓</b> Fits</span><span><b class="wi-amber-dot" aria-hidden="true">!</b> Stretch</span><span><b class="wi-red-dot" aria-hidden="true">×</b> Does not fit</span></div>'
     + '<div class="wi-range-wrap"><div id="whatif-zone-bar" class="wi-budget-band" aria-hidden="true"></div><input type="range" id="whatif-slider" aria-labelledby="wi-payment-label" aria-describedby="wi-assessment-text" min="'+minPay+'" max="'+sliderMax+'" step="0.01" value="'+sliderStartVal+'" oninput="_fpWhatIfInputInvalid=false;updateWhatIf()"></div>'
-    + '<div class="wi-range-limits"><span>$'+fmt(minPay)+' minimum</span><span>$'+fmt(sliderMax)+' shown</span></div>'
+    + '<div class="wi-range-limits"><span>$'+fmt(minPay)+' minimum</span><span id="wi-range-max">$'+fmt(sliderMax)+' shown</span></div>'
     + '<div id="wi-suggestion"></div><div id="whatif-result" style="margin:14px 0;"></div>'
     + '<details class="wi-budget-details"><summary>What we counted</summary><div id="wi-budget-details"></div></details>'
     + '<button id="whatif-apply-btn" class="save-btn" style="width:100%;margin-top:14px;" onclick="applyWhatIfPayment(\''+loan.id+'\')">Set this as my monthly payment</button>'
@@ -5078,9 +5080,10 @@ function updateWhatIf(fromAmount) {
   const endBal = endBalGlobal;
 
   if(!fromAmount)document.getElementById('whatif-amount').value=payment.toFixed(2);
-  const budget=fpWhatIfBudget(loan),assessment=_fpWhatIfInputInvalid?{status:'invalid',title:'Check the payment amount',text:'Enter at least $'+fmt(budget.minimum)+'.'}:fpPaymentAssessment(budget,payment);
+  const budget=fpWhatIfBudget(loan),assessment=_fpWhatIfInputInvalid?{status:'invalid',title:'Check the payment amount',text:'Enter between $'+fmt(budget.minimum)+' and $'+fmt(fpRound2((loan._cardParts||[loan]).reduce((n,l)=>n+fpLoanBalanceAmount(l)*(1+(Number(l.apr)||0)/1200),0)))+'.'}:fpPaymentAssessment(budget,payment);
   const colours={green:'#166534',amber:'#8a4b00',red:'#b42318',unknown:'#5b6570',invalid:'#5b6570'},icons={green:'✓',amber:'!',red:'×',unknown:'?',invalid:'?'};
   const amtColor=colours[assessment.status],extra=payment-minPay;
+  document.getElementById('wi-range-max').textContent='$'+fmt(sliderMax)+' shown';
   document.getElementById('whatif-amt').textContent='$'+fmt(payment);
   document.getElementById('whatif-amount').style.color=amtColor;
   sliderEl.setAttribute('aria-valuetext','$'+fmt(payment)+' per month. '+assessment.title);
