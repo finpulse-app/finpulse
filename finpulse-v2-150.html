@@ -1284,6 +1284,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 <div id="toast" class="toast"><span class="toast-icon" id="toast-icon">✓</span><span id="toast-msg">Saved</span></div>
 
 <!-- EDIT EXPENSE MODAL -->
+<div id="statement-record-overlay" style="position:fixed;inset:0;background:rgba(26,25,22,0.55);z-index:400;display:none;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--surface);border-radius:20px;padding:26px;width:420px;max-width:95vw;">
+    <h3 id="statement-record-title" style="margin-bottom:8px;">Statement record</h3>
+    <p class="goal-note">Imported from your statement. These recorded details stay read-only.</p>
+    <div id="statement-record-details" style="line-height:1.8;margin:16px 0;"></div>
+    <button class="btn btn-outline" style="width:100%;" onclick="fpCloseStatementRecord()">Close</button>
+  </div>
+</div>
 <div id="edit-expense-overlay" style="position:fixed;inset:0;background:rgba(26,25,22,0.55);backdrop-filter:blur(4px);z-index:400;display:none;align-items:center;justify-content:center;padding:20px;">
   <div style="background:var(--surface);border-radius:20px;padding:26px;width:420px;max-width:95vw;box-shadow:var(--shadow-md);">
     <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:600;margin-bottom:16px;">Edit Expense</div>
@@ -1443,18 +1451,30 @@ function openExpenseEdit(txnId) {
   fpRestoreExpenseEditor();
   const txn = transactions.find(function(t){ return String(t.id) === String(txnId); });
   if (!txn) { console.warn('openExpenseEdit: txn not found for id', txnId); return; }
+  if(fpIsStatementRecord(txn)){fpOpenStatementRecord(txn.id);return;}
   _editExpenseTxnId = txn.id;
   document.getElementById('ee-desc').value = txn.description || '';
   document.getElementById('ee-amount').value = txn.amount || '';
   document.getElementById('ee-date').value = txn.date || txn.anchor_date || '';
   document.getElementById('ee-frequency').value=txn.recurring?(txn.frequency||'monthly'):'once';
-  document.getElementById('ee-frequency').disabled=txn.category==='loan_payment';
+  document.getElementById('ee-frequency').disabled=txn.category==='loan_payment'||(txn.type==='expense'&&!txn.recurring);document.getElementById('ee-frequency').closest('.form-group').hidden=txn.type==='expense'&&!txn.recurring;
   document.getElementById('edit-expense-overlay').style.display = 'flex';
   setTimeout(function(){
     const input = document.getElementById('ee-desc');
     if (input && _editExpenseTxnId === txn.id) input.select();
   }, 80);
 }
+
+function fpIsStatementRecord(t) {
+  return !!t&&(t.type==='expense'||t.type==='income')&&!t.recurring&&/^import:(?:card|bank):/.test(String(t.lender||''));
+}
+function fpOpenStatementRecord(id) {
+  const t=transactions.find(r=>String(r.id)===String(id));if(!t)return;
+  document.getElementById('statement-record-title').textContent=t.description;
+  document.getElementById('statement-record-details').innerHTML='<strong>'+ (t.type==='income'?'Received':'Spent')+' $'+fmt(t.amount)+'</strong><br>'+fpEscHtml(fpDateLabel(t.date))+'<br>'+fpEscHtml(fpImportCategories()[t.category]||t.category||'Other')+'<br>'+fpEscHtml(String(t.lender||'').replace(/^import:(?:card|bank):/,''));
+  document.getElementById('statement-record-overlay').style.display='flex';
+}
+function fpCloseStatementRecord(){document.getElementById('statement-record-overlay').style.display='none';}
 
 async function saveExpenseEdit() {
   if (!_editExpenseTxnId) return;
@@ -1464,6 +1484,7 @@ async function saveExpenseEdit() {
   const date = document.getElementById('ee-date').value;
   if (!desc || !/^\d+(?:\.\d{1,2})?$/.test(amountRaw) || !Number.isFinite(amount) || amount <= 0 || amount >= 1e12 || !fpParseIso(date) || fpIso(fpParseIso(date)) !== date) { showToast('Add a description, a valid amount with up to two decimal places, and a valid date.', 'error');return; }
   const editingTxn = transactions.find(function(t){ return String(t.id) === String(_editExpenseTxnId); });
+  if(editingTxn&&fpIsStatementRecord(editingTxn)){showToast('Statement details are read-only.','error');return;}
   if (editingTxn && editingTxn.category === 'loan_payment') {
     // A loan payment's amount and name are tied to the loan balance. Only the date may change here.
     if (Math.abs(parseFloat(editingTxn.amount) - amount) > 0.004 || desc !== editingTxn.description) {
@@ -1477,8 +1498,8 @@ async function saveExpenseEdit() {
     return;
   }
   const upd = { description: desc, amount, date };
-  const frequency=document.getElementById('ee-frequency').value;
-  if(['once','weekly','biweekly','twicemonthly','monthly','yearly'].includes(frequency)){upd.recurring=frequency!=='once';upd.frequency=upd.recurring?frequency:null;upd.anchor_date=upd.recurring?date:null;if(editingTxn&&editingTxn.type==='bill'&&!upd.recurring)upd.type='expense';}
+  const frequency=editingTxn&&editingTxn.type==='expense'&&!editingTxn.recurring?'once':document.getElementById('ee-frequency').value;
+  if(['once','weekly','biweekly','twicemonthly','monthly','yearly'].includes(frequency)){upd.recurring=frequency!=='once';upd.frequency=upd.recurring?frequency:null;upd.anchor_date=upd.recurring?date:null;if(editingTxn&&editingTxn.type==='bill')upd.type='bill';}
   if (editingTxn && editingTxn.recurring && editingTxn.anchor_date && upd.recurring!==false) upd.anchor_date = date; // keep date and schedule start together
   if (!await fpUpdateTransaction(_editExpenseTxnId, upd)) return;
   document.getElementById('edit-expense-overlay').style.display = 'none';
@@ -1520,6 +1541,7 @@ let _reassignTxnId = null;
 function openReassignModal(txnId) {
   const txn = transactions.find(function(t){ return String(t.id) === String(txnId); });
   if (!txn) { console.warn('openReassignModal: txn not found', txnId); return; }
+  if(fpIsStatementRecord(txn)){fpOpenStatementRecord(txn.id);return;}
   _reassignTxnId = txn.id;
   const descEl = document.getElementById('reassign-desc');
   if (descEl) descEl.textContent = '"' + txn.description + '", pick the right category';
@@ -1646,6 +1668,7 @@ async function fpResolvePendingOperation(key) {
   try { pending = fpPendingOperation(key); }
   catch(e) { showToast('Pending change could not be read.', 'error'); return; }
   if (!pending) return;
+  if(pending.kind==='card_review'){if(await fpSaveCardBatch(pending.request))showToast('Card save confirmed');return;}
   if (pending.kind === 'insert') {
     if (await fpInsertTransactions(pending.payload)) {
       if (fpStatementImportMatches(pending.payload)) fpFinishStatementImport();
@@ -2143,6 +2166,7 @@ async function fpUpdateTransaction(id, changes) {
   delete changes.user_id;
   const userId=currentUser.id, version=++_fpMutationVersion;
   const existing=transactions.find(function(t){return String(t.id)===String(id);});
+  if(existing&&fpIsStatementRecord(existing)){showToast('Statement records keep their original details. Only manual entries can be edited.','error');return false;}
   if (existing && existing.category==='loan_payment'
       && Object.keys(changes).some(function(k){return k!=='date' && k!=='anchor_date';})) {
     showToast('Loan payments can only change date. Delete and record the payment again to change its amount.', 'error');
@@ -2959,8 +2983,8 @@ function renderExpensesView() {
           + '<span class="exp-card-badge" style="background:' + badgeBg + ';color:' + badgeColor + ';">' + freqLabel + '</span>'
           + (dateLabel ? '<span style="color:var(--text3);">' + dateLabel + '</span>' : '')
           + '</div>'
-          + '<button onclick="event.stopPropagation();openExpenseEdit(\'' + t.id + '\')" style="font-size:10px;font-weight:600;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 8px;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;flex-shrink:0;transition:all 0.1s;" onmouseover="this.style.color=\'var(--accent)\';this.style.borderColor=\'#c3ddd1\'" onmouseout="this.style.color=\'var(--text3)\';this.style.borderColor=\'var(--border)\'">Edit</button>'
-          + (isOther ? '<button onclick="event.stopPropagation();openReassignModal(\'' + t.id + '\')" style="font-size:10px;font-weight:600;color:var(--accent);background:var(--accent-light);border:1px solid #c3ddd1;border-radius:6px;padding:2px 8px;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;flex-shrink:0;">Move</button>' : '')
+          + '<button onclick="event.stopPropagation();openExpenseEdit(\'' + t.id + '\')" style="font-size:10px;font-weight:600;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 8px;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;flex-shrink:0;transition:all 0.1s;" onmouseover="this.style.color=\'var(--accent)\';this.style.borderColor=\'#c3ddd1\'" onmouseout="this.style.color=\'var(--text3)\';this.style.borderColor=\'var(--border)\'">'+(fpIsStatementRecord(t)?'View':'Edit')+'</button>'
+          + (isOther && !fpIsStatementRecord(t) ? '<button onclick="event.stopPropagation();openReassignModal(\'' + t.id + '\')" style="font-size:10px;font-weight:600;color:var(--accent);background:var(--accent-light);border:1px solid #c3ddd1;border-radius:6px;padding:2px 8px;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;flex-shrink:0;">Move</button>' : '')
           + '</div>'
           + '</div>';
       });
@@ -2988,10 +3012,10 @@ function renderExpensesView() {
       const catDef = CAT_DEFS.find(function(c) { return c.id === (t.category || 'other').toLowerCase(); }) || { id:'other', color:'#6b7280' };
       const isLoanPayment = t.category === 'loan_payment';
       const dateStr = fpExpenseRecordLabel(t);
-      const clickFn = isLoanPayment ? 'openLoanPaymentInfo(\'' + t.id + '\')' : 'openExpenseEdit(\'' + t.id + '\')';
+      const clickFn = fpIsStatementRecord(t)?'fpOpenStatementRecord(\''+t.id+'\')':isLoanPayment ? 'openLoanPaymentInfo(\'' + t.id + '\')' : 'openExpenseEdit(\'' + t.id + '\')';
       return '<div class="fv-row" onclick="' + clickFn + '">'
         + '<div class="fv-row-icon" style="background:' + catDef.color + '18;color:' + catDef.color + ';">' + catIconSvg(catDef.id, 15) + '</div>'
-        + '<div class="fv-row-info"><div class="fv-row-name">' + fpEscHtml(t.description) + '</div><div class="fv-row-meta">' + (dateStr || '') + '</div></div>'
+        + '<div class="fv-row-info"><div class="fv-row-name">' + fpEscHtml(t.description) + '</div><div class="fv-row-meta">' + (dateStr || '') + (fpIsStatementRecord(t)?' · Statement record · read-only':'') + '</div></div>'
         + '<div class="fv-row-amt">-$' + fmt(t.amount) + '</div>'
         + '</div>';
     }).join('');
@@ -4074,7 +4098,7 @@ function fpOpenPriority(destination) {
     const today=new Date();currentYear=today.getFullYear();currentMonth=today.getMonth();showView('calendar',null);renderCalendar();updateStats();
     if(destination==='balance')openEditBalance();else openEditIncome();return;
   }
-  if(destination==='bill_entry'){showView('calendar',null);openDayPanel(null,'bill');return;}
+  if(destination==='bill_entry'){showView('bills',null);openDayPanel(null,'bill');return;}
   if(['bills','loans','expenses','plan','dreams'].includes(destination))showView(destination,null);
 }
 
@@ -4324,6 +4348,7 @@ let bsEntryKind = "expense";
 let bsFrequency = "monthly"; // whether the next save should be a recurring monthly charge
 
 function openBottomSheet(day,kind='expense') {
+  if(kind==='bill'&&document.getElementById('view-bills').style.display!=='block')showView('bills',null);
   if(day==null){const today=new Date();currentYear=today.getFullYear();currentMonth=today.getMonth();day=today.getDate();}
   bsEntryKind=kind==='bill'?'bill':'expense';
   bsSelectedDay = day;
@@ -4421,7 +4446,7 @@ function renderBottomSheetBody() {
       + dayTxns.map(function(t) {
           const isIncome = t.type === 'income';
           const isLoanAccount = t.type === 'loan'; // this IS the loan's own record, not a payment, never delete it from here
-          const actionBtn = isLoanAccount
+          const actionBtn = fpIsStatementRecord(t)?'<button class="bs-txn-del" onclick="fpOpenStatementRecord(\''+t.id+'\')">View</button>':isLoanAccount
             ? '<button class="bs-txn-del" title="Manage this loan from Loans & Debt" onclick="closeBottomSheet();showView(\'loans\',null);" style="font-size:10px;white-space:nowrap;">Manage &#8250;</button>'
             : '<button class="bs-txn-del" onclick="deleteTxnWithUndo(\'' + t.id + '\').then(function(){renderBottomSheetBody();})">&#10005;</button>';
           return '<div class="bs-txn-item">'
@@ -4445,12 +4470,13 @@ function renderBottomSheetBody() {
     + '</div>';
 
   // Recurring toggle — applies to whichever save path (AI text or category grid) runs next
-  html += '<button type="button" class="recurring-toggle" aria-pressed="'+bsRecurring+'" onclick="bsToggleRecurring()" style="margin-bottom:14px;width:100%;text-align:left;">'
+  if(bsEntryKind==='bill')html += '<button type="button" class="recurring-toggle" aria-pressed="'+bsRecurring+'" onclick="bsToggleRecurring()" style="margin-bottom:14px;width:100%;text-align:left;">'
     + '<div class="toggle-check' + (bsRecurring ? ' on' : '') + '" id="bs-recurring-check">&#10003;</div>'
     + '<div class="toggle-label">Repeats</div>'
     + '<div style="font-size:11px;color:var(--text3);margin-left:auto;">e.g. subscriptions, rent</div>'
     + '</button>';
-  if(bsRecurring)html+='<div class="form-group"><label class="form-label" for="bs-frequency">How often?</label><select class="form-select" id="bs-frequency" onchange="bsFrequency=this.value">'+[['weekly','Every week'],['biweekly','Every two weeks'],['monthly','Every month'],['yearly','Every year']].map(function(pair){return '<option value="'+pair[0]+'"'+(bsFrequency===pair[0]?' selected':'')+'>'+pair[1]+'</option>';}).join('')+'</select><p class="goal-note">Enter the full amount charged each time. Repeats from the selected calendar date.</p></div>';
+  if(bsEntryKind!=='bill')html+='<p class="goal-note">Add everyday spending here. <button class="btn btn-outline" onclick="bsToggleRecurring()">Add a recurring bill</button></p>';
+  if(bsEntryKind==='bill'&&bsRecurring)html+='<div class="form-group"><label class="form-label" for="bs-frequency">How often?</label><select class="form-select" id="bs-frequency" onchange="bsFrequency=this.value">'+[['weekly','Every week'],['biweekly','Every two weeks'],['monthly','Every month'],['yearly','Every year']].map(function(pair){return '<option value="'+pair[0]+'"'+(bsFrequency===pair[0]?' selected':'')+'>'+pair[1]+'</option>';}).join('')+'</select><p class="goal-note">Enter the full amount charged each time. Repeats from the selected calendar date.</p></div>';
 
   // Divider
   html += '<div class="bs-divider"><div class="bs-divider-line"></div><div class="bs-divider-text">or pick a category</div><div class="bs-divider-line"></div></div>';
@@ -4479,6 +4505,7 @@ function renderBottomSheetBody() {
 }
 
 function bsToggleRecurring() {
+  if(bsEntryKind!=='bill'){const text=document.getElementById('bs-ai-input'),draft=text?text.value:'',day=bsSelectedDay;showView('bills',null);openBottomSheet(day,'bill');const input=document.getElementById('bs-ai-input');if(input)input.value=draft;return;}
   bsRecurring = !bsRecurring;
   // Preserve whatever the user already typed before re-rendering
   const inp = document.getElementById('bs-ai-input');
@@ -4548,6 +4575,11 @@ async function bsAiSubmit() {
 
   const parsed = fpParseQuickExpense(raw);
   const amount = parsed ? parsed.amount : null;
+  if(parsed){
+    const destination=fpEverydayEntryDestination(parsed.description);
+    if(destination==='loans'){showView('loans',null);showToast('Add debts and record loan payments in Loans & Debt. This expense has not been saved.','error');return;}
+    if(destination==='bills'&&bsEntryKind!=='bill'){const day=bsSelectedDay;showView('bills',null);openBottomSheet(day,'bill');document.getElementById('bs-ai-input').value=raw;showToast('Review this recurring charge under Bills.');return;}
+  }
 
   if (!parsed) {
     showToast('Use one amount, like Coffee $6 or Rent $1,200. Keep cents to two decimal places.', 'error');
@@ -4593,7 +4625,7 @@ async function bsAiSubmit() {
   const dateStr = currentYear + '-' + String(currentMonth+1).padStart(2,'0') + '-' + String(Math.min(day, daysInMonth)).padStart(2,'0');
 
   const txnObj = {
-    type: bsRecurring && bsEntryKind==='bill' ? 'bill' : 'expense',
+    type: bsEntryKind==='bill' ? 'bill' : 'expense',
     description: description,
     amount: amount,
     date: dateStr,
@@ -4614,6 +4646,13 @@ async function bsAiSubmit() {
     bsRecurring = bsEntryKind==='bill';bsFrequency="monthly";
     renderBottomSheetBody();
   }
+}
+
+function fpEverydayEntryDestination(description) {
+  const text=String(description||'').toLowerCase();
+  if(/\b(loan|loans|mortgage|affirm|klarna|financing|financed|installments?|bnpl)\b|credit card.*payment|debt.*payment/.test(text))return 'loans';
+  if(/\b(rent|subscription|subscriptions|netflix|spotify|hulu|insurance)\b|(?:electric|water|internet|phone) bill|gym membership/.test(text))return 'bills';
+  return 'expense';
 }
 
 async function bsConfirmSave() {
@@ -4657,7 +4696,7 @@ async function bsCatSave() {
   const desc = cats[savedCat] || 'Expense';
 
   const txnObj = {
-    type: bsRecurring && bsEntryKind==='bill' ? 'bill' : 'expense',
+    type: bsEntryKind==='bill' ? 'bill' : 'expense',
     description: desc,
     amount: amt,
     date: dateStr,
@@ -6212,7 +6251,7 @@ function categorizeImportedRow(description) {
   const lower = description.toLowerCase();
   const rules = [
     { cat:'food', words:['coffee','starbucks','dunkin','mcdonald','burger','pizza','restaurant','food','grocery','groceries','doordash','ubereats','grubhub','chipotle','whole foods','trader joe','safeway','kroger'] },
-    { cat:'transport', words:['uber','lyft','gas','shell','chevron','exxon','parking','transit','mta','tire','autozone'] },
+    { cat:'transport', words:['uber','lyft','gas','nyct','omny','metrocard','shell','chevron','exxon','parking','transit','mta','tire','autozone'] },
     { cat:'shopping', words:['amazon','target','walmart','costco','ebay','nike','adidas','shopping'] },
     { cat:'health', words:['pharmacy','cvs','walgreens','doctor','dentist','gym','fitness','medical'] },
     { cat:'home', words:['rent','mortgage','electric','internet','wifi','phone','xfinity','comcast','utility'] },
@@ -6291,17 +6330,17 @@ function fpEscHtml(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;')
 let _fpStatementFiles=[], _fpStatementOwner=null, _fpDetectedCards=[], _fpCardReview=[], _fpCardSaving=false, _fpPdfReader=null;
 function fpStatementIdentity(text,name) {
   const summary=String(text||'').slice(0,14000);
-  const issuers=[['American Express',/american express|\bamex\b/i],['Capital One',/capital\s*one/i],['Bank of America',/bank of america/i],['Chase',/\bchase\b|jpmorgan/i],['Citi',/\bciti(?:bank)?\b/i],['Discover',/\bdiscover\b/i],['Wells Fargo',/wells fargo/i],['Barclays',/barclays/i],['Synchrony',/synchrony/i],['US Bank',/u\.?s\.? bank/i]];
+  const issuers=[['Apple Card',/\bapple\s*card\b/i],['American Express',/american express|\bamex\b/i],['Capital One',/capital\s*one/i],['Bank of America',/bank of america/i],['Chase',/\bchase\b|jpmorgan/i],['Citi',/\bciti(?:bank)?\b/i],['Discover',/\bdiscover\b/i],['Wells Fargo',/wells fargo/i],['Barclays',/barclays/i],['Synchrony',/synchrony/i],['US Bank',/u\.?s\.? bank/i]];
   const identityHeader=summary.split(/\r?\n/).slice(0,18).filter(line=>!/^\s*\d{1,4}[\/-]\d/.test(line)).join('\n')+'\n'+String(name||'');
   const found=issuers.map(x=>({value:x,match:identityHeader.match(x[1])})).filter(x=>x.match).sort((a,b)=>a.match.index-b.match.index)[0]?.value;
-  const last=summary.match(/(?:ending(?:\s+in)?|last\s+(?:four|4)(?:\s+digits)?|account\s*(?:number|#)?\s*[:#]?)\s*(?:[xX*•\s-]*\d[\d\s-]{5,}|[xX*•\s-]*)(\d{4})\b/i);
-  const ending=summary.match(/(?:account\s*)?ending(?:\s+in)?\s*[:#]?\s*([\dxX*•][\dxX*• -]{3,30})/i);
+  const last=identityHeader.match(/(?:ending(?:\s+in)?|last\s+(?:four|4)(?:\s+digits)?|account\s*(?:number|#)?\s*[:#]?)\s*(?:[xX*•\s-]*\d[\d\s-]{5,}|[xX*•\s-]*)(\d{4})\b/i);
+  const ending=identityHeader.match(/(?:account\s*)?ending(?:\s+in)?\s*[:#]?\s*([\dxX*•][\dxX*• -]{3,30})/i);
   const endingDigits=ending?ending[1].replace(/\D/g,''):'';
   const card=/credit\s*card|minimum\s+(?:payment|amount)\s+due|payment\s+due\s+date|purchase\s+apr|annual percentage rate.*purchases|\b(?:sapphire|quicksilver|venture|freedom unlimited|blue cash|savor)\b/i.test(identityHeader);
   const bank=/beginning balance|ending balance|direct deposit|payroll/i.test(summary);
   const cardSummary=/minimum\s+(?:payment|amount)\s+due|payment\s+due\s+date|purchases?\s+apr|annual percentage rate.*purchases/i.test(summary);
   const bankHeader=summary.split(/\r?\n/).slice(0,15).some(line=>!/^\s*\d{1,4}[\/-]\d/.test(line)&&/\b(checking|savings)\b/i.test(line)&&!/payment|transfer|\bfrom\b|linked|drawn|credit\s*card/i.test(line));
-  return {issuer:found?found[0]:null,last4:last?last[1]:endingDigits.length>=4?endingDigits.slice(-4):null,kind:cardSummary?'card':bankHeader?'bank':card?'card':bank?'bank':null};
+  return {issuer:found?found[0]:null,last4:last?last[1]:endingDigits.length>=4?endingDigits.slice(-4):null,kind:found&&found[0]==='Apple Card'?'card':cardSummary?'card':bankHeader?'bank':card?'card':bank?'bank':null};
 }
 function fpStatementDate(text) {
   const value=String(text||'').trim();let d=parseImportDate(value);if(d)return fpIso(d);
@@ -6310,7 +6349,7 @@ function fpStatementDate(text) {
 }
 function fpStatementCardDetails(text,name) {
   const id=fpStatementIdentity(text,name), lines=String(text||'').split(/\r?\n/);
-  const amountFor=function(pattern,signed){for(let i=0;i<lines.length;i++){const m=lines[i].match(pattern);if(!m)continue;const tail=lines[i].slice(m.index+m[0].length)+' '+(lines[i+1]||'');const a=tail.match(/^\s*:?\s*(\(?-?\$?\s*\d[\d,]*\.\d{2}\)?)(?!\d)/);if(a){let n=fpImportAmount(a[1].replace(/\s/g,''));if(n!==null){if(/^\s*(?:CR|credit)\b/i.test(tail.slice(a[0].length)))n=-Math.abs(n);if(signed||n>=0)return n;}}}return null;};
+  const amountFor=function(pattern,signed){for(let i=0;i<lines.length;i++){const m=lines[i].match(pattern);if(!m||/\b(previous|prior|opening|beginning)\b/i.test(lines[i].slice(0,m.index)))continue;const tail=lines[i].slice(m.index+m[0].length)+' '+(lines[i+1]||'');const a=tail.match(/^\s*:?\s*(\(?-?\$?\s*\d[\d,]*\.\d{2}\)?)(?!\d)/);if(a){let n=fpImportAmount(a[1].replace(/\s/g,''));if(n!==null){if(/^\s*(?:CR|credit)\b/i.test(tail.slice(a[0].length)))n=-Math.abs(n);if(signed||n>=0)return n;}}}return null;};
   const dateFor=function(pattern,period){
     const matches=value=>Array.from(value.matchAll(/\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2}|(?:Jan\w*|Feb\w*|Mar\w*|Apr\w*|May|Jun\w*|Jul\w*|Aug\w*|Sep\w*|Oct\w*|Nov\w*|Dec\w*)\.?\s+\d{1,2},?\s+\d{4}/gi));
     for(let i=0;i<lines.length;i++){
@@ -6356,13 +6395,40 @@ function fpDetectStatementCSV(text,name) {
   if(!mode&&id.kind!=='card'&&amt>=0){const income=csv.slice(1).some(r=>/payroll|direct deposit|salary/i.test(String(r[desc]||''))&&(fpImportAmount(r[amt])||0)>0);if(income){id.kind='bank';mode='bank';}}
   return {mode,identity:id,text,statementText:originalText,format:'csv'};
 }
+function fpAppleCardPDFDetails(file) {
+  const lines=file.pages[0]||[],text=file.text||file.pages.flat().map(l=>l.text).join('\n');
+  const money=value=>{const m=String(value||'').match(/\$?([\d,]+\.\d{2})(?!\d)/);return m?fpImportAmount(m[1]):null;};
+  const exact=pattern=>{for(const line of file.pages.flat()){if(pattern.test(line.text.trim())){const matches=line.text.match(/\$[\d,]+\.\d{2}/g);if(matches&&matches.length===1)return money(matches[0]);}}return null;};
+  const columnValue=pattern=>{
+    const index=lines.findIndex(l=>l.items.some(i=>pattern.test(i.text.trim())));if(index<0)return null;
+    const label=lines[index].items.find(i=>pattern.test(i.text.trim()));
+    for(let j=index;j<Math.min(lines.length,index+7);j++){
+      const items=lines[j].items.filter(i=>/^\$[\d,]+\.\d{2}$/.test(i.text.trim())).sort((a,b)=>Math.abs(a.x-label.x)-Math.abs(b.x-label.x));
+      if(items.length&&Math.abs(items[0].x-label.x)<85)return money(items[0].text);
+    }return null;
+  };
+  const minimum=columnValue(/^Minimum(?: Payment)?$/i);
+  const totalBalance=exact(/^Total Balance\b/i),financedBalance=exact(/^Total remaining\s*\$/i);
+  const beside=pattern=>{for(const line of lines){const label=line.items.find(i=>pattern.test(i.text.trim()));if(!label)continue;const value=line.items.filter(i=>i.x>label.x&&i.x<label.x+180&&/^\$[\d,]+\.\d{2}$/.test(i.text.trim())).sort((a,b)=>a.x-b.x)[0];if(value)return money(value.text);}return null;};
+  const installmentMonthly=beside(/^Apple Card Monthly Installments$/i),cardMinimum=beside(/^Apple Card transactions$/i);
+  const originalFinanced=exact(/^Total financed\s*\$/i);
+  const rate=text.match(/Annual Percentage Rate\s*\(APR\)\s*(\d{1,2}(?:\.\d+)?)\s*%/i);
+  const period=(lines.slice(0,25).map(l=>l.text).join('\n')).match(/(?:Jan\w*|Feb\w*|Mar\w*|Apr\w*|May|Jun\w*|Jul\w*|Aug\w*|Sep\w*|Oct\w*|Nov\w*|Dec\w*)\s+\d{1,2}\s*[–—-]\s*((?:Jan\w*|Feb\w*|Mar\w*|Apr\w*|May|Jun\w*|Jul\w*|Aug\w*|Sep\w*|Oct\w*|Nov\w*|Dec\w*)\s+\d{1,2},?\s+\d{4})/i);
+  const dueLabel=lines.findIndex(l=>l.items.some(i=>/^Due By$/i.test(i.text.trim())));let due=null;
+  if(dueLabel>=0){const label=lines[dueLabel].items.find(i=>/^Due By$/i.test(i.text.trim()));for(let j=dueLabel;j<Math.min(lines.length,dueLabel+7);j++){const value=lines[j].items.filter(i=>i.x>=label.x-20&&i.x<label.x+180).map(i=>i.text).join(' ');const date=value.match(/(?:Jan\w*|Feb\w*|Mar\w*|Apr\w*|May|Jun\w*|Jul\w*|Aug\w*|Sep\w*|Oct\w*|Nov\w*|Dec\w*)\s+\d{1,2},?\s+\d{4}/i);if(date){due=fpStatementDate(date[0]);if(due)break;}}}
+  const financed=financedBalance!==null&&financedBalance>0;
+  const coherent=financed&&totalBalance!==null&&installmentMonthly!==null&&minimum!==null&&cardMinimum!==null&&Math.round(minimum*100)===Math.round(installmentMonthly*100)+Math.round(cardMinimum*100)&&totalBalance>=financedBalance;
+  return {balance:totalBalance,minimum,due,asOf:period?fpStatementDate(period[1]):null,apr:rate?Number(rate[1]):null,aprAmbiguous:false,installments:financed?{balance:financedBalance,monthly:installmentMonthly,originalBalance:originalFinanced,cardMinimum,regularBalance:totalBalance===null?null:Math.round((totalBalance-financedBalance)*100)/100,coherent}:null};
+}
+
+
 async function fpReadStatementPDF(file) {
   if(file.size>20*1024*1024)throw Error('This PDF is too large. Choose a file smaller than 20 MB.');
   if(!_fpPdfReader){_fpPdfReader=import('https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/build/pdf.mjs').then(lib=>{lib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/build/pdf.worker.mjs';return lib;}).catch(e=>{_fpPdfReader=null;throw Error('The PDF reader could not load. Check your connection and try again.');});}
   const lib=await _fpPdfReader, task=lib.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false,stopAtErrors:true});let doc;
   try{doc=await task.promise;if(doc.numPages>80)throw Error('Choose a statement with 80 pages or fewer.');const pages=[];
     for(let i=1;i<=doc.numPages;i++){const page=await doc.getPage(i),content=await page.getTextContent();const groups=[];content.items.forEach(item=>{if(!item.str)return;const y=item.transform[5],x=item.transform[4];let line=groups.find(g=>Math.abs(g.y-y)<2);if(!line){line={y,items:[]};groups.push(line);}line.items.push({text:item.str,x,width:item.width||0});});groups.sort((a,b)=>b.y-a.y);pages.push(groups.map(g=>{g.items.sort((a,b)=>a.x-b.x);return {text:g.items.map(t=>t.text).join(' '),items:g.items};}));}
-    const text=pages.flat().map(l=>l.text).join('\n');if(text.trim().length<50)throw Error('This PDF is a scan with no readable text. Upload its CSV export instead.');return {text,pages,format:'pdf',identity:fpStatementIdentity(text,file.name),card:fpStatementCardDetails(text,file.name)};
+    const text=pages.flat().map(l=>l.text).join('\n');if(text.trim().length<50)throw Error('This PDF is a scan with no readable text. Upload its CSV export instead.');const identity=fpStatementIdentity(text,file.name),card=fpStatementCardDetails(text,file.name);if(identity.issuer==='Apple Card')Object.assign(card,fpAppleCardPDFDetails({text,pages}));return {text,pages,format:'pdf',identity,card};
   }catch(e){if(e.name==='PasswordException')throw Error('This PDF is password protected. Upload an unlocked copy or a CSV export.');throw e;}finally{await task.destroy();}
 }
 function fpStatementPDFSection(text) {
@@ -6374,29 +6440,35 @@ function fpStatementPDFSection(text) {
   return null;
 }
 function fpParseStatementPDF(file,kind) {
-  const rows=[], result={rows,unreadable:0,cardCredits:0};const end=file.card.asOf;
+  const rows=[], result={rows,unreadable:0,cardCredits:0,financedPurchases:0};const end=file.card.asOf;
   const privateValues=fpStatementPrivateValues(file.text||file.pages.flat().map(function(line){return line.text;}).join('\n'));
   const dated=function(raw){let d=parseImportDate(raw);if(d)return fpIso(d);if(!end||!/^\d{1,2}\/\d{1,2}$/.test(raw))return null;d=parseImportDate(raw+'/'+end.slice(0,4));if(d&&fpIso(d)>end)d=parseImportDate(raw+'/'+(Number(end.slice(0,4))-1));return d?fpIso(d):null;};
   let section='',columns=null;
   file.pages.forEach(page=>page.forEach(line=>{
     const text=line.text.trim();
+    if(/^Apple Card Monthly Installments$/i.test(text)){section='installments';columns=null;return;}
+    if(/^Daily Cash$/i.test(text)){section='cashback';columns=null;return;}
+    if(/^Transactions by /i.test(text))section='purchases';
     const nextSection=fpStatementPDFSection(text);if(nextSection){section=nextSection;return;}
+    if(/Daily Cash/.test(text)&&/Amounts?$/.test(text)){columns=[{text:'card-daily-cash'}];return;}
     const header=line.items.filter(i=>/^(amount|debit|credit|withdrawals?|deposits?|balance)$/i.test(i.text.trim()));if(header.length){columns=header;return;}
     const m=text.match(/^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\d{4}-\d{2}-\d{2})\s*[*†]?\s+(.*)$/);if(!m)return;
+    if(section==='installments'){result.financedPurchases++;return;}if(section==='cashback')return;
     const date=dated(m[1]);if(!date){result.unreadable++;return;}
     const body=m[2].replace(/^\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\s+/,'');const values=Array.from(body.matchAll(/(?:^|\s)(\(?-?\$?\d[\d,]*\.\d{2}\)?)(?:\s*(CR))?(?=\s|$)/g));
     if(!values.length){result.unreadable++;return;}
     let amount=null,description=body.slice(0,values[0].index).trim(),income=false;
     if(kind==='card'){
-      if(values.length!==1){result.unreadable++;return;}
-      amount=fpImportAmount(values[0][1]);if(amount===null)return;
-      if(section==='payments'||section==='credits'||/^(?:payment\s+(?:received|thank you|online|from|to)|(?:mobile|automatic|online) payment|autopay|refund|credit(?: adjustment| received))\b/i.test(description)||values[0][2]||amount<0){result.cardCredits++;return;}
+      if(values.length!==1&&!(columns&&columns.some(c=>c.text==='card-daily-cash'))){result.unreadable++;return;}
+      const value=values[values.length-1];amount=fpImportAmount(value[1]);if(amount===null)return;
+      if(section==='payments'||section==='credits'||/^(?:payment\s+(?:received|thank you|online|from|to)|(?:mobile|automatic|online) payment|autopay|refund|credit(?: adjustment| received))\b/i.test(description)||value[2]||amount<0){result.cardCredits++;return;}
     }else{
       if(!columns){result.unreadable++;return;}
       const monetary=line.items.filter(i=>/^\(?-?\$?\d[\d,]*\.\d{2}\)?$/.test(i.text.trim()));
       for(const item of monetary){const nearest=columns.slice().sort((a,b)=>Math.abs((a.x+a.width)-(item.x+item.width))-Math.abs((b.x+b.width)-(item.x+item.width)))[0];if(/balance/i.test(nearest.text))continue;const n=fpImportAmount(item.text);if(n===null)continue;if(amount!==null){amount=null;break;}amount=n;if(/debit|withdrawal/i.test(nearest.text))amount=-Math.abs(n);else if(/credit|deposit/i.test(nearest.text))amount=Math.abs(n);else if(!/[+-]/.test(item.text)){amount=null;break;}}
       if(amount===null){result.unreadable++;return;}income=amount>0;
     }
+    if(columns&&columns.some(c=>c.text==='card-daily-cash'))description=description.replace(/\s+-?\d+(?:\.\d+)?%\s*$/,'').trim();
     description=fpPrivateStatementDescription(description,privateValues);
     if(!description||!amount){result.unreadable++;return;}
     rows.push({type:income?'income':'expense',description,amount:Math.abs(amount),date,category:income?null:categorizeImportedRow(description),recurring:false});
@@ -6437,7 +6509,7 @@ function fpBuildStatementPreview() {
   _fpStatementFiles.forEach((f,i)=>{
     if(f.error){meta.failedFiles++;meta.errors.push(f.name+': '+f.error);return;}if(f.mode==='skip')return;
     const result=f.format==='pdf'?fpParseStatementPDF(f,f.identity.kind||'bank'):fpParseStatement(f.text,f.mode);
-    meta.unreadable+=result.unreadable;meta.cardCredits+=result.cardCredits;if(!result.rows.length)meta.emptyFiles++;
+    meta.unreadable+=result.unreadable;meta.cardCredits+=result.cardCredits;meta.financedPurchases=(meta.financedPurchases||0)+(result.financedPurchases||0);if(!result.rows.length)meta.emptyFiles++;
     const card=f.identity.kind==='card',detail=f.card||fpStatementCardDetails(f.statementText||f.text,f.name);
     if(f.identity.last4){detail.last4=f.identity.last4;detail.name=(f.identity.issuer||'Credit card')+' ending '+detail.last4;}
     const label=(card?detail.name:(f.identity.issuer||'Bank account')+(f.identity.last4?' ending '+f.identity.last4:''));
@@ -6476,7 +6548,7 @@ function fpStartDetectedCardReview(imported) {
     const payoff=fpPaidOffDate(existing);
     if(payoff&&(!card.asOf||card.asOf<=payoff))return false;
     if(card.balance===null||(stamp&&(!card.asOf||card.asOf<=stamp[1]))||(!stamp&&Number(existing.balance)===card.balance))return false;
-    card.existingId=existing.id;card.name=existing.description;
+    card.existingId=existing.id;card.name=card.installments?existing.description.replace(/ · purchases$/,''):existing.description;
     if(card.minimum===null)card.minimum=Number(existing.min_payment)||null;
     if(card.apr===null&&!card.aprAmbiguous&&fpLoanRateKnown(existing))card.apr=Number(existing.apr);
     return true;
@@ -6489,10 +6561,45 @@ function fpRenderDetectedCard() {
   if(!currentUser||currentUser.id!==_fpStatementOwner)return;
   if(!_fpCardReview.length){fpReviewRecurringBills(_fpCardImported);return;}
   const c=_fpCardReview[0],box=document.getElementById('import-preview');document.getElementById('import-upload-section').style.display='none';box.style.display='block';
-  const field=(id,label,value,type='text')=>'<label class="form-label" for="'+id+'" style="margin-top:10px;">'+label+'</label><input class="form-input" id="'+id+'" type="'+type+'"'+(type==='text'&&id!=='detected-card-name'?' inputmode="decimal"':'')+' value="'+fpEscHtml(value==null?'':value)+'">';
-  box.innerHTML='<h3 style="font-size:17px;margin:0 0 8px;">'+(c.existingId?'Update this card?':'Add this card to your plan?')+'</h3><p style="font-size:12px;line-height:1.5;">'+fpEscHtml(c.fileName)+'<br>'+(c.creditBalance>0?'This statement shows a $'+fmt(c.creditBalance)+' credit, so you owe $0.<br>':'')+(!_fpCardImported.length?'No transactions were imported. You can still add or update the card details below.<br>':'')+(c.balance===null?'This export has purchases, but no card balance. Fill in the missing statement details once.':c.existingId?'This statement shows a different balance. Check it against any payments or purchases since the statement date. Missing details keep your saved values.':'We found these statement details. Check them before adding the card under Loans.')+'</p>'+field('detected-card-name','Card name',c.name==='Credit card'?'':c.name)+field('detected-card-balance','Balance owed ($)',c.balance)+field('detected-card-minimum','Minimum payment ($)',c.minimum)+field('detected-card-apr','Purchase APR % (leave blank if unknown)',c.apr)+field('detected-card-due','Payment due date',c.due,'date')+'<p class="goal-note" style="font-size:11px;margin-top:10px;">Your priority list uses this card name and confirmed balance. Check your latest balance. Keep a past due date if that payment is still unpaid; otherwise use your next due date.</p><button class="save-btn" style="margin-top:12px;" onclick="fpConfirmDetectedCard()">'+(c.existingId?'Update credit card':'Add credit card')+'</button><button class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="fpSkipDetectedCard()">Skip for now</button>';
+  const field=(id,label,value,type='text')=>'<label class="form-label" for="'+id+'" style="margin-top:10px;">'+label+'</label><input class="form-input" id="'+id+'" type="'+type+'"'+(type==='text'&&id!=='detected-card-name'?' inputmode="decimal"':'')+(c.installments&&['detected-card-balance','detected-card-minimum','detected-card-apr'].includes(id)?' readonly':'')+' value="'+fpEscHtml(value==null?'':value)+'">';
+  const financeNote=c.installments?'<p class="goal-note">'+(c.installments.coherent?'Includes $'+fmt(c.installments.balance)+' in 0% financing. Its $'+fmt(c.installments.monthly)+' monthly payment is already included in the minimum. We will track regular purchases and 0% financing separately under Loans &amp; Debt.':'The financing amounts could not be reconciled. Skip this card until the statement details can be verified.')+'</p>':'';
+  box.innerHTML='<h3 style="font-size:17px;margin:0 0 8px;">'+(c.existingId?'Update this card?':'Add this card to your plan?')+'</h3><p style="font-size:12px;line-height:1.5;">'+fpEscHtml(c.fileName)+'<br>'+(c.creditBalance>0?'This statement shows a $'+fmt(c.creditBalance)+' credit, so you owe $0.<br>':'')+(!_fpCardImported.length?'No transactions were imported. You can still add or update the card details below.<br>':'')+(c.balance===null?'This export has purchases, but no card balance. Fill in the missing statement details once.':c.existingId?'This statement shows a different balance. Check it against any payments or purchases since the statement date. Missing details keep your saved values.':'We found these statement details. Check them before adding the card under Loans.')+'</p>'+field('detected-card-name','Card name',c.name==='Credit card'?'':c.name)+field('detected-card-balance','Balance owed ($)',c.balance)+field('detected-card-minimum','Minimum payment ($)',c.minimum)+field('detected-card-apr','Purchase APR % (leave blank if unknown)',c.apr)+field('detected-card-due','Payment due date',c.due,'date')+financeNote+'<p class="goal-note" style="font-size:11px;margin-top:10px;">Your priority list uses this card name and confirmed balance. Check your latest balance. Keep a past due date if that payment is still unpaid; otherwise use your next due date.</p><button class="save-btn" style="margin-top:12px;" onclick="fpConfirmDetectedCard()">'+(c.existingId?'Update credit card':'Add credit card')+'</button><button class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="fpSkipDetectedCard()">Skip for now</button>';
 }
 function fpSkipDetectedCard(){if(_fpCardSaving)return;_fpCardReview.shift();fpRenderDetectedCard();}
+async function fpSaveCardBatch(records) {
+  if(!currentUser||_fpMutationBusy)return false;
+  const uid=currentUser.id,version=++_fpMutationVersion,key='card-review',storageKey=fpOperationStorageKey(key);
+  _fpMutationBusy=true;
+  try{
+    const request=records.map(r=>{const safe=fpSafeTransactionRecord(r);safe.user_id=uid;if(r.id)safe.id=String(r.id);return safe;});
+    if(!request.length||request.some(r=>r.type!=='loan'))throw Error('Only reviewed debt entries can be saved here.');
+    let pending=fpPendingOperation(key);
+    if(pending&&(pending.kind!=='card_review'||JSON.stringify(pending.request)!==JSON.stringify(request)))throw Error('Confirm the previous card save before making another change.');
+    if(!pending){
+      if(request.some(r=>r.id&&!transactions.some(t=>String(t.id)===r.id&&t.user_id===uid&&t.type==='loan')))throw Error('This saved debt could not be verified for your account.');
+      pending={id:crypto.randomUUID(),kind:'card_review',request,payload:request.map(r=>Object.assign({},r,{id:r.id||crypto.randomUUID()}))};
+      localStorage.setItem(storageKey,JSON.stringify(pending));
+    }
+    if(!Array.isArray(pending.payload)||pending.payload.length!==request.length||new Set(pending.payload.map(r=>r.id)).size!==request.length||pending.payload.some((r,i)=>r.user_id!==uid||r.type!=='loan'||!r.id||JSON.stringify(r)!==JSON.stringify(Object.assign({},request[i],{id:request[i].id||r.id}))))throw Error('The pending card save could not be verified.');
+    const response=await sb.from('transactions').upsert(pending.payload,{onConflict:'id'}).select();
+    if(response.error){if(/^(22|23|42501)/.test(response.error.code||''))localStorage.removeItem(storageKey);throw Error(response.error.message||'Card details could not be saved.');}
+    if(!Array.isArray(response.data)||response.data.length!==pending.payload.length||pending.payload.some(r=>!response.data.some(t=>t.id===r.id&&t.user_id===uid)))throw Error('Card save confirmation was incomplete. Retry to confirm it.');
+    if(!currentUser||currentUser.id!==uid||version!==_fpMutationVersion)return false;
+    response.data.forEach(row=>{const i=transactions.findIndex(t=>t.id===row.id);if(i<0)transactions.push(row);else transactions[i]=row;});
+    localStorage.removeItem(storageKey);fpRenderTransactionState();return true;
+  }catch(e){if(currentUser&&currentUser.id===uid)showToast(e.message||'Card save failed.','error');return false;}
+  finally{if(version===_fpMutationVersion){_fpMutationBusy=false;fpUpdatePendingNotice();}}
+}
+function fpCardComponentRecords(card,name,date,apr) {
+  const f=card.installments,source=card.sourceAccount,stamp=card.asOf?' statement:'+card.asOf:'';
+  const parts=[{source,balance:f.regularBalance,minimum:f.cardMinimum,apr,name:name+' · purchases',original:f.regularBalance},{source:source+':installments',balance:f.balance,minimum:f.monthly,apr:0,name:name+' · 0% financing',original:f.originalBalance==null?f.balance:f.originalBalance}];
+  return parts.map(p=>{
+    const old=transactions.find(t=>t.type==='loan'&&String(t.lender||'').includes('| account:'+p.source+' |'));
+    const record={type:'loan',description:p.name,amount:p.balance>0?p.minimum:0,min_payment:p.balance>0?p.minimum:0,original_min_payment:old&&old.original_min_payment!=null?old.original_min_payment:p.minimum,date,anchor_date:date,category:'Credit Card',lender:'Credit Card | account:'+p.source+' |'+stamp+(p.apr===0?' | financing:0% | included_in:'+name:''),recurring:true,frequency:'monthly',balance:p.balance,apr:p.apr,original_balance:old&&old.original_balance!=null?old.original_balance:p.original};
+    if(old)record.id=old.id;return record;
+  });
+}
+
 async function fpConfirmDetectedCard() {
   if(_fpCardSaving||_fpMutationBusy||!currentUser||currentUser.id!==_fpStatementOwner||!_fpCardReview.length)return;
   const name=document.getElementById('detected-card-name').value.trim(),balance=fpParseMoney(document.getElementById('detected-card-balance').value,true),minimum=fpParseMoney(document.getElementById('detected-card-minimum').value,true),rate=document.getElementById('detected-card-apr').value.trim(),apr=rate===''?null:Number(rate),date=document.getElementById('detected-card-due').value;
@@ -6500,11 +6607,12 @@ async function fpConfirmDetectedCard() {
   if(apr!==null&&(!/^\d+(?:\.\d+)?$/.test(rate)||apr<0||apr>100)){showToast('Check the purchase APR, or leave it blank if unknown.','error');return;}
   if(balance>0&&!parseImportDate(date)){showToast('Choose a valid payment due date.','error');return;}
   const card=_fpCardReview[0];
-  if(transactions.some(t=>t.type==='loan'&&String(t.id)!==String(card.existingId)&&fpImportDesc(t.description)===fpImportDesc(name))){showToast('This card is already in Loans. Review it there.','error');return;}
+  if(card.installments&&!card.installments.coherent){showToast('The financing details must match before saving this card. Skip for now.','error');return;}
+  if(!card.installments&&transactions.some(t=>t.type==='loan'&&String(t.id)!==String(card.existingId)&&fpImportDesc(t.description)===fpImportDesc(name))){showToast('This card is already in Loans. Review it there.','error');return;}
   const uid=currentUser.id;_fpCardSaving=true;document.querySelectorAll('#import-preview input, #import-preview button, #import-close-btn').forEach(el=>el.disabled=true);
   const record={type:'loan',description:name,amount:balance>0?minimum:0,min_payment:balance>0?minimum:0,original_min_payment:balance>0?minimum:0,date:balance>0?date:fpIso(new Date()),anchor_date:balance>0?date:fpIso(new Date()),category:'Credit Card',lender:'Credit Card | account:'+card.sourceAccount+' |'+(card.asOf?' statement:'+card.asOf:''),recurring:true,frequency:'monthly',balance,apr};
   if(card.existingId){const previous=transactions.find(t=>String(t.id)===String(card.existingId)),paid=previous&&fpPaidOffDate(previous);if(paid)record.lender+=' | paid_off:'+paid;}
-  let saved=false;try{saved=card.existingId?await fpUpdateTransaction(card.existingId,record):await saveTxn(Object.assign(record,{original_balance:balance}));}
+  let saved=false;try{saved=card.installments?await fpSaveCardBatch(fpCardComponentRecords(card,name,date,apr)):card.existingId?await fpUpdateTransaction(card.existingId,record):await saveTxn(Object.assign(record,{original_balance:balance}));}
   finally{_fpCardSaving=false;document.querySelectorAll('#import-preview input, #import-preview button, #import-close-btn').forEach(el=>el.disabled=false);}
   if(!saved||!currentUser||currentUser.id!==uid)return;_fpCardReview.shift();fpRenderDetectedCard();renderCalendar();updateStats();renderLoans();renderPriorityReport();showToast('Credit card added to Loans');
 }
@@ -6577,6 +6685,7 @@ function renderImportPreview() {
   if (meta.errors && meta.errors.length) meta.errors.forEach(e=>skipNotes.push(fpEscHtml(e)));
   else if (meta.failedFiles > 0) skipNotes.push(meta.failedFiles + ' file' + (meta.failedFiles===1?'':'s') + ' could not be read or had invalid CSV quoting');
   if (meta.unreadable > 0) skipNotes.push(meta.unreadable + ' row' + (meta.unreadable===1?'':'s') + ' could not be read and ' + (meta.unreadable===1?'was':'were') + ' left out');
+  if(meta.financedPurchases>0)skipNotes.push(meta.financedPurchases+' financed purchase'+(meta.financedPurchases===1?'':'s')+' shown separately for review under Loans & Debt');
   if (meta.cardCredits > 0) skipNotes.push(meta.cardCredits + ' card payment or credit row' + (meta.cardCredits===1?'':'s') + ' left out');
   if (meta.emptyFiles > 0) skipNotes.push(meta.emptyFiles + ' file' + (meta.emptyFiles===1?'':'s') + ' had no recognizable transactions. Try a CSV export if a PDF layout is not recognized');
   const skipHtml = skipNotes.length ? '<div style="font-size:11px;color:var(--text3);margin-top:6px;">' + skipNotes.join('. ') + '.</div>' : '';
@@ -6633,7 +6742,7 @@ function fpLockImportControls() {
   const recovery=document.getElementById('import-recovery-btn');if(recovery){recovery.style.display=locked&&!_importSaving?'block':'none';recovery.disabled=_importSaving||_fpMutationBusy;}
   const close=document.getElementById('import-close-btn'); if(close) close.disabled=_importSaving;
   const note=document.getElementById('import-save-note');
-  if(note) note.textContent=_importSaving?'Saving your selected transactions…':locked?'A previous save needs confirmation. Check the saved import before making corrections.':'Review the categories. Use Edit to correct a row. Nothing is saved until you press Import.';
+  if(note) note.textContent=_importSaving?'Saving your selected transactions…':locked?'A previous save needs confirmation. Check the saved import before making corrections.':'These statement details are read-only. Uncheck entries you do not want to import. Nothing is saved until you press Import.';
 }
 function fpRenderImportRow(r,i) {
   const category=r.type==='income'?'Income':(fpImportCategories()[r.category]||'Other');
@@ -6642,9 +6751,10 @@ function fpRenderImportRow(r,i) {
     +'<label style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer;"><input type="checkbox" data-import-idx="'+i+'"'+(r.include?' checked':'')+' onchange="toggleImportRow('+i+',this.checked)">'
     +'<span style="min-width:0;overflow-wrap:anywhere;">'+fpEscHtml(r.description)+'<span style="display:block;font-size:10.5px;color:var(--text2);">'+fpEscHtml(r.date)+' · '+fpEscHtml(category)+why+'<span style="display:block;">'+fpEscHtml(r.fileName)+'</span></span></span></label>'
     +'<span style="font-weight:600;white-space:nowrap;text-align:right;"><span style="display:block;font-size:10.5px;color:var(--text2);">'+(r.type==='income'?'Received':r.category==='card_transfer'?'Card payment':'Spent')+'</span>$'+fmt(r.amount)+'</span>'
-    +'<button type="button" data-import-edit="'+i+'" aria-label="Edit transaction '+(i+1)+'" onclick="openImportRowEdit('+i+')" style="background:none;border:none;color:var(--accent);padding:8px 2px;font:600 12px Inter,sans-serif;cursor:pointer;">Edit</button></div>';
+    +'</div>';
 }
 function openImportRowEdit(i) {
+  showToast('Imported statement details are read-only. Select the entries to include.','error');return;
   if(fpImportLocked() || !_pendingImportRows[i]) return;
   if(_importEditIndex!==-1 && _importEditIndex!==i){showToast('Apply or cancel this correction first.');return;}
   _importEditIndex=i;
@@ -6683,6 +6793,7 @@ function fpCorrectImportRows(rows,i,changes,existing) {
   rows.forEach(function(r,j){if(r.dupKind===previous[j].dupKind)r.include=previous[j].include;});
 }
 function applyImportRowEdit() {
+  showToast('Imported statement details are read-only.','error');return;
   if(fpImportLocked() || !_pendingImportRows[_importEditIndex])return;
   const draft={};['desc','date','amount','type','category'].forEach(function(k){draft[k==='desc'?'description':k]=document.getElementById('import-edit-'+k).value;});
   const result=fpImportCorrection(draft);
@@ -6695,7 +6806,7 @@ function cancelImportRowEdit() {
   _importEditIndex=-1; const editor=document.getElementById('import-row-editor');if(editor)editor.replaceChildren();updateImportSummary();
 }
 function fpStatementImportRecords() {
-  return _pendingImportRows.filter(function(r){return r.include!==false;}).map(function(row){return fpSafeTransactionRecord({user_id:currentUser.id,type:row.type,description:row.description,amount:row.amount,date:row.date,category:row.category||null,recurring:false,frequency:null,anchor_date:null,apr:null,min_payment:null,balance:null,original_balance:null,lender:row.sourceAccount||null});});
+  return _pendingImportRows.filter(function(r){return r.include!==false;}).map(function(row){return fpSafeTransactionRecord({user_id:currentUser.id,type:row.type,description:row.description,amount:row.amount,date:row.date,category:row.category||null,recurring:false,frequency:null,anchor_date:null,apr:null,min_payment:null,balance:null,original_balance:null,lender:row.sourceAccount||('import:'+(document.getElementById('import-account-type').value==='card'?'card':'bank')+':Statement export')});});
 }
 function fpStatementImportMatches(records) {
   return !!currentUser && _pendingImportRows.length>0 && JSON.stringify(fpStatementImportRecords())===JSON.stringify(records);
@@ -6762,7 +6873,7 @@ async function confirmStatementImport() {
 // Suggestions never change statement history. Only a confirmed future schedule is saved.
 let _fpRecurringSuggestions = [], _fpRecurringOwner = null, _fpRecurringSaving = false;
 function fpRecurringMerchant(text) {
-  return String(text||'').toLowerCase().replace(/\b\d{4,}\b/g,' ').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+  return String(text||'').toLowerCase().replace(/\b[a-z0-9]+\b/g,t=>/[a-z]/.test(t)&&(t.match(/\d/g)||[]).length>=4?' ':t).replace(/\b\d{4,}\b/g,' ').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
 }
 function fpSuggestRecurringBills(rows, today) {
   const groups = new Map(), scheduled = new Set(rows.filter(r=>r.recurring&&(r.type==='bill'||r.type==='expense')).map(r=>fpRecurringMerchant(r.description)));
@@ -6776,23 +6887,26 @@ function fpSuggestRecurringBills(rows, today) {
   groups.forEach(group=>{
     const byDate=new Map();group.forEach(r=>{if(!byDate.has(r.date))byDate.set(r.date,r);});
     const entries=Array.from(byDate.values()).sort((a,b)=>a.date.localeCompare(b.date));
-    if(entries.length<2)return;
+    const possible=entries.length===1&&/\b(spotify|netflix|hulu|disney|youtube premium|chatgpt|subscription|membership|harbor fitness|icloud)\b/i.test(entries[0].description);
+    if(entries.length<2&&!possible)return;
+    if(possible&&fpDaysBetween(fpParseIso(entries[0].date),fpParseIso(today))>95)return;
     const recent=entries.slice(-4), latest=recent[recent.length-1], dates=recent.map(r=>fpParseIso(r.date));
     const gaps=dates.slice(1).map((d,i)=>Math.round((Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())-Date.UTC(dates[i].getFullYear(),dates[i].getMonth(),dates[i].getDate()))/86400000));
     let frequency=null;
     if(gaps.every(g=>g>=26&&g<=35))frequency='monthly';
     else if(recent.length>=3&&gaps.every(g=>g>=6&&g<=8))frequency='weekly';
     else if(recent.length>=3&&gaps.every(g=>g>=13&&g<=15))frequency='biweekly';
+    if(possible)frequency='monthly';
     if(!frequency)return;
     const billLike=/\b(rent|mortgage|electric|energy|water|internet|wifi|phone|xfinity|comcast|utility|utilities|insurance|netflix|hulu|disney|spotify|subscription|gym|fitness)\b/.test(fpRecurringMerchant(latest.description));
     const amounts=recent.map(r=>r.amount), min=Math.min(...amounts), max=Math.max(...amounts);
-    if(!billLike&&(recent.length<3||max-min>Math.max(1,max*0.03)||['food','shopping','transport','personal','pets'].includes(latest.category)))return;
+    if(!possible&&!billLike&&(recent.length<3||max-min>Math.max(1,max*0.03)||['food','shopping','transport','personal','pets'].includes(latest.category)))return;
     const anchor=fpParseIso(latest.date);let next;
     if(frequency==='monthly')next=new Date(anchor.getFullYear(),anchor.getMonth()+1,Math.min(anchor.getDate(),new Date(anchor.getFullYear(),anchor.getMonth()+2,0).getDate()),12);
     else next=fpAddDays(anchor,frequency==='weekly'?7:14);
     // Old history is useful for review, but cannot imply an active bill indefinitely.
-    if(fpIso(next)<today)return;
-    result.push({description:latest.description,amount:latest.amount,category:latest.category||'other',lender:String(latest.lender||'').startsWith('import:card:')?latest.lender:null,frequency,date:fpIso(next),count:recent.length,variable:max-min>0.01});
+    if(possible){while(fpIso(next)<today)next=new Date(next.getFullYear(),next.getMonth()+1,Math.min(anchor.getDate(),new Date(next.getFullYear(),next.getMonth()+2,0).getDate()),12);}else if(fpIso(next)<today)return;
+    result.push({description:latest.description,amount:latest.amount,category:latest.category||'other',lender:String(latest.lender||'').startsWith('import:card:')?latest.lender:null,frequency,date:fpIso(next),count:recent.length,possible,variable:max-min>0.01});
   });
   return result.sort((a,b)=>a.date.localeCompare(b.date));
 }
@@ -6809,7 +6923,7 @@ function fpRenderRecurringReview() {
   document.getElementById('import-upload-section').style.display=_fpRecurringSuggestions.length?'none':'block';
   if(!_fpRecurringSuggestions.length){box.style.display='none';return;}
   const r=_fpRecurringSuggestions[0];box.style.display='block';
-  box.innerHTML='<h3 style="margin:0 0 8px;font-size:17px;">Does this repeat?</h3><p style="font-size:12px;line-height:1.5;">We found '+r.count+' payments to <strong>'+fpEscHtml(r.description)+'</strong> about '+(r.frequency==='monthly'?'once a month':r.frequency==='weekly'?'once a week':'every two weeks')+'. Confirm it to add upcoming bills to your calendar.</p><label class="form-label" for="recurring-review-amount">Expected amount'+(r.variable?' (your latest payment)':'')+'</label><input class="form-input" id="recurring-review-amount" inputmode="decimal" value="'+r.amount.toFixed(2)+'"><label class="form-label" for="recurring-review-date" style="margin-top:10px;">Next payment date</label><input class="form-input" id="recurring-review-date" type="date" value="'+r.date+'"><p style="font-size:11px;line-height:1.5;color:var(--text2);">'+(r.variable?'Amounts varied. Adjust the estimate if needed. ':'')+'Past transactions stay as recorded. This adds a future schedule; it does not pay the bill.</p><button class="save-btn" onclick="fpConfirmRecurringBill()">Yes, add this bill</button><button class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="fpSkipRecurringBill()">No, skip it</button><p style="font-size:11px;margin-bottom:0;">'+_fpRecurringSuggestions.length+' suggestion'+(_fpRecurringSuggestions.length===1?'':'s')+' left to review</p>';
+  box.innerHTML='<h3 style="margin:0 0 8px;font-size:17px;">Does this repeat?</h3><p style="font-size:12px;line-height:1.5;">'+(r.possible?'This looks like a possible subscription. One charge does not prove it repeats. Check whether you still pay for <strong>'+fpEscHtml(r.description)+'</strong>.':'We found '+r.count+' payments to <strong>'+fpEscHtml(r.description)+'</strong> about '+(r.frequency==='monthly'?'once a month':r.frequency==='weekly'?'once a week':'every two weeks')+'.')+' Confirm it to add upcoming bills to your calendar.</p><label class="form-label" for="recurring-review-amount">Expected amount'+(r.variable?' (your latest payment)':'')+'</label><input class="form-input" id="recurring-review-amount" inputmode="decimal" value="'+r.amount.toFixed(2)+'"><label class="form-label" for="recurring-review-date" style="margin-top:10px;">Next payment date</label><input class="form-input" id="recurring-review-date" type="date" value="'+r.date+'"><p style="font-size:11px;line-height:1.5;color:var(--text2);">'+(r.variable?'Amounts varied. Adjust the estimate if needed. ':'')+'Past transactions stay as recorded. This adds a future schedule; it does not pay the bill.</p><button class="save-btn" onclick="fpConfirmRecurringBill()">Yes, add this bill</button><button class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="fpSkipRecurringBill()">No, skip it</button><p style="font-size:11px;margin-bottom:0;">'+_fpRecurringSuggestions.length+' suggestion'+(_fpRecurringSuggestions.length===1?'':'s')+' left to review</p>';
 }
 function fpSkipRecurringBill() {if(_fpRecurringSaving)return;_fpRecurringSuggestions.shift();fpRenderRecurringReview();}
 async function fpConfirmRecurringBill() {
@@ -7448,13 +7562,13 @@ function rippleDismiss() {
 }
 
 // Shared dialog behavior: only the active dialog handles keys or backdrop clicks.
-const fpDialogIds = ['paid-off-overlay','ripple-overlay','loan-delete-overlay','loan-edit-overlay','lp-info-overlay','add-income-overlay','connect-accounts-overlay','edit-expense-overlay','reassign-overlay','edit-balance-overlay','edit-income-overlay','setup-overlay','record-payment-overlay','rollover-overlay','whatif-overlay','stage-overlay','bottom-sheet'];
+const fpDialogIds = ['statement-record-overlay','paid-off-overlay','ripple-overlay','loan-delete-overlay','loan-edit-overlay','lp-info-overlay','add-income-overlay','connect-accounts-overlay','edit-expense-overlay','reassign-overlay','edit-balance-overlay','edit-income-overlay','setup-overlay','record-payment-overlay','rollover-overlay','whatif-overlay','stage-overlay','bottom-sheet'];
 let _fpDialogSequence=0;
 function fpTopDialog() {
   return fpDialogIds.map(id=>document.getElementById(id)).filter(el=>el&&el.getClientRects().length&&getComputedStyle(el).visibility!=='hidden').sort((a,b)=>Number(getComputedStyle(b).zIndex||0)-Number(getComputedStyle(a).zIndex||0)||Number(b.dataset.fpOpened||0)-Number(a.dataset.fpOpened||0))[0]||null;
 }
 function fpDismissDialog(id) {
-  const close={'paid-off-overlay':fpClosePaidOff,'connect-accounts-overlay':closeConnectAccounts,'record-payment-overlay':closeRecordPayment,'whatif-overlay':closeWhatIf,'ripple-overlay':rippleDismiss,'setup-overlay':closeSetup,'stage-overlay':closeStageModal,'bottom-sheet':closeBottomSheet};
+  const close={'statement-record-overlay':fpCloseStatementRecord,'paid-off-overlay':fpClosePaidOff,'connect-accounts-overlay':closeConnectAccounts,'record-payment-overlay':closeRecordPayment,'whatif-overlay':closeWhatIf,'ripple-overlay':rippleDismiss,'setup-overlay':closeSetup,'stage-overlay':closeStageModal,'bottom-sheet':closeBottomSheet};
   if(close[id]){close[id]();return;}
   const el=document.getElementById(id);if(el)el.style.display='none';
   if(id==='loan-delete-overlay')_loanDeleteId=null;

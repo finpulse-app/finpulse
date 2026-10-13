@@ -37,6 +37,12 @@ function dbop(s) {
     const old=rows.find(r=>r.id===p.id);if(old)Object.assign(old,p);else rows.push({...p});
     if(writeFault==='goal-lost'){writeFault=null;throw Error('Lost goal confirmation');}
     return{data:s.single?{...p}:[{...p}],error:null};
+  } else if(s.op==='upsert'&&s.table==='transactions') {
+    const arr=Array.isArray(s.payload)?s.payload:[s.payload];
+    if(arr.some(p=>check(p)||p.user_id!=='user-A'||rows.some(r=>r.id===p.id&&r.user_id!==p.user_id)))return{data:null,error:{code:'42501',message:'Invalid or unowned transaction'}};
+    const made=arr.map(p=>{let r=rows.find(x=>x.id===p.id);if(r)Object.assign(r,p);else {r=Object.assign(Object.fromEntries(COLS.map(c=>[c,null])),p,{created_at:'now'});rows.push(r);}return {...r};});
+    if(writeFault==='lost'){writeFault=null;throw Error('Lost card batch confirmation');}
+    return {data:made,error:null};
   } else if (s.op === 'upsert' && s.table === 'bill_paid_marks') {
     const made=[];
     for(const p of s.payload) {
@@ -320,31 +326,22 @@ const loan = id => txns().find(t => t.id === id);
   await page.click('#import-confirm-btn'); await page.waitForTimeout(1000);
   ok('T13h only the 2 new rows saved', txns().length === n0 + 2 && txns().filter(t => t.description === 'BATCH ROW').length === 1, 'rows ' + (txns().length - n0));
 
-  // Corrections use the actual preview controls and the fake backend only.
+  // Statement facts are read-only; users can exclude rows before confirming.
   n0=txns().length;
   await pick([['correct.csv',H+'2026-10-28,AMAZON MARKETPLACE,-12.00\n2026-10-29,KEEP UNSELECTED,-4.00\n']]);
-  ok('T13j preview shows assigned expense categories',/Shopping/.test(await page.innerText('#import-preview')),'category hidden');
-  await page.uncheck('[data-import-idx="1"]');await page.click('[data-import-edit="0"]');
-  await page.fill('#import-edit-desc','Groceries');await page.fill('#import-edit-amount','1.001');await page.click('#import-edit-apply');
-  ok('T13j invalid correction keeps the draft and blocks import',/two decimal places/.test(await page.innerText('#import-edit-error')) && await page.isDisabled('#import-confirm-btn') && await page.inputValue('#import-edit-amount')==='1.001' && txns().length===n0,'invalid correction escaped review');
-  await page.fill('#import-edit-amount','$1,200.01');await page.fill('#import-edit-date','2026-10-30');await page.selectOption('#import-edit-category','food');await page.click('#import-edit-apply');
-  ok('T13j applied correction updates preview totals and preserves an unchecked row without saving',/Groceries/.test(await page.innerText('#import-preview')) && /Food & Drink/.test(await page.innerText('#import-preview')) && /1,200.01/.test(await page.innerText('#import-totals')) && !await page.isChecked('[data-import-idx="1"]') && txns().length===n0,'correction prematurely saved or selection lost');
-  await page.click('[data-import-edit="0"]');await page.fill('#import-edit-desc','Discard this draft');await page.getByRole('button',{name:'Cancel',exact:true}).click();
-  ok('T13j cancelling a correction keeps the applied preview unchanged',/Groceries/.test(await page.innerText('#import-preview')) && !/Discard this draft/.test(await page.innerText('#import-preview')) && txns().length===n0,'cancel changed row');
+  ok('T13j statement preview shows categories and no edit controls',/Shopping/.test(await page.innerText('#import-preview'))&&await page.locator('[data-import-edit]').count()===0,'mutable statement preview');
+  await page.uncheck('[data-import-idx="1"]');await page.evaluate(()=>openImportRowEdit(0));
+  ok('T13j direct correction cannot change source facts',await page.evaluate(()=>_pendingImportRows[0].amount===12&&_importEditIndex===-1),'source facts changed');
   await page.click('#import-confirm-btn');await page.waitForTimeout(500);
-  const corrected=txns().find(t=>t.description==='Groceries');
-  ok('T13j import saves exactly the reviewed fields and no unchecked transaction',txns().length===n0+1 && corrected && near(corrected.amount,1200.01) && corrected.date==='2026-10-30' && corrected.category==='food' && corrected.type==='expense' && corrected.recurring===false && !txns().some(t=>t.description==='KEEP UNSELECTED'),JSON.stringify(corrected));
-  await pick([['correct-duplicate.csv',H+'2026-10-28,New bank label,-12.00\n']]);await page.click('[data-import-edit="0"]');
-  await page.fill('#import-edit-desc','Groceries');await page.fill('#import-edit-amount','1200.01');await page.fill('#import-edit-date','2026-10-30');await page.selectOption('#import-edit-category','food');await page.click('#import-edit-apply');
-  ok('T13k correction to an existing purchase is rechecked and skipped by default',/1 possible duplicate/.test(await page.innerText('#import-preview')) && !await page.isChecked('[data-import-idx="0"]') && await page.isDisabled('#import-confirm-btn'),'duplicate remained selected');
-  await page.click('[data-import-edit="0"]');await page.fill('#import-edit-amount','1200.02');await page.selectOption('#import-edit-type','income');
-  ok('T13k income correction hides the expense category',!await page.isVisible('#import-edit-category'),'income category still required');
-  await page.click('#import-edit-apply');
-  ok('T13k correcting away from a duplicate reselects the new row',await page.isChecked('[data-import-idx="0"]') && /Income/.test(await page.innerText('#import-preview')) && !await page.isDisabled('#import-confirm-btn'),'new row excluded');
-  n0=txns().length;await page.click('#import-confirm-btn');await page.waitForTimeout(500);
-  ok('T13k corrected income imports with no expense category',txns().length===n0+1 && txns().some(t=>t.description==='Groceries' && near(t.amount,1200.02) && t.type==='income' && t.category===null),'income correction lost');
-  n0=txns().length;await pick([['escape.csv',H+'2026-10-28,ESCAPE CANCELLED,-8.00\n']]);await page.click('[data-import-edit="0"]');await page.fill('#import-edit-desc','Unsaved escape correction');await page.keyboard.press('Escape');await page.evaluate(()=>confirmStatementImport());
-  ok('T13l Escape cancels the import draft and correction without saving',!await page.isVisible('#connect-accounts-overlay') && await page.evaluate(()=>_pendingImportRows.length===0 && _importEditIndex===-1) && txns().length===n0,'Escape retained an importable draft');
+  const importedFact=txns().find(t=>t.description==='AMAZON MARKETPLACE');
+  ok('T13j only selected unchanged statement facts are saved',txns().length===n0+1&&importedFact.amount===12&&importedFact.date==='2026-10-28'&&!txns().some(t=>t.description==='KEEP UNSELECTED'),'facts or selection changed');
+  await page.evaluate(()=>closeConnectAccounts());await page.evaluate(id=>openExpenseEdit(id),importedFact.id);
+  ok('T13k saved statement opens read-only details',await page.isVisible('#statement-record-overlay')&&!await page.isVisible('#edit-expense-overlay'),'editable statement');
+  await page.evaluate(id=>fpUpdateTransaction(id,{amount:999,description:'Changed'}),importedFact.id);
+  ok('T13k update helper refuses imported statement changes',loan(importedFact.id).amount===12&&loan(importedFact.id).description==='AMAZON MARKETPLACE','source record mutated');
+  await page.keyboard.press('Escape');
+  n0=txns().length;await pick([['escape.csv',H+'2026-10-28,ESCAPE CANCELLED,-8.00\n']]);await page.keyboard.press('Escape');await page.evaluate(()=>confirmStatementImport());
+  ok('T13l Escape cancels a statement preview without saving',!await page.isVisible('#connect-accounts-overlay')&&await page.evaluate(()=>_pendingImportRows.length===0)&&txns().length===n0,'draft saved after cancel');
   // I. descriptions are escaped in the duplicates list
   await pick([['x.csv', H + '2026-10-27,"<i id=""xss"">hello</i>",-2.00\n']]);
   await page.click('#import-confirm-btn'); await page.waitForTimeout(800);
@@ -667,7 +664,7 @@ const loan = id => txns().find(t => t.id === id);
 
   await page.evaluate(()=>{openConnectAccounts();_pendingImportRows=[{type:'expense',description:'Recovery C',amount:14,date:'2026-10-09',category:'food',include:true,dupKind:null,fileIdx:0,fileName:'recovery.csv'}];renderImportPreview();});
   writeFault='lost';await page.click('#import-confirm-btn');await wait(200);
-  ok('T21 unconfirmed import locks row corrections and selection',await page.isDisabled('[data-import-edit="0"]') && await page.isDisabled('[data-import-idx="0"]') && await page.isDisabled('#import-cancel-btn') && /needs confirmation/.test(await page.innerText('#import-save-note')) && await page.isVisible('#import-recovery-btn'),'pending save can be changed');
+  ok('T21 unconfirmed import locks row corrections and selection',await page.locator('[data-import-edit]').count()===0 && await page.isDisabled('[data-import-idx="0"]') && await page.isDisabled('#import-cancel-btn') && /needs confirmation/.test(await page.innerText('#import-save-note')) && await page.isVisible('#import-recovery-btn'),'pending save can be changed');
   await page.click('#import-recovery-btn');await wait(200);await page.evaluate(()=>confirmStatementImport());
   ok('T21 checking saved import clears its draft and cannot add duplicates',await page.evaluate(()=>_pendingImportRows.length)===0 && !await page.isVisible('#import-preview') && txns().filter(t=>t.description==='Recovery C').length===1,'confirmed batch left ready to import');
   await page.click('#import-close-btn');seed();await load();await hideStage();
@@ -819,6 +816,23 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>fpStartDetectedCardReview([]));
   ok('Amex card review is prefilled from the actual PDF reader',await page.inputValue('#detected-card-name')==='American Express ending 6789'&&await page.inputValue('#detected-card-balance')==='900'&&await page.inputValue('#detected-card-apr')==='19.99','Amex review missing');
   await page.evaluate(()=>cancelStatementImport(false));
+  const applePath='/tmp/finpulse-fictional-apple.pdf';fs.writeFileSync(applePath,require('./apple-pdf-fixture')());
+  await page.setInputFiles('#import-csv-input',applePath);await page.waitForFunction(()=>document.getElementById('import-totals'));
+  ok('Apple PDF reads actual purchase amount rather than Daily Cash',/Found 3 transactions/.test(await page.textContent('#import-preview'))&&/Spent \$45/.test(await page.textContent('#import-totals'))&&/1 financed purchase/.test(await page.textContent('#import-preview')),'wrong Apple rows or totals');
+  ok('Apple PDF identity never uses the bank payment account',/Apple Card/.test(await page.textContent('#import-preview'))&&!/ending 8765/.test(await page.textContent('#import-preview')),'bank account became card identity');
+  await page.click('#import-confirm-btn');await page.waitForTimeout(300);
+  ok('Apple PDF prefills current total minimum APR and due date',await page.inputValue('#detected-card-name')==='Apple Card'&&await page.inputValue('#detected-card-balance')==='805'&&await page.inputValue('#detected-card-minimum')==='45'&&await page.inputValue('#detected-card-apr')==='24.99'&&await page.inputValue('#detected-card-due')==='2026-10-31','Apple metadata incorrect');
+  writeFault='reject';await page.click('#import-preview button.save-btn');await page.waitForTimeout(150);
+  ok('Apple financing pair rejects together and preserves review',!db.transactions.some(t=>t.type==='loan'&&/Apple Card/.test(t.description))&&await page.isVisible('#detected-card-name'),'partial save');
+  writeFault='lost';await page.click('#import-preview button.save-btn');await page.waitForTimeout(150);
+  const applePair=()=>db.transactions.filter(t=>t.type==='loan'&&/Apple Card/.test(t.description));
+  ok('Lost Apple save confirmation keeps one pair and its retry',applePair().length===2&&await page.isVisible('#detected-card-name')&&await page.evaluate(()=>!!fpPendingOperation('card-review')),'retry missing');
+  await page.click('#import-preview button.save-btn');await page.waitForTimeout(250);
+  ok('Apple retry confirms identical IDs without duplicate loans',applePair().length===2&&applePair().some(t=>t.apr===0&&t.balance===800&&t.min_payment===40)&&applePair().some(t=>t.apr===24.99&&t.balance===5&&t.min_payment===5)&&await page.evaluate(()=>!fpPendingOperation('card-review')),'financing or retry wrong');
+  ok('Apple bank cash counts the combined minimum exactly once',await page.evaluate(()=>fpDayEvents(2026,9)[31].loans.filter(t=>/Apple Card/.test(t.description)).reduce((n,t)=>n+fpAmountDue(t),0)===45),'minimum double counted');
+  ok('Single recognizable subscriptions are offered as possible and not auto-saved',/possible/i.test(await page.textContent('#import-preview'))&&!db.transactions.some(t=>t.recurring&&t.type==='bill'),'unverified subscriptions saved');
+  await page.evaluate(()=>cancelStatementImport(false));await page.evaluate(()=>closeConnectAccounts());
+  fs.unlinkSync(applePath);seed();db.transactions=[];await load();await hideStage();await page.evaluate(()=>openConnectAccounts());
   const statementPDF=require('./statement-pdf-fixture');const pdfPath='/tmp/finpulse-fictional-card.pdf',bankPath='/tmp/finpulse-fictional-bank.csv',bankPdfPath='/tmp/finpulse-fictional-bank.pdf';
   fs.writeFileSync(pdfPath,statementPDF(['Chase credit card','Account ending in 1234','Statement closing date 09/30/2026','New Balance $1,203.45','Minimum Payment Due $35.00','Payment Due Date 10/20/2026','Purchases APR 24.99%','Transactions','Cardholder name: Jane Sample','Billing address: 123 Main Street','09/05 Coffee 1111222233334444 4.50','09/20 Electric bill 70.00','09/25 Payment Thank You -50.00']));
   fs.writeFileSync(bankPath,'Date,Description,Amount\n2026-09-01,Payroll,1000\n2026-09-25,Chase credit card payment 1111222233334444,-50\n');
@@ -997,15 +1011,15 @@ const loan = id => txns().find(t => t.id === id);
   ok('T34 reviewing a priority bill opens Bills without changing paid status',await page.isVisible('#view-bills')&&db.transactions.length===priorityWrites,'shortcut saved money action');
 
 
-  seed();db.transactions=[];await load();await page.evaluate(()=>{showView('calendar',null);openBottomSheet(10);});await page.fill('#bs-ai-input','Annual insurance $1200');await page.click('button.recurring-toggle');await page.selectOption('#bs-frequency','yearly');
+  seed();db.transactions=[];await load();await page.evaluate(()=>{showView('calendar',null);openBottomSheet(10);});await page.fill('#bs-ai-input','Annual insurance $1200');await page.getByRole('button',{name:'Add a recurring bill',exact:true}).click();await page.selectOption('#bs-frequency','yearly');
   ok('T35 choosing repeat frequency preserves expense description',await page.inputValue('#bs-ai-input')==='Annual insurance $1200','text lost');await page.click('#bs-ai-send-btn');await page.waitForTimeout(300);
   const annual=db.transactions.find(t=>t.description==='Annual Insurance');
-  ok('T35 annual expense saves full charge once per year',annual&&annual.amount===1200&&annual.frequency==='yearly'&&annual.anchor_date==='2026-10-10','annual converted to monthly');
+  ok('T35 annual expense saves full charge once per year',annual&&annual.type==='bill'&&annual.amount===1200&&annual.frequency==='yearly'&&annual.anchor_date==='2026-10-10','annual converted to monthly');
   ok('T35 annual cash flow shows due-month charge and none next month',await page.evaluate(()=>{const sum=(y,m)=>Object.values(buildDayMap(y,m)).reduce((n,d)=>n+d.expenses.concat(d.bills).reduce((a,t)=>a+Number(t.amount),0),0);return sum(2026,9)===1200&&sum(2026,10)===0;}),'annual repeated next month');
   await page.evaluate(id=>{closeBottomSheet();openExpenseEdit(id);},annual.id);await page.selectOption('#ee-frequency','weekly');await page.click('#edit-expense-overlay button:text-is("Save Changes")');await page.waitForTimeout(300);
-  ok('T35 edited expense repeat schedule saves and recalculates calendar',db.transactions.find(t=>t.id===annual.id).frequency==='weekly'&&await page.evaluate(()=>[10,17,24,31].every(day=>buildDayMap(2026,9)[day].expenses.some(t=>t.description==='Annual Insurance'))),'schedule unchanged');
+  ok('T35 edited expense repeat schedule saves and recalculates calendar',db.transactions.find(t=>t.id===annual.id).frequency==='weekly'&&await page.evaluate(()=>[10,17,24,31].every(day=>buildDayMap(2026,9)[day].bills.some(t=>t.description==='Annual Insurance'))),'schedule unchanged');
   await page.evaluate(id=>openExpenseEdit(id),annual.id);await page.selectOption('#ee-frequency','once');await page.click('#edit-expense-overlay button:text-is("Save Changes")');await page.waitForTimeout(300);
-  ok('T35 stop repeating keeps the original expense and removes future occurrences',db.transactions.find(t=>t.id===annual.id).recurring===false&&db.transactions.find(t=>t.id===annual.id).anchor_date===null&&await page.evaluate(()=>buildDayMap(2026,9)[17].expenses.length===0),'repeat not removed');
+  ok('T35 stop repeating keeps the original expense and removes future occurrences',db.transactions.find(t=>t.id===annual.id).recurring===false&&db.transactions.find(t=>t.id===annual.id).anchor_date===null&&await page.evaluate(()=>buildDayMap(2026,9)[17].bills.length===0),'repeat not removed');
 
 
   await page.evaluate(()=>{closeBottomSheet();showView('dreams',null);});await page.click('#d-once-btn');await page.fill('#d-amt-input','12.50');await scenarioRate('10');const cashBefore=JSON.stringify(db.transactions);await page.click('#d-skip-btn');
