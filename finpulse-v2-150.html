@@ -902,11 +902,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <div class="topbar"><div><h2>Your goals</h2><p>A clear target. A little progress at a time.</p></div><button class="btn btn-solid" id="goal-add-btn" onclick="fpOpenGoal()">+ Add goal</button></div>
       <div class="card goal-overview"><div class="card-body"><div class="eyebrow">Saved toward your goals</div><div id="finish-date" class="goal-headline">Set your first goal</div><p id="finish-sub"></p><div class="goal-progress"><div id="finish-bar"></div></div><div class="goal-summary"><span id="finish-pct"></span><span id="finish-stage-badge"></span></div></div></div>
       <p id="goal-status" role="status" style="margin:12px 0;color:var(--text2);font-size:13px;"></p>
-      <form class="card goal-editor" id="goal-editor" style="display:none;" onsubmit="event.preventDefault();fpSaveGoal()">
+      <form class="card goal-editor" id="goal-editor" style="display:none;" oninput="fpRenderGoalCheck()" onchange="fpRenderGoalCheck()" onsubmit="event.preventDefault();fpSaveGoal()">
         <div class="card-header"><span class="card-title" id="goal-editor-title">New goal</span></div><div class="card-body">
           <div class="form-group"><label class="form-label" for="goal-name">What are you saving for?</label><input class="form-input" id="goal-name" maxlength="100" required placeholder="Emergency fund, a trip, a new home…"></div>
           <div class="form-row"><div class="form-group"><label class="form-label" for="goal-target">Target amount ($)</label><input class="form-input" id="goal-target" type="number" step="0.01" min="0.01" required></div><div class="form-group"><label class="form-label" for="goal-saved">Already saved ($)</label><input class="form-input" id="goal-saved" type="number" step="0.01" min="0" value="0" required></div></div>
           <div class="form-row"><div class="form-group"><label class="form-label" for="goal-monthly">Planned per month ($)</label><input class="form-input" id="goal-monthly" type="number" step="0.01" min="0" value="0" required></div><div class="form-group"><label class="form-label" for="goal-date">Target date (optional)</label><input class="form-input" id="goal-date" type="date"></div></div>
+          <div id="goal-feasibility" aria-live="polite"></div>
           <p class="goal-note">You record these savings yourself. A goal does not transfer money or change your calendar balance.</p>
           <div class="goal-actions"><button class="save-btn" id="goal-save-btn" type="submit">Save goal</button><button class="btn btn-outline" type="button" onclick="fpCloseGoal()">Cancel</button></div>
         </div>
@@ -1634,6 +1635,7 @@ function fpRenderTransactionState() {
   renderCalendar(); updateStats(); renderLoans(); renderBillsView();
   renderSpendingRings(); renderExpensesView();
   if (panelOpen) renderPanelBody();
+  if(document.getElementById("view-plan").style.display==="block")renderPlan();
 }
 function fpUpdatePendingNotice() {
   const app = document.getElementById('app');
@@ -4181,6 +4183,7 @@ function getIsoWeekKey(d) {
 }
 
 function updateStats() {
+  if(document.getElementById('view-plan').style.display==='block')renderPlan();
   const dayMap = buildDayMap(currentYear, currentMonth);
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const startBal = getStartingBalanceForMonth(currentYear, currentMonth);
@@ -5728,10 +5731,91 @@ function fpGoalSchedule(goal,asOf) {
   const firstDate=new Date(firstMonth.getFullYear(),firstMonth.getMonth(),Math.min(today.getDate(),new Date(firstMonth.getFullYear(),firstMonth.getMonth()+1,0).getDate()),12);
   return {status:Math.round(Number(goal.monthly_amount)*100)*months>=Math.round(progress.remaining*100)?'on_track':'needs_plan',months,needed,firstDate:fpIso(firstDate)};
 }
+// Goal estimates use the same dated balance and settlement rules as the calendar.
+function fpGoalDepositDate(asOf, months) {
+  const month=new Date(asOf.getFullYear(),asOf.getMonth()+months,1,12);
+  return fpIso(new Date(month.getFullYear(),month.getMonth(),Math.min(asOf.getDate(),new Date(month.getFullYear(),month.getMonth()+1,0).getDate()),12));
+}
+function fpGoalFinancialModel(asOf) {
+  const A=fpParseIso(fpIso(asOf)),cfg=fpPriorityConfig(),marks=fpReadPaidMarks(),snap=fpPrioritySnapshot(A,{paidMarks:marks});
+  const end=fpGoalDepositDate(A,12),start=snap.projectedToday,rows=[],missing=[],risks=[];
+  const codeText={spending_data_invalid:'Check the unreadable spending dates or amounts.',no_income:'Add your income and payday.',pay_schedule_unclear:'Confirm your payday schedule.',no_next_payday:'Confirm your next payday.',unconfirmed_income:'Update your bank balance to include pay that has arrived.',income_inclusion_unknown:'Confirm whether recent pay is included in your balance.',undated_items:'Add missing bill or debt due dates.',apr_missing:'Add the missing interest rates under Loans & Debt.',loan_data_missing:'Add missing debt balances and minimum payments.',payment_unmatched:'Confirm whether the matching bill payments were already paid.'};
+  snap.cash.blockers.forEach(code=>{
+    if(code.startsWith('balance_'))missing.push('Update your bank balance and its date.');
+    else if(codeText[code])missing.push(codeText[code]);
+    else if(['overdue','unverified_obligation','partial_payment'].includes(code))risks.push('Resolve outstanding payments in Bills and Loans & Debt first.');
+  });
+  if(!_fpGoalsReady)missing.push('Refresh your saved goals.');
+  if(!_fpBillMarksReady)missing.push('Refresh Bills so paid items are counted correctly.');
+  // Recognized bill charges are covered by their bill budget, including subscriptions charged to a card.
+  const used=new Set();transactions.filter(t=>t.type==='bill'||t.type==='expense'&&t.recurring).forEach(t=>fpConfidentPayments(t,transactions,snap.asOf).forEach(p=>used.add(String(p.id))));
+  const hist=transactions.filter(t=>t.type==='expense'&&!t.recurring&&!used.has(String(t.id))&&!['loan_payment','card_transfer'].includes(t.category)&&t.date>=fpIso(fpAddDays(A,-89))&&t.date<=snap.asOf);
+  const valid=hist.filter(t=>fpParseIso(t.date)&&Number.isFinite(Number(t.amount))&&Number(t.amount)>0),days=new Set(valid.map(t=>t.date));
+  const oldest=valid.map(t=>t.date).sort()[0],latest=valid.map(t=>t.date).sort().pop(),span=oldest?fpDaysBetween(fpParseIso(oldest),fpParseIso(latest))+1:0;
+  const importedHistory=valid.some(t=>String(t.lender||'').startsWith('import:'));
+  const reliable=hist.length===valid.length&&days.size>=cfg.MIN_SPEND_DAYS&&span>=cfg.MIN_SPEND_SPAN&&latest&&fpDaysBetween(fpParseIso(latest),A)<=(importedHistory?45:cfg.MAX_SPEND_GAP);
+  if(!reliable)missing.push('Import recent statements or record more everyday spending. Use up to 3 months of statements. At least 8 spending days over 2 weeks are needed; statement history must be recent, or manual spending updated in the past week.');
+  const daily=reliable?Math.max(cfg.MIN_DAILY_SPEND,valid.reduce((n,t)=>n+Number(t.amount),0)/span)*(1+cfg.SPEND_MARGIN):0;
+  let income=0,bills=0,debt=0,spending=0,otherCosts=0;
+  const cardBills=transactions.filter(t=>String(t.lender||'').startsWith('import:card:')&&(t.type==='bill'||t.type==='expense'&&t.recurring));
+  const cardDates=new Map();cardBills.forEach(t=>fpOccurrences(t,fpIso(fpAddDays(A,1)),end).forEach(d=>cardDates.set(d,(cardDates.get(d)||0)+Number(t.amount))));
+  let map=null,month='';
+  for(let D=fpAddDays(A,1);fpIso(D)<=end;D=fpAddDays(D,1)){
+    const iso=fpIso(D),key=iso.slice(0,7);if(key!==month){month=key;map=fpDayEvents(D.getFullYear(),D.getMonth(),{paidMarks:marks});}
+    const day=map[D.getDate()],inc=day.income.reduce((n,t)=>n+Number(t.amount),0),regularIncome=day.income.filter(t=>String(t.id).startsWith('pay_')||t.recurring||fpIsPaycheckRecord(t)).reduce((n,t)=>n+Number(t.amount),0);
+    const bill=day.bills.reduce((n,t)=>n+Number(t.amount),0)+day.expenses.filter(t=>t.recurring).reduce((n,t)=>n+Number(t.amount),0)+(cardDates.get(iso)||0);
+    const loan=day.loans.reduce((n,t)=>n+fpAmountDue(t),0),committed=day.expenses.filter(t=>!t.recurring&&['loan_payment','card_transfer'].includes(t.category)).reduce((n,t)=>n+Number(t.amount),0);
+    const ordinary=day.expenses.filter(t=>!t.recurring&&!['loan_payment','card_transfer'].includes(t.category)).reduce((n,t)=>n+Number(t.amount),0),everyday=Math.max(daily,ordinary);
+    income+=regularIncome;bills+=bill;debt+=loan;spending+=everyday;otherCosts+=committed;
+    rows.push({date:iso,net:fpRound2(inc-bill-loan-committed-everyday)});
+  }
+  transactions.filter(t=>t.type==='loan'&&!fpLoanPaidOff(t)).forEach(t=>{const balance=Number(t.balance),apr=t.apr==null?null:Number(t.apr);if(apr>0&&balance>0&&fpAmountDue(t)<=balance*apr/1200)risks.push(t.description+' has a payment that may not cover its interest. Review it under Loans & Debt.');});
+  return {asOf:snap.asOf,start:Number.isFinite(start)?start:null,buffer:cfg.BUFFER,rows,missing:[...new Set(missing)],risks:[...new Set(risks)],monthly:{income:income/12,bills:bills/12,debt:debt/12,spending:spending/12,other:otherCosts/12},daily,historyDays:span};
+}
+function fpGoalCapacity(model,goals,excludeId) {
+  const all=goals.filter(g=>!g.archived),others=all.filter(g=>g.id!==excludeId&&fpGoalProgress(g).remaining>0),A=fpParseIso(model.asOf),missing=model.missing.slice();
+  let otherMonthly=0;
+  others.forEach(g=>{const schedule=fpGoalSchedule(g,A),p=fpGoalProgress(g),amount=Math.max(Number(g.monthly_amount)||0,schedule.needed||0);if(!amount)missing.push('Choose a monthly plan for '+g.name+' so both goals can be assessed together.');otherMonthly+=Math.min(p.remaining,amount);});
+  const saved=all.reduce((n,g)=>n+Math.min(Number(g.saved_amount)||0,Number(g.target_amount)||0),0),monthly=model.monthly;
+  const available=monthly.income-monthly.bills-monthly.debt-monthly.spending-monthly.other-otherMonthly;
+  const deposits=Array.from({length:12},(_,i)=>fpGoalDepositDate(A,i+1));let base=(model.start==null?0:model.start)-saved,low=base,depositCount=0,cashCap=Infinity;
+  model.rows.forEach(r=>{base+=r.net;if(deposits.includes(r.date)){base-=otherMonthly;depositCount++;}low=Math.min(low,base);if(depositCount)cashCap=Math.min(cashCap,(base-model.buffer)/depositCount);});
+  const capacity=missing.length||model.start==null||model.risks.length||low<model.buffer-0.005?0:Math.max(0,Math.floor(Math.min(available*0.8,cashCap)*100)/100);
+  return {capacity,available:fpRound2(available),otherMonthly:fpRound2(otherMonthly),reservedSavings:fpRound2(saved),buffer:model.buffer,low:fpRound2(low),missing:[...new Set(missing)],risks:model.risks.slice(),monthly,asOf:model.asOf};
+}
+function fpGoalAssessment(goal,budget,asOf) {
+  const p=fpGoalProgress(goal),schedule=fpGoalSchedule(goal,asOf),plan=Number(goal.monthly_amount)||0;
+  if(!p.remaining)return {status:'reached',title:'Goal reached',text:'You have recorded enough savings for this goal.',budget};
+  if(budget.missing.length)return {status:'unknown',title:'A little more information first',text:budget.missing.join(' '),budget};
+  if(budget.capacity<=0)return {status:'no_room',title:'Make room for this goal first',text:budget.risks.length?budget.risks.join(' '):budget.available<=0?'Income is already needed for your spending, bills, debt payments and other goals. A longer deadline alone will not fix that.':'Upcoming payments, recorded savings or your $'+fmt(budget.buffer)+' cash cushion leave no dependable room yet. Update your finances or lower another commitment before adding savings.',budget};
+  const max=budget.capacity,needed=schedule.needed||null,dateIssue=['overdue','soon'].includes(schedule.status),fits=plan>0&&plan<=max+0.005&&!dateIssue&&(!needed||plan>=needed);
+  const suggested=Math.min(max,needed&&needed<=max?needed:plan>0&&plan<=max&&!dateIssue?plan:max),months=Math.ceil(Math.round(p.remaining*100)/Math.max(1,Math.round(suggested*100)));
+  const date=months<=1200?fpGoalDepositDate(asOf,months):null;
+  return {status:fits?'feasible':'adjust',title:fits?'This looks realistic with your current numbers':'A more manageable plan',text:fits?'Your planned $'+fmt(plan)+'/month fits after spending, bills, debt payments, other goals and a cash cushion.':(dateIssue?'That deadline leaves too little time. ':needed&&needed>max?'That deadline needs $'+fmt(needed)+'/month, above the room currently available. ':plan>max?'Your planned payment is more than your finances currently support. ':'Choose a monthly amount that fits the whole picture. ')+'Try $'+fmt(suggested)+'/month'+(date?' and aim for '+fpParseIso(date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'; this would take over 100 years, so consider a smaller target')+'.',suggested,date,months,budget};
+}
+function fpGoalAssessmentHTML(a,action) {
+  const E=fpEscHtml,b=a.budget,m=b.monthly;
+  const breakdown='<details class="goal-note" style="margin-top:10px;"><summary style="cursor:pointer;">What this considers</summary><p>Monthly averages over the next year: income $'+fmt(m.income)+'; bills $'+fmt(m.bills)+'; debt and financing payments $'+fmt(m.debt)+'; everyday spending $'+fmt(m.spending)+'; other scheduled payments $'+fmt(m.other)+'; other goals $'+fmt(b.otherMonthly)+'.</p><p>We protect a $'+fmt(b.buffer)+' cash cushion and $'+fmt(b.reservedSavings)+' of recorded goal savings. Recorded savings are assumed to be included in your bank balance; if held elsewhere, this estimate is conservative. Everyday spending includes a 25% allowance, and suggested payments leave 20% of monthly room uncommitted.</p><p>Estimates use your saved information and upcoming payment dates. Debt payments stay in the budget until you update or pay off that debt. Dates beyond a year assume these costs and income continue. No investment growth or future pay rise is assumed.</p></details>';
+  return '<div class="goal-check" data-goal-assessment="'+a.status+'" style="margin-top:14px;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);"><strong>'+E(a.title)+'</strong><p class="goal-note" style="margin-top:6px;">'+E(a.text)+'</p>'+(a.status==='adjust'&&a.date&&action?'<button type="button" class="btn btn-outline" onclick="'+action+'">Use $'+fmt(a.suggested)+'/month and this date</button>':'')+breakdown+'</div>';
+}
+function fpGoalEditorAssessment() {
+  const target=fpParseMoney(document.getElementById('goal-target').value,true),saved=fpParseMoney(document.getElementById('goal-saved').value,true),monthly=fpParseMoney(document.getElementById('goal-monthly').value,true),date=document.getElementById('goal-date').value;
+  if(!(target>0)||saved===null||monthly===null)return null;
+  const goal={id:_fpGoalDraftId,name:document.getElementById('goal-name').value,target_amount:target,saved_amount:saved,monthly_amount:monthly,target_date:date||null,archived:false};
+  const goals=_fpGoals.filter(g=>g.id!==goal.id).concat(goal),A=new Date(),model=fpGoalFinancialModel(A);
+  return fpGoalAssessment(goal,fpGoalCapacity(model,goals,goal.id),A);
+}
+function fpRenderGoalCheck() {
+  const box=document.getElementById('goal-feasibility');if(!box||document.getElementById('goal-editor').style.display!=='block')return;
+  const a=fpGoalEditorAssessment();box.innerHTML=a?fpGoalAssessmentHTML(a,'fpApplyGoalSuggestion()'):'<p class="goal-note">Add your target and savings to see what fits your finances.</p>';
+}
+function fpApplyGoalSuggestion() {
+  if(_fpGoalBusy)return;const a=fpGoalEditorAssessment();if(!a||a.status!=='adjust'||!a.date)return;
+  document.getElementById('goal-monthly').value=a.suggested.toFixed(2);document.getElementById('goal-date').value=a.date;fpRenderGoalCheck();
+}
+
 function fpUseGoalPace(id) {
-  const goal=_fpGoals.find(g=>g.id===id);if(!goal||_fpGoalBusy)return;
-  const plan=fpGoalSchedule(goal,new Date());if(!plan.needed)return;
-  fpOpenGoal(id);document.getElementById('goal-monthly').value=plan.needed.toFixed(2);document.getElementById('goal-monthly').focus();
+  if(_fpGoalBusy)return;fpOpenGoal(id);fpApplyGoalSuggestion();
 }
 
 async function fpLoadGoals(render=true) {
@@ -5762,7 +5846,7 @@ function fpOpenGoal(id) {
   document.getElementById('goal-saved').value=goal?goal.saved_amount:0;
   document.getElementById('goal-monthly').value=goal?goal.monthly_amount:0;
   document.getElementById('goal-date').value=goal&&goal.target_date?goal.target_date:'';
-  document.getElementById('goal-editor').style.display='block';
+  document.getElementById('goal-editor').style.display='block';fpRenderGoalCheck();
   document.getElementById(goal?'goal-saved':'goal-name').focus();
   document.getElementById('goal-editor').scrollIntoView({block:'nearest'});
 }
@@ -5806,7 +5890,7 @@ async function fpArchiveGoal(id,archived) {
 }
 
 function renderPlan() {
-  const goals=_fpGoals.filter(g=>!g.archived),archived=_fpGoals.filter(g=>g.archived);
+  const goals=_fpGoals.filter(g=>!g.archived),archived=_fpGoals.filter(g=>g.archived),asOf=new Date(),goalModel=fpGoalFinancialModel(asOf);
   let target=0,saved=0;goals.forEach(g=>{target+=Number(g.target_amount);saved+=Math.min(Number(g.saved_amount),Number(g.target_amount))});
   const percent=target?fpGoalProgress({target_amount:target,saved_amount:saved,monthly_amount:0}).percent:0;
   document.getElementById('finish-date').textContent=goals.length?'$'+fmt(saved)+' of $'+fmt(target):'Set your first goal';
@@ -5817,12 +5901,13 @@ function renderPlan() {
   const status=document.getElementById('goal-status');status.innerHTML=_fpGoalsReady?'':'Goals could not load. <button class="btn btn-outline" onclick="fpLoadGoals()">Retry goals</button>';
   function card(g) {
     const p=fpGoalProgress(g),schedule=fpGoalSchedule(g,new Date());
-    const deadlineNote=schedule.status==='overdue'?'Your target date has passed. Update the date or the amount saved.':schedule.status==='soon'?'Your target is less than one monthly deposit away. You still need $'+fmt(p.remaining)+'.':schedule.needed?(schedule.status==='on_track'?'Your monthly plan covers this target. ':'Plan $'+fmt(schedule.needed)+'/month to reach this target. ')+schedule.months+' monthly deposits, starting '+fpParseIso(schedule.firstDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'.':'';
-    const paceAction=!g.archived&&schedule.status==='needs_plan'?'<button class="btn btn-outline" onclick="fpUseGoalPace(\''+g.id+'\')">Plan $'+fmt(schedule.needed)+'/month</button>':'';
+    const assessment=g.archived?null:fpGoalAssessment(g,fpGoalCapacity(goalModel,_fpGoals,g.id),asOf);
+    const deadlineNote='';const paceAction='';
     const pace=p.remaining===0?'Target reached':p.months===null?'Add a monthly plan to estimate your timeline':p.months+' month'+(p.months===1?'':'s')+' at your planned $'+fmt(g.monthly_amount)+'/month';
-    return '<article class="card"><div class="card-body"><div class="goal-card-header"><div class="goal-title">'+fpEscHtml(g.name)+'</div><span class="br-tag good">'+(g.archived?'Archived':p.percent+'%')+'</span></div><div class="goal-progress"><div style="width:'+p.percent+'%"></div></div><div class="goal-numbers">$'+fmt(p.saved)+' saved <span style="color:var(--text3)">of $'+fmt(p.target)+'</span></div><p class="goal-note" style="margin-top:8px;">'+fpEscHtml(pace)+(p.remaining>0?' · $'+fmt(p.remaining)+' to go':'')+(g.target_date?' · Target '+fpEscHtml(fpParseIso(g.target_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})):'')+'</p>'+(deadlineNote?'<p class="goal-note" style="margin:8px 0;">'+fpEscHtml(deadlineNote)+'</p>':'')+'<div class="goal-actions">'+paceAction+'<button class="btn btn-outline" onclick="fpOpenGoal(\''+g.id+'\')">Edit progress</button><button class="btn btn-outline" onclick="fpArchiveGoal(\''+g.id+'\','+(!g.archived)+')">'+(g.archived?'Restore':'Archive')+'</button></div></div></article>';
+    return '<article class="card"><div class="card-body"><div class="goal-card-header"><div class="goal-title">'+fpEscHtml(g.name)+'</div><span class="br-tag good">'+(g.archived?'Archived':p.percent+'%')+'</span></div><div class="goal-progress"><div style="width:'+p.percent+'%"></div></div><div class="goal-numbers">$'+fmt(p.saved)+' saved <span style="color:var(--text3)">of $'+fmt(p.target)+'</span></div><p class="goal-note" style="margin-top:8px;">'+fpEscHtml(pace)+(p.remaining>0?' · $'+fmt(p.remaining)+' to go':'')+(g.target_date?' · Target '+fpEscHtml(fpParseIso(g.target_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})):'')+'</p>'+(deadlineNote?'<p class="goal-note" style="margin:8px 0;">'+fpEscHtml(deadlineNote)+'</p>':'')+(assessment?fpGoalAssessmentHTML(assessment,'fpUseGoalPace(\''+g.id+'\')'):'')+'<div class="goal-actions">'+paceAction+'<button class="btn btn-outline" onclick="fpOpenGoal(\''+g.id+'\')">Edit progress</button><button class="btn btn-outline" onclick="fpArchiveGoal(\''+g.id+'\','+(!g.archived)+')">'+(g.archived?'Restore':'Archive')+'</button></div></div></article>';
   }
   document.getElementById('milestones-list').innerHTML=goals.length?goals.map(card).join(''):'<div class="card goal-empty"><h3>Make room for what matters.</h3><p class="goal-note">Start with an emergency fund, a trip, or a goal of your own.</p></div>';
+  fpRenderGoalCheck();
   if(archived.length)document.getElementById('milestones-list').innerHTML+='<details><summary style="padding:12px;cursor:pointer;">Archived goals ('+archived.length+')</summary><div class="goals-list">'+archived.map(card).join('')+'</div></details>';
   const dm=buildDayMap(currentYear,currentMonth);let income=0,outflows=0;
   Object.values(dm).forEach(e=>{e.income.forEach(t=>income+=Number(t.amount)||0);e.expenses.concat(e.bills,e.loans).forEach(t=>outflows+=fpAmountDue(t))});
@@ -6297,7 +6382,7 @@ function fpClassifyImportRows(rows, existing) {
   const existCount = {};
   (existing || []).forEach(function(t) {
     if (t.type === 'loan' || t.type === 'note') return;
-    const source=String(t.lender||'').startsWith('import:')?t.lender:'';
+    const source=String(t.lender||'').startsWith('import:')&&!/^import:(?:bank|card):Statement export$/.test(t.lender)?t.lender:'';
     const k = fpImportKey(t.type, t.date, t.amount, t.description)+(source?'|'+source:'');
     existCount[k] = (existCount[k] || 0) + 1;
   });
@@ -6595,8 +6680,8 @@ function fpCardComponentRecords(card,name,date,apr) {
   const parts=[{source,balance:f.regularBalance,minimum:f.cardMinimum,apr,name:name+' · purchases',original:f.regularBalance},{source:source+':installments',balance:f.balance,minimum:f.monthly,apr:0,name:name+' · 0% financing',original:f.originalBalance==null?f.balance:f.originalBalance}];
   return parts.map(p=>{
     const old=transactions.find(t=>t.type==='loan'&&String(t.lender||'').includes('| account:'+p.source+' |'));
-    const record={type:'loan',description:p.name,amount:p.balance>0?p.minimum:0,min_payment:p.balance>0?p.minimum:0,original_min_payment:old&&old.original_min_payment!=null?old.original_min_payment:p.minimum,date,anchor_date:date,category:'Credit Card',lender:'Credit Card | account:'+p.source+' |'+stamp+(p.apr===0?' | financing:0% | included_in:'+name:''),recurring:true,frequency:'monthly',balance:p.balance,apr:p.apr,original_balance:old&&old.original_balance!=null?old.original_balance:p.original};
-    if(old)record.id=old.id;return record;
+    const record={type:'loan',description:p.name,amount:p.balance>0?p.minimum:0,min_payment:p.balance>0?p.minimum:0,original_min_payment:old&&old.original_min_payment!=null?old.original_min_payment:p.minimum,date,anchor_date:date,category:'Credit Card',lender:'Credit Card | account:'+p.source+' |'+stamp+(p.source===source+':installments'?' | financing:0% | included_in:'+name:''),recurring:true,frequency:'monthly',balance:p.balance,apr:p.apr,original_balance:old&&old.original_balance!=null?old.original_balance:p.original};
+    if(old){record.id=old.id;const paid=fpPaidOffDate(old);if(paid)record.lender+=' | paid_off:'+paid;}return record;
   });
 }
 
@@ -7064,7 +7149,7 @@ async function dMakeGoal() {
   if(!loaded){showToast('Goals could not load. Tap Retry goals to try again.','error');return;}
   fpOpenGoal();document.getElementById('goal-name').value=monthly?'Money I choose to keep each month':'A purchase I choose to wait on';
   document.getElementById('goal-target').value=fpRound2(monthly?amount*12:amount);
-  document.getElementById('goal-monthly').value=monthly?amount:0;
+  document.getElementById('goal-monthly').value=monthly?amount:0;fpRenderGoalCheck();
   showToast('Your goal is ready to review. No money has been moved or recorded as saved.');
   }finally{_fpDreamGoalBusy=false;document.getElementById('d-goal-btn').disabled=!_fpDreamAmountValid||dAmount<=0;}
 }
