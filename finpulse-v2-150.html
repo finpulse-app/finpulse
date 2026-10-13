@@ -714,8 +714,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="width:32px;height:32px;background:var(--accent-light);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;">&#9878;&#65039;</div>
             <div>
-              <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;color:var(--text);">Fixed vs. Variable</div>
-              <div style="font-size:12px;color:var(--text2);">Why we split your spending this way, tap to learn more</div>
+              <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;color:var(--text);">Regular payments and one-time spending</div>
+              <div style="font-size:12px;color:var(--text2);">A quick way to see where your money goes</div>
             </div>
           </div>
           <div id="fv-arrow" style="color:var(--text3);font-size:14px;transition:transform 0.2s;">&#9660;</div>
@@ -723,15 +723,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
         <div id="fv-body" style="display:none;margin-top:16px;border-top:1px solid var(--border);padding-top:16px;">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
             <div style="background:var(--danger-light);border-radius:var(--radius-sm);padding:12px 14px;">
-              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--danger);margin-bottom:4px;">Fixed</div>
-              <div style="font-size:12.5px;color:#7a1f1f;line-height:1.5;">Repeating costs and loan payments. They may be weekly, monthly, or yearly. FinPulse counts each payment scheduled in the month.</div>
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--danger);margin-bottom:4px;">Regular payments</div>
+              <div style="font-size:12.5px;color:#7a1f1f;line-height:1.5;">Bills, subscriptions and loan payments that repeat.</div>
             </div>
             <div style="background:var(--warning-light);border-radius:var(--radius-sm);padding:12px 14px;">
-              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--warning);margin-bottom:4px;">Variable</div>
-              <div style="font-size:12.5px;color:#7a5c1e;line-height:1.5;">One-time expenses you have entered, such as groceries, a repair, or a purchase. Some are essential; others may be easier to change.</div>
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--warning);margin-bottom:4px;">One-time spending</div>
+              <div style="font-size:12.5px;color:#7a5c1e;line-height:1.5;">Individual purchases, groceries and repairs.</div>
             </div>
           </div>
-          <div style="background:var(--accent-light);border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;color:#2d5a46;line-height:1.6;"><strong>Why it matters:</strong> this split helps you see what repeats and what happened once. It does not tell you whether you can afford a purchase. Check your upcoming bills and projected balance too.</div>
+          <div style="background:var(--accent-light);border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;color:#2d5a46;line-height:1.6;">See what repeats and what happened once. Before buying something new, check what money you have left.</div>
         </div>
       </div>
 
@@ -741,11 +741,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
         <strong id="exp-month-label" style="font-size:14px;">Selected month</strong>
         <button class="cal-btn" onclick="fpChangeExpenseMonth(1)" aria-label="Next expense month">&#8250;</button>
       </div>
-      <p style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px;">Calendar outflows for this month, including scheduled payments. These estimates use the same items as the calendar.</p>
+      <p style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px;">This month’s planned spending and payments, from your calendar.</p>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;" id="exp-stats-row">
-        <div class="stat-card"><div class="stat-divider neg"></div><div class="stat-label">Fixed outflows</div><div class="stat-value neg" id="exp-stat-recurring">$0</div><div class="stat-sub">recurring items and loan payments</div></div>
-        <div class="stat-card"><div class="stat-divider warn"></div><div class="stat-label">Variable outflows</div><div class="stat-value warn" id="exp-stat-onetime">$0</div><div class="stat-sub">one-time calendar expenses</div></div>
-        <div class="stat-card"><div class="stat-divider neg"></div><div class="stat-label">Total outflows</div><div class="stat-value neg" id="exp-stat-total">$0</div><div class="stat-sub">selected month</div></div>
+        <div class="stat-card"><div class="stat-divider neg"></div><div class="stat-label">Regular payments</div><div class="stat-value neg" id="exp-stat-recurring">$0</div><div class="stat-sub">bills, subscriptions and loans</div></div>
+        <div class="stat-card"><div class="stat-divider warn"></div><div class="stat-label">One-time spending</div><div class="stat-value warn" id="exp-stat-onetime">$0</div><div class="stat-sub">individual calendar purchases</div></div>
+        <div class="stat-card"><div class="stat-divider neg"></div><div class="stat-label">Total planned</div><div class="stat-value neg" id="exp-stat-total">$0</div><div class="stat-sub">selected month</div></div>
       </div>
 
       <!-- Fixed vs Variable ratio bar -->
@@ -757,7 +757,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <div class="expense-tools"><div style="flex:1;"><label class="form-label" for="expense-search">Find a saved record</label><input class="form-input" id="expense-search" type="search" placeholder="Search name, category, or date" oninput="_fpExpenseQuery=this.value;renderExpensesView()"></div><button class="btn btn-outline" onclick="document.getElementById('expense-search').value='';_fpExpenseQuery='';renderExpensesView()">Clear search</button><button class="btn btn-outline" onclick="fpExportTransactions()">Export CSV</button></div><p class="goal-note" style="margin:8px 0 18px;">Search filters the saved records below. Monthly totals stay unchanged.</p>
       <!-- Fixed vs Variable, side by side, click any row for details -->
       <h3 style="font-size:15px;margin-bottom:6px;">Saved records</h3>
-      <p id="exp-records-note" style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px;">All dates. Recurring rows show the amount per occurrence; recorded payments and one-time expenses show their saved amount. Click a row to view or edit it. This list is separate from the monthly totals above.</p>
+      <p id="exp-records-note" style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px;">All your saved records, from every month. Tap a record for details.</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
         <div class="card" style="overflow:visible;">
           <div class="card-header"><span class="card-title" style="color:var(--danger);">Recurring &amp; loan payments</span><span class="card-meta" id="fv-fixed-total"></span></div>
@@ -888,7 +888,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
     <div id="whatif-overlay" style="position:fixed;inset:0;background:rgba(26,25,22,0.5);backdrop-filter:blur(4px);z-index:300;display:none;align-items:center;justify-content:center;">
       <div style="background:var(--surface);border-radius:16px;padding:28px;width:460px;max-width:95vw;box-shadow:var(--shadow-md);">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-          <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:600;">What If Calculator</div>
+          <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:600;">Choose your payment</div>
           <button onclick="closeWhatIf()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--text2);">&#10005;</button>
         </div>
         <div id="whatif-content"></div>
@@ -2904,11 +2904,11 @@ function renderExpensesView() {
       + '<div style="width:' + varPct + '%;background:var(--warning);"></div>'
       + '</div>'
       + '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);">'
-      + '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:4px;"></span>Fixed ' + fixedPct + '%</span>'
-      + '<span>Variable ' + varPct + '%<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-left:4px;"></span></span>'
+      + '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:4px;"></span>Regular payments ' + fixedPct + '%</span>'
+      + '<span>One-time spending ' + varPct + '%<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-left:4px;"></span></span>'
       + '</div>';
     if (ratioInsight) {
-      ratioInsight.textContent = 'This split covers the selected month\'s calendar outflows, including scheduled payments. It is separate from the saved records below.';
+      ratioInsight.textContent = 'This is the selected month’s plan. Your saved records below cover all dates.';
     }
   } else if (ratioBar) {
     ratioBar.innerHTML = '<div style="font-size:12px;color:var(--text3);text-align:center;padding:6px 0;">No calendar outflows in this month.</div>';
@@ -3078,7 +3078,7 @@ function renderSpendingRings() {
   const fixedPct = Math.round((fixedTotal / total) * 100);
   const varPct = 100 - fixedPct;
   const insight = fixedPct >= 65
-    ? 'Fixed costs dominate. Look for subscriptions or bills you could reduce.'
+    ? 'Most goes to regular payments. Check for bills or subscriptions you could reduce.'
     : fixedPct <= 35
     ? 'Mostly variable, this is where you have the most control to save.'
     : 'This month includes both repeating payments and one-time expenses.';
@@ -3089,7 +3089,7 @@ function renderSpendingRings() {
     + '</div>'
     + '<div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:10px;">'
     + '<div style="flex:1;">'
-    + '<div style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--danger);margin-bottom:2px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--danger);display:inline-block;"></span>Fixed ' + fixedPct + '%</div>'
+    + '<div style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--danger);margin-bottom:2px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--danger);display:inline-block;"></span>Regular payments ' + fixedPct + '%</div>'
     + '<div style="font-family:\'DM Serif Display\',serif;font-size:18px;color:var(--text);">-$' + fmt(fixedTotal) + '</div>'
     + '</div>'
     + '<div style="flex:1;text-align:right;">'
@@ -5136,7 +5136,7 @@ function openWhatIf(loanId) {
     + '</div>'
     + '<div id="whatif-coach" class="wi-budget-status" role="status" aria-live="polite"><div class="wi-status-line"><strong id="wi-zone-label"></strong>'+fpNumberBadge('budget','Explain this money picture')+' </div><p id="wi-assessment-text"></p><button id="wi-check-details" class="btn btn-outline" onclick="fpWhatIfNextStep()" hidden>Check my numbers</button></div>'
     + '<div class="wi-payment-heading"><label id="wi-payment-label" for="whatif-slider">Monthly payment</label><label class="wi-amount-field"><span aria-hidden="true">$</span><input id="whatif-amount" type="text" inputmode="decimal" aria-label="Monthly payment in dollars" value="'+sliderStartVal.toFixed(2)+'" oninput="fpWhatIfAmountInput(this.value)"></label>'+fpNumberBadge('payment','Explain this monthly payment')+'<span id="whatif-amt" class="sr-only"></span></div>'
-    + '<p class="wi-range-hint">Extra is optional · choose what feels manageable</p><div class="wi-budget-legend"><span><b class="wi-green-dot" aria-hidden="true">✓</b> Fits</span><span><b class="wi-amber-dot" aria-hidden="true">!</b> Stretch</span><span><b class="wi-red-dot" aria-hidden="true">×</b> Does not fit</span></div>'
+    + '<p class="wi-range-hint">Minimum first · add extra only if there is room</p><div class="wi-budget-legend"><span><b class="wi-green-dot" aria-hidden="true">✓</b> Fits</span><span><b class="wi-amber-dot" aria-hidden="true">!</b> Stretch</span><span><b class="wi-red-dot" aria-hidden="true">×</b> Does not fit</span></div>'
     + '<div class="wi-range-wrap"><div id="whatif-zone-bar" class="wi-budget-band" aria-hidden="true"></div><input type="range" id="whatif-slider" aria-labelledby="wi-payment-label" aria-describedby="wi-assessment-text" min="'+minPay+'" max="'+sliderMax+'" step="0.01" value="'+sliderStartVal+'" oninput="_fpWhatIfInputInvalid=false;updateWhatIf()"></div>'
     + '<div class="wi-range-limits"><span>$'+fmt(minPay)+' minimum</span><span id="wi-range-max">$'+fmt(sliderMax)+' shown</span></div>'
     + '<div id="wi-suggestion"></div><div id="whatif-result" style="margin:14px 0;"></div>'
