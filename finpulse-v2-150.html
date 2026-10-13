@@ -5783,20 +5783,37 @@ function fpGoalCapacity(model,goals,excludeId) {
   others.forEach(g=>{const schedule=fpGoalSchedule(g,A),p=fpGoalProgress(g),amount=Math.max(Number(g.monthly_amount)||0,schedule.needed||0);if(!amount)missing.push('Choose a monthly plan for '+g.name+' so both goals can be assessed together.');otherMonthly+=Math.min(p.remaining,amount);});
   const saved=all.reduce((n,g)=>n+Math.min(Number(g.saved_amount)||0,Number(g.target_amount)||0),0),monthly=model.monthly;
   const available=monthly.income-monthly.bills-monthly.debt-monthly.spending-monthly.other-otherMonthly;
-  const deposits=Array.from({length:12},(_,i)=>fpGoalDepositDate(A,i+1));let base=(model.start==null?0:model.start)-saved,low=base,depositCount=0,cashCap=Infinity;
-  model.rows.forEach(r=>{base+=r.net;if(deposits.includes(r.date)){base-=otherMonthly;depositCount++;}low=Math.min(low,base);if(depositCount)cashCap=Math.min(cashCap,(base-model.buffer)/depositCount);});
-  const capacity=missing.length||model.start==null||model.risks.length||low<model.buffer-0.005?0:Math.max(0,Math.floor(Math.min(available*0.8,cashCap)*100)/100);
-  return {capacity,available:fpRound2(available),otherMonthly:fpRound2(otherMonthly),reservedSavings:fpRound2(saved),buffer:model.buffer,low:fpRound2(low),missing:[...new Set(missing)],risks:model.risks.slice(),monthly,asOf:model.asOf};
+  const deposits=Array.from({length:12},(_,i)=>fpGoalDepositDate(A,i+1)),frames=[];let base=(model.start==null?0:model.start)-saved,low=base;
+  model.rows.forEach(r=>{base+=r.net;if(deposits.includes(r.date))base-=otherMonthly;low=Math.min(low,base);frames.push({date:r.date,base});});
+  const options=[];
+  if(!missing.length&&model.start!==null&&!model.risks.length&&low>=0&&available>0){
+    for(let first=1;first<=12;first++){
+      let count=0,cap=Infinity;const firstDate=deposits[first-1];
+      frames.forEach(r=>{if(r.date<firstDate)return;if(deposits.includes(r.date))count++;if(count)cap=Math.min(cap,(r.base-model.buffer)/count);});
+      const capacity=Math.max(0,Math.floor(Math.min(available*0.8,cap)*100)/100);
+      if(capacity>=0.01)options.push({capacity,startMonth:first,firstDate});
+    }
+  }
+  const choice=options[0]||{capacity:0,startMonth:1,firstDate:deposits[0]};
+  return {...choice,options,buildingCushion:low<model.buffer,available:fpRound2(available),otherMonthly:fpRound2(otherMonthly),reservedSavings:fpRound2(saved),buffer:model.buffer,low:fpRound2(low),missing:[...new Set(missing)],risks:model.risks.slice(),monthly,asOf:model.asOf};
 }
 function fpGoalAssessment(goal,budget,asOf) {
   const p=fpGoalProgress(goal),schedule=fpGoalSchedule(goal,asOf),plan=Number(goal.monthly_amount)||0;
   if(!p.remaining)return {status:'reached',title:'Goal reached',text:'You have recorded enough savings for this goal.',budget};
   if(budget.missing.length)return {status:'unknown',title:'A little more information first',text:budget.missing.join(' '),budget};
-  if(budget.capacity<=0)return {status:'no_room',title:'Make room for this goal first',text:budget.risks.length?budget.risks.join(' '):budget.available<=0?'Income is already needed for your spending, bills, debt payments and other goals. A longer deadline alone will not fix that.':'Upcoming payments, recorded savings or your $'+fmt(budget.buffer)+' cash cushion leave no dependable room yet. Update your finances or lower another commitment before adding savings.',budget};
-  const max=budget.capacity,needed=schedule.needed||null,dateIssue=['overdue','soon'].includes(schedule.status),fits=plan>0&&plan<=max+0.005&&!dateIssue&&(!needed||plan>=needed);
-  const suggested=Math.min(max,needed&&needed<=max?needed:plan>0&&plan<=max&&!dateIssue?plan:max),months=Math.ceil(Math.round(p.remaining*100)/Math.max(1,Math.round(suggested*100)));
-  const date=months<=1200?fpGoalDepositDate(asOf,months):null;
-  return {status:fits?'feasible':'adjust',title:fits?'This looks realistic with your current numbers':'A more manageable plan',text:fits?'Your planned $'+fmt(plan)+'/month fits after spending, bills, debt payments, other goals and a cash cushion.':(dateIssue?'That deadline leaves too little time. ':needed&&needed>max?'That deadline needs $'+fmt(needed)+'/month, above the room currently available. ':plan>max?'Your planned payment is more than your finances currently support. ':'Choose a monthly amount that fits the whole picture. ')+'Try $'+fmt(suggested)+'/month'+(date?' and aim for '+fpParseIso(date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'; this would take over 100 years, so consider a smaller target')+'.',suggested,date,months,budget};
+  if(budget.capacity<=0)return {status:'no_room',title:'Make room for this goal first',text:budget.risks.length?budget.risks.join(' '):budget.available<=0?'Income is already needed for your spending, bills, debt payments and other goals. A longer deadline alone will not fix that.':'Upcoming payments, recorded savings or your $'+fmt(budget.buffer)+' cash cushion leave no dependable room within the next year. Update your finances or lower another commitment before adding savings.',budget};
+  const options=budget.options||[{capacity:budget.capacity,startMonth:budget.startMonth||1,firstDate:budget.firstDate||fpGoalDepositDate(asOf,1)}];
+  const neededFor=o=>{if(!goal.target_date)return null;const months=(schedule.months||0)-o.startMonth+1;return months>0?Math.ceil(Math.round(p.remaining*100)/months)/100:Infinity;};
+  let choice=options.find(o=>plan>0&&plan<=o.capacity+0.005&&(!goal.target_date||plan>=neededFor(o))),fits=!!choice,suggested=plan;
+  if(!choice&&goal.target_date){choice=options.find(o=>neededFor(o)<=o.capacity);if(choice)suggested=neededFor(choice);}
+  if(!choice){
+    choice=options.slice().sort((a,b)=>(a.startMonth+Math.ceil(Math.round(p.remaining*100)/Math.round(a.capacity*100)))-(b.startMonth+Math.ceil(Math.round(p.remaining*100)/Math.round(b.capacity*100)))||a.startMonth-b.startMonth)[0];
+    suggested=!goal.target_date&&plan>0&&plan<=choice.capacity?plan:choice.capacity;
+  }
+  budget={...budget,...choice};const needed=neededFor(choice),months=Math.ceil(Math.round(p.remaining*100)/Math.max(1,Math.round(suggested*100))),finishMonth=choice.startMonth+months-1;
+  const date=finishMonth<=1200?fpGoalDepositDate(asOf,finishMonth):null,start=fpParseIso(choice.firstDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  const why=goal.target_date&&!Number.isFinite(needed)?'That deadline leaves too little time. ':needed>choice.capacity?'That deadline needs $'+fmt(needed)+'/month, above the room currently available. ':plan>choice.capacity?'Your planned payment is more than your finances currently support. ':'Choose a monthly amount that fits the whole picture. ';
+  return {status:fits?'feasible':'adjust',title:fits?'This looks realistic with your current numbers':'A more manageable plan',text:fits?'Your planned $'+fmt(plan)+'/month fits starting '+start+', after spending, bills, debt payments, other goals and a cash cushion.'+(budget.buildingCushion?' Build the cash cushion before that first savings payment.':''):why+'Try $'+fmt(suggested)+'/month starting '+start+(date?' and aim for '+fpParseIso(date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'; this would take over 100 years, so consider a smaller target')+'.',suggested,date,months,budget};
 }
 function fpGoalAssessmentHTML(a,action) {
   const E=fpEscHtml,b=a.budget,m=b.monthly;
