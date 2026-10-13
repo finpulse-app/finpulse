@@ -501,8 +501,8 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(() => { const sl = document.getElementById('whatif-slider'); sl.value = sl.max; updateWhatIf(); }); await wait(100);
   const wi2 = await page.evaluate(() => ({ zone: document.getElementById('wi-zone-label').textContent, coach: document.getElementById('whatif-coach').textContent, btn: document.getElementById('whatif-apply-btn').disabled, result: document.getElementById('whatif-result').innerText }));
   sweep.whatif = await page.evaluate(() => document.getElementById('whatif-overlay').innerText);
-  ok('T16c What-If at the minimum: no zone label, no "$20-30 more" nudge, neutral coach text saying FinPulse is not checking affordability', wi1.zone === '' && !/20.30 more/.test(wi1.coach) && /not checking whether it fits your budget/.test(wi1.coach) && !wi1.btn, JSON.stringify(wi1));
-  ok('T16c What-If at the maximum: still no "Too much"/"Can afford" verdict; payoff maths for the chosen amount still shown', wi2.zone === '' && /not checking/.test(wi2.coach) && /done in/i.test(wi2.result) && !wi2.btn, JSON.stringify(wi2));
+  ok('T16c incomplete finances show Check your numbers and permit keeping the current plan', /Check your numbers/.test(wi1.zone) && !/20.30 more/.test(wi1.coach) && !wi1.btn, JSON.stringify(wi1));
+  ok('T16c unknown budget blocks a payment increase while retaining payoff comparison', /Check your numbers/.test(wi2.zone) && /done in/i.test(wi2.result) && wi2.btn, JSON.stringify(wi2));
   await page.evaluate(() => { document.getElementById('whatif-overlay').style.display = 'none'; });
   await page.evaluate(() => { showView('plan', null); }); await wait(300); sweep.planNull = await viewText();
   ok('T16d goal tracker never invents recorded savings from an undated balance', /Set your first goal/.test(sweep.planNull) && /goal savings are tracked separately/.test(sweep.planNull) && !/saved \(|available\./.test(sweep.planNull), sweep.planNull.slice(0, 200));
@@ -525,7 +525,7 @@ const loan = id => txns().find(t => t.id === id);
   const on = { label: await page.evaluate(() => document.querySelector('.br-label').textContent), loans: await carCard() };
   await page.evaluate(() => openWhatIf('loan-car')); await wait(200);
   const onZone = await page.evaluate(() => document.getElementById('wi-zone-label').textContent);
-  ok('T16g control: with the switch turned on in the page, Breathing Room, the loan card, What-If zones and the AI call come back (so the switch is the gate)', on.label !== 'Month-end estimate' && /gets you done in/.test(on.loans) && onZone !== '' && aiCalls > 0, JSON.stringify({ label: on.label, onZone, aiCalls }));
+  ok('T16g legacy allocation switch does not bypass the new dedicated financial checks', on.label !== 'Month-end estimate' && /gets you done in/.test(on.loans) && /Check your numbers/.test(onZone) && aiCalls > 0, JSON.stringify({ label: on.label, onZone, aiCalls }));
   await page.evaluate(() => { document.getElementById('whatif-overlay').style.display = 'none'; FP_FLAGS.extraAmountEnabled = false; showView('calendar', null); updateStats(); }); await wait(300);
 
   // ---- T17 v149: the paycheck question and date validation in the balance dialog
@@ -1308,6 +1308,36 @@ const loan = id => txns().find(t => t.id === id);
   ok('T54 removing a loan needs only a confirmation, not an unused reason',!await page.isDisabled('#ld-confirm-btn')&&!await page.locator('#ld-reasons').count(),'unnecessary reason required');await page.keyboard.press('Escape');
   await page.evaluate(()=>{transactions[0].balance=1000.01;transactions[0].original_balance=1000.01;transactions[0].apr=12;transactions[0].min_payment=200;renderLoans();});
   ok('T54 payoff total keeps cents and identifies itself as an estimate',await page.locator('.loan-card').filter({hasText:'Test Car Loan'}).textContent().then(t=>/Estimated total repayment/.test(t)&&/\$1,031\.13/.test(t)),'estimated total rounded away cents');
+
+  // T55 Payment affordability: complete synthetic finances, never real records.
+  seed();db.transactions=[{...db.transactions[0],balance:10000,original_balance:10000,apr:0,amount:100,min_payment:100,original_min_payment:100,date:'2026-10-10',anchor_date:'2026-10-10'}];
+  Object.assign(db.user_settings[0],{starting_balance:1800,pay_amount:1800,pay_frequency:'monthly',payday:'2026-10-12',month_balances_json:JSON.stringify({__dated_balance:{v:2,amount:1800,asOf:'2026-10-08',monthStart:1800,paycheck:null}})});
+  db.transactions.push({id:'wi-rent',user_id:'user-A',type:'bill',description:'Rent',amount:800,date:'2026-10-18',anchor_date:'2026-10-18',recurring:true,frequency:'monthly',category:'home',created_at:'2026-10-08'});
+  for(let i=0;i<24;i++){const d=new Date(2026,8,15+i,12);db.transactions.push({id:'wi-history-'+i,user_id:'user-A',type:'expense',description:'Everyday purchase',amount:10,date:[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'),recurring:false,category:'food'});}
+  db.financial_goals=[{id:'wi-goal',user_id:'user-A',name:'Trip',target_amount:1200,saved_amount:200,monthly_amount:75,target_date:null,archived:false}];
+  await load();await hideStage();await page.evaluate(()=>showView('loans',null));
+  const wiWritesBefore=JSON.stringify(db);await page.locator('.loan-card button[onclick^="openWhatIf"]').first().click();
+  const wiStates=await page.evaluate(()=>{const b=fpWhatIfBudget(currentWhatIfLoan),found={};for(let p=100;p<=3000;p+=5){const a=fpPaymentAssessment(b,p);if(!found[a.status])found[a.status]=p;}return {found,missing:b.missing,reserved:b.reservedSavings,goals:b.goalTotal};});
+  ok('T55 dated income, bills, historical spending and goals produce all three payment ranges',!!wiStates.found.green&&!!wiStates.found.amber&&!!wiStates.found.red&&wiStates.reserved===200&&wiStates.goals===900,JSON.stringify(wiStates));
+  ok('T55 opening and moving a comparison writes nothing',JSON.stringify(db)===wiWritesBefore,'comparison mutated finances');
+  for(const state of ['green','amber','red']){await page.fill('#whatif-amount',String(wiStates.found[state]||100));ok('T55 exact amount changes visible '+state+' verdict with text and icon',await page.getAttribute('#whatif-coach','data-state')===state&&await page.textContent('#wi-zone-label').then(t=>t.length>8)&&await page.getAttribute('#whatif-slider','aria-valuetext').then(t=>t.includes('per month')),await page.textContent('#whatif-coach'));}
+  ok('T55 unaffordable increase cannot be saved',await page.isDisabled('#whatif-apply-btn'),'red save enabled');await page.evaluate(()=>applyWhatIfPayment('loan-car'));await wait(150);
+  ok('T55 bypassing the disabled control still cannot save red increases',JSON.stringify(db)===wiWritesBefore,'red increase persisted');
+  await page.fill('#whatif-amount','oops');ok('T55 malformed amount clears payoff comparison and blocks saving',await page.isDisabled('#whatif-apply-btn')&&/valid monthly amount/.test(await page.textContent('#whatif-result')),'stale or saveable amount');
+  await page.fill('#whatif-amount','99.99');ok('T55 payments below the contractual minimum cannot be selected',await page.isDisabled('#whatif-apply-btn')&&await page.getAttribute('#whatif-coach','data-state')==='invalid','below minimum accepted');
+  await page.fill('#whatif-amount',String(wiStates.found.green||100));await page.locator('#whatif-slider').focus();const wiKeyBefore=Number(await page.inputValue('#whatif-slider'));await page.keyboard.press('ArrowRight');
+  ok('T55 native keyboard slider preserves cents and updates the exact entry',near(await page.inputValue('#whatif-slider'),wiKeyBefore+.01)&&near(await page.inputValue('#whatif-amount'),wiKeyBefore+.01),'keyboard control failed');
+  await page.setViewportSize({width:312,height:900});
+  ok('T55 payment status, exact entry and range fit a narrow phone',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&['whatif-coach','whatif-amount','whatif-slider'].every(id=>{const r=document.getElementById(id).getBoundingClientRect();return r.left>=0&&r.right<=innerWidth})), 'comparison overflow');await page.setViewportSize({width:1280,height:900});
+  await page.fill('#whatif-amount','150');const staleState=await page.getAttribute('#whatif-coach','data-state');
+  await page.evaluate(()=>{_fpGoals[0].saved_amount=10000;});await page.evaluate(()=>applyWhatIfPayment('loan-car'));await wait(100);
+  ok('T55 save rechecks current goal savings instead of trusting a stale green result',staleState==='green'&&loan('loan-car').min_payment===100&&await page.getAttribute('#whatif-coach','data-state')==='red','stale plan saved');
+  await page.evaluate(()=>{_fpGoals[0].saved_amount=200;updateWhatIf()});await page.fill('#whatif-amount','150');await page.click('#whatif-apply-btn');await wait(200);
+  ok('T55 a verified payment change updates the calendar plan while preserving the contractual minimum',loan('loan-car').min_payment===150&&loan('loan-car').original_min_payment===100&&!await page.isVisible('#whatif-overlay'),'valid plan lost baseline');
+  await page.evaluate(()=>openWhatIf('loan-car'));await page.fill('#whatif-amount','100');await page.click('#whatif-apply-btn');await wait(200);
+  ok('T55 reducing a previous commitment back to the minimum works',loan('loan-car').min_payment===100,'reduction unavailable');
+  await page.evaluate(()=>{openWhatIf('loan-car');_fpGoalsReady=false;updateWhatIf()});await page.fill('#whatif-amount','150');
+  ok('T55 failed goal loading produces a grey check state and blocks an increase',await page.getAttribute('#whatif-coach','data-state')==='unknown'&&await page.isDisabled('#whatif-apply-btn')&&!await page.isHidden('#wi-check-details'),'missing data reassurance');await page.evaluate(()=>{_fpGoalsReady=true;closeWhatIf()});
 
   const privateWrite=await page.evaluate(async()=>{
     const ok=await fpInsertTransactions([{type:'expense',description:'Privacy memo 1111222233334444',amount:5,date:'2026-10-08',category:'other',recurring:false,rawText:'Jane Sample',address:'123 Main Street',fileName:'private.pdf'}]);

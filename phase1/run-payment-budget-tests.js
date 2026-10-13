@@ -1,0 +1,32 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');const html=fs.readFileSync(process.argv[2]||'finpulse-v2-150.html','utf8');
+function grab(n){const m=new RegExp('(?:async )?function '+n+'\\s*\\(').exec(html);if(!m)throw Error(n);let a=html.indexOf('{',m.index),d=0,j=a;for(;j<html.length;j++){if(html[j]==='{')d++;else if(html[j]==='}'&&!--d)break;}return html.slice(m.index,j+1);}
+const c=vm.createContext({Date,Math,Number,Set,Map,JSON});for(const n of ['fmt','fpRound2','fpPad2','fpIso','fpParseIso','fpDateLabel','fpLoanBalanceAmount','fpGoalProgress','fpGoalSchedule','fpGoalDepositDate','fpPaymentMinimum','fpPaymentBudget','fpPaymentAssessment','fpPaymentBands'])vm.runInContext(grab(n),c);
+const loan={id:'L',type:'loan',description:'Example',balance:10000,apr:0,amount:100,min_payment:100,original_min_payment:100};
+function model(start=2000){return{asOf:'2026-10-08',start,buffer:500,missing:[],risks:[],monthly:{income:2000,bills:600,debt:100,spending:800,other:0},rows:Array.from({length:12},(_,i)=>({date:c.fpGoalDepositDate(new Date(2026,9,8,12),i+1),net:400}))};}
+function budget(m=model(),goals=[],l=loan){return c.fpPaymentBudget(m,goals,l,m.rows.map(r=>({id:'L',date:r.date,amount:100})));}
+const goal=(data={})=>({id:'G',name:'Holiday',target_amount:1000,saved_amount:0,monthly_amount:100,target_date:null,archived:false,...data});
+let pass=0,fail=0;function t(name,fn){try{fn();pass++;console.log('PASS '+name);}catch(e){fail++;console.log('FAIL '+name+' -> '+e.message);}}
+t('known dated cash flow supports a green payment',()=>assert.equal(c.fpPaymentAssessment(budget(),100).status,'green'));
+t('a large monthly payment creates a red shortfall',()=>assert.equal(c.fpPaymentAssessment(budget(),900).status,'red'));
+t('thin remaining cash is amber rather than a promise',()=>assert.equal(c.fpPaymentAssessment(budget(model(400)),100).status,'amber'));
+t('minimum payments can be unaffordable',()=>{const m=model(50);m.rows[0].net=-100;assert.equal(c.fpPaymentAssessment(budget(m),100).status,'red');});
+t('positive month end cannot hide a shortfall before payday',()=>{const m=model(650);m.rows=[{date:'2026-10-10',net:-100},{date:'2026-10-12',net:-100},{date:'2026-10-20',net:2000}];const b=c.fpPaymentBudget(m,[],loan,[{id:'L',date:'2026-10-10',amount:100}]);const a=c.fpPaymentAssessment(b,600);assert.equal(a.status,'red');assert.equal(a.lowest.date,'2026-10-12');assert.equal(a.lowest.amount,-50);});
+t('missing financial information never becomes green or red affordability',()=>{const m=model();m.missing=['Update your bank balance.'];assert.equal(c.fpPaymentAssessment(budget(m),100).status,'unknown');});
+t('unresolved other debt obligations prevent confident advice',()=>{const m=model();m.risks=['Resolve outstanding payments first.'];assert.equal(c.fpPaymentAssessment(budget(m),100).status,'unknown');});
+t('raising the selected debt payment can address its interest risk',()=>{const m=model();m.risks=['Example has a payment that may not cover its interest.'];assert.equal(budget(m).missing.length,0);});
+t('recorded savings stay protected including amounts above their target',()=>{const b=budget(model(2000),[goal({saved_amount:1800,target_amount:1000})]);assert.equal(b.reservedSavings,1800);assert.equal(c.fpPaymentAssessment(b,100).status,'amber');});
+t('active goal contributions reduce available cash on their deposit dates',()=>{const m=model(600);m.rows=m.rows.slice(0,2).map(r=>({...r,net:0}));const b=budget(m,[goal({monthly_amount:500})]);assert.equal(c.fpPaymentAssessment(b,100).status,'red');});
+t('goal deposits stop when their remaining target is funded',()=>{const b=budget(model(),[goal({target_amount:150,monthly_amount:100})]);assert.equal(b.goalTotal,150);});
+t('archived goals do not reserve money or consume future payments',()=>{const b=budget(model(),[goal({archived:true,saved_amount:1900})]);assert.equal(b.reservedSavings,0);assert.equal(b.goalTotal,0);});
+t('the selected debt stops consuming cash after it is repaid',()=>{const l={...loan,balance:100,min_payment:200,original_min_payment:200,apr:12};const m=model(1000);m.rows=m.rows.map(r=>({...r,net:-200}));m.monthly.debt=200;const b=c.fpPaymentBudget(m,[],l,m.rows.map(r=>({id:'L',date:r.date,amount:200})));const a=c.fpPaymentAssessment(b,101);assert.equal(a.lowest.amount,899);assert.equal(a.totalPaid,101);});
+t('changing a payment due today replaces only today’s projected amount',()=>{const m=model(800);const b=c.fpPaymentBudget(m,[],loan,[{id:'L',date:m.asOf,amount:100},...m.rows.map(r=>({id:'L',date:r.date,amount:100}))]);const a=c.fpPaymentAssessment(b,600);assert(a.lowest.amount<=300);});
+t('loan rate and balance cap the final payment without charging extra principal',()=>assert.equal(c.fpPaymentMinimum({...loan,balance:100,apr:12,original_min_payment:200}),101));
+t('a change below the required amount is invalid',()=>assert.equal(c.fpPaymentAssessment(budget(),99).status,'invalid'));
+t('an unspecified monthly goal plan requires clarification',()=>assert.equal(c.fpPaymentAssessment(budget(model(),[goal({monthly_amount:0})]),100).status,'unknown'));
+t('bands recommend only a value whose exact assessment is green',()=>{const b=budget(),bands=c.fpPaymentBands(b,100,1000);assert(bands.segments.some(x=>x.status==='green'));assert(bands.segments.some(x=>x.status==='amber'));assert(bands.segments.some(x=>x.status==='red'));assert.equal(c.fpPaymentAssessment(b,bands.suggested).status,'green');});
+t('an unknown budget has only grey guide segments and no recommendation',()=>{const m=model();m.missing=['Check income.'];const b=c.fpPaymentBands(budget(m),100,1000);assert(b.segments.every(s=>s.status==='unknown'));assert.equal(b.suggested,null);});
+t('assessment and guide do not mutate financial records or goal plans',()=>{const g=[goal()],b=budget(model(),g),before=JSON.stringify([g,b]);c.fpPaymentAssessment(b,400);c.fpPaymentBands(b,100,1000);assert.equal(JSON.stringify([g,b]),before);});
+// WCAG text contrast for the status colours on their associated surfaces.
+function luminance(hex){const rgb=hex.match(/\w\w/g).map(h=>parseInt(h,16)/255).map(n=>n<=0.04045?n/12.92:((n+0.055)/1.055)**2.4);return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;}
+t('status text colours have at least 4.5:1 contrast',()=>{for(const [fg,bg]of[['166534','eaf6ed'],['8a4b00','fff3d6'],['b42318','fdecea']]){const a=luminance(fg),b=luminance(bg);assert((Math.max(a,b)+.05)/(Math.min(a,b)+.05)>=4.5);}});
+console.log('PAYMENT BUDGET TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;

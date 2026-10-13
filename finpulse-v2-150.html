@@ -462,6 +462,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .bill-occurrence{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:8px 0;border-top:1px solid var(--border);}.bill-date-action{min-height:44px;padding:8px 10px;font-size:12px;}
 @media(max-width:600px){.fp-dialog-overlay{padding:12px!important}.fp-dialog-card{padding:20px!important;max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px)}.bill-info{min-width:0}.bill-due{white-space:normal;line-height:1.5}.bill-amt{font-size:14px}.bill-payment-details{margin-left:0}}
 @media(max-width:600px){#loan-add-form>div[style*="display:grid"]{grid-template-columns:1fr!important}.loan-header{flex-wrap:wrap;gap:10px}.loan-card button{min-height:44px;min-width:44px}.loan-card .loan-proj+div{flex-wrap:wrap;flex-direction:column;align-items:stretch!important}.loan-card .loan-proj+div>div:last-child{width:100%}.loan-card .loan-proj+div button{width:100%}.loan-card button[onclick^="openWhatIf"]{min-height:44px}}
+
+.wi-budget-status{padding:15px 16px;border:1px solid var(--border);border-left:4px solid #5b6570;border-radius:12px;background:var(--surface2);margin-bottom:18px;color:var(--text);}.wi-budget-status strong{font-size:16px;}.wi-budget-status p{font-size:13px;line-height:1.6;margin:7px 0 0;}.wi-budget-status button{margin-top:10px;}.wi-budget-status[data-state="green"]{background:#eaf6ed;border-left-color:#166534;color:#166534;}.wi-budget-status[data-state="amber"]{background:#fff3d6;border-left-color:#8a4b00;color:#8a4b00;}.wi-budget-status[data-state="red"]{background:#fdecea;border-left-color:#b42318;color:#b42318;}.wi-payment-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0;}.wi-payment-heading>label{font-size:13px;font-weight:700;}.wi-amount-field{display:flex;align-items:center;font-family:'DM Serif Display',serif;font-size:28px;}.wi-amount-field input{width:120px;max-width:30vw;font:inherit;padding:7px;border:1px solid var(--border);background:var(--surface);border-radius:8px;text-align:right;}.wi-amount-field input:focus{outline:2px solid var(--accent);outline-offset:2px;}.wi-budget-legend{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;font-size:12px;margin:12px 0;}.wi-budget-legend b{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:99px;font-size:12px;}.wi-green-dot{background:#eaf6ed;color:#166534;}.wi-amber-dot{background:#fff3d6;color:#8a4b00;}.wi-red-dot{background:#fdecea;color:#b42318;}.wi-range-wrap{height:42px;position:relative;display:flex;align-items:center;}.wi-budget-band{position:absolute;width:100%;height:9px;border-radius:99px;border:1px solid var(--border);}.wi-range-wrap input{width:100%;height:42px;position:relative;background:transparent;-webkit-appearance:none;appearance:none;cursor:pointer;}.wi-range-limits{display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin:4px 0 12px;}.wi-budget-details{font-size:12px;line-height:1.6;margin-top:12px;}.wi-budget-details>div{margin-top:8px;color:var(--text2);}.wi-budget-details summary{cursor:pointer;font-weight:600;min-height:28px;}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
 </style>
 </head>
 <body>
@@ -1788,7 +1790,7 @@ function fpResetAccountState() {
   _fpSettingsVersion++;
   _fpSettingsBusy = false;
   _fpGoals=[];_fpGoalsReady=false;_fpGoalBusy=false;_fpGoalDraftId=null;_fpGoalVersion++;
-  _fpCalendarMode=fpInitialCalendarMode();_fpExpenseQuery="";_fpManualLoanPayment=false;_fpDreamSkippedSignature=null;_fpPurchaseCheckActive=false;_fpPurchaseAfterPayday=false;_fpPurchaseSnapshotCache=null;
+  _fpPaymentBudgetCache=null;_fpWhatIfBandCache=null;currentWhatIfLoan=null;_fpCalendarMode=fpInitialCalendarMode();_fpExpenseQuery="";_fpManualLoanPayment=false;_fpDreamSkippedSignature=null;_fpPurchaseCheckActive=false;_fpPurchaseAfterPayday=false;_fpPurchaseSnapshotCache=null;
   const loanForm=document.getElementById("loan-add-form");if(loanForm)loanForm.style.display="none";
   const search=document.getElementById("expense-search");if(search)search.value="";
   const goalEditor=document.getElementById("goal-editor");if(goalEditor)goalEditor.style.display="none";
@@ -4952,6 +4954,65 @@ function fpLoanRateKnown(loan) {
   return loan.apr !== null && loan.apr !== undefined && String(loan.apr).trim() !== '' && Number.isFinite(Number(loan.apr)) && Number(loan.apr) >= 0;
 }
 
+// Pure cash-flow comparison. The UI invokes it without saving any records.
+function fpPaymentMinimum(loan) {
+  const minimum=Number(loan.original_min_payment == null ? (loan.min_payment == null ? loan.amount : loan.min_payment) : loan.original_min_payment)||0;
+  const parts=loan._cardParts||[loan],owed=parts.reduce((n,l)=>n+fpLoanBalanceAmount(l)*(1+(Number(l.apr)||0)/1200),0);
+  return fpRound2(Math.max(0,Math.min(minimum,owed)));
+}
+function fpPaymentBudget(model,goals,loan,events) {
+  const missing=model.missing.slice(),ids=new Set(loan._cardIds||[loan.id]),parts=loan._cardParts||[loan];
+  const risks=model.risks.filter(r=>!parts.some(l=>r.startsWith(l.description+' has a payment')));
+  const active=goals.filter(g=>!g.archived),reserved=active.reduce((n,g)=>n+(Number(g.saved_amount)||0),0),A=fpParseIso(model.asOf);
+  const plans=active.filter(g=>fpGoalProgress(g).remaining>0).map(g=>{const p=fpGoalProgress(g),s=fpGoalSchedule(g,A),amount=Math.min(p.remaining,Math.max(Number(g.monthly_amount)||0,s.needed||0));if(!amount)missing.push('Choose a monthly plan for '+g.name+' under Goals.');return {remaining:p.remaining,amount};});
+  const dates=new Set(Array.from({length:12},(_,i)=>fpGoalDepositDate(A,i+1))),due=new Map();
+  events.forEach(e=>{if(ids.has(e.id))due.set(e.date,(due.get(e.date)||0)+e.amount);});
+  let goalTotal=0;
+  const rows=model.rows.map(r=>{let saving=0;if(dates.has(r.date))plans.forEach(p=>{const v=Math.min(p.remaining,p.amount);p.remaining-=v;saving+=v;});goalTotal+=saving;return {date:r.date,net:r.net-saving,oldPayment:due.get(r.date)||0};});
+  const originalCost=Array.from(due.entries()).filter(([date])=>date>model.asOf).reduce((n,[date,v])=>n+v,0),m=model.monthly;
+  const room=m.income-m.bills-Math.max(0,m.debt-originalCost/12)-m.spending-m.other-goalTotal/12;
+  return {asOf:model.asOf,through:rows.length?rows[rows.length-1].date:model.asOf,start:model.start==null?null:model.start-reserved,rows,todayPayment:due.get(model.asOf)||0,firstDue:Array.from(due.keys()).sort()[0]||null,loan,minimum:fpPaymentMinimum(loan),buffer:model.buffer,comfortableBuffer:fpRound2(model.buffer+Math.max(0,room)*0.2),missing:[...new Set(missing.concat(risks))],reservedSavings:reserved,goalTotal,monthly:model.monthly};
+}
+function fpPaymentAssessment(budget,payment) {
+  if(!Number.isFinite(payment)||payment<budget.minimum-0.005)return {status:'invalid',title:'Check the payment amount',text:'Enter at least $'+fmt(budget.minimum)+' per month.'};
+  if(budget.start===null||budget.missing.length||!budget.firstDue)return {status:'unknown',title:'Check your numbers',text:budget.missing[0]||'Confirm the balance and next payment date first.'};
+  const parts=(budget.loan._cardParts||[budget.loan]).map(l=>({balance:fpLoanBalanceAmount(l),apr:Number(l.apr)||0,minimum:Number(l.original_min_payment == null?(l.min_payment==null?l.amount:l.min_payment):l.original_min_payment)||0})).sort((a,b)=>b.apr-a.apr);
+  function charge(){if(!parts.some(p=>p.balance>0.005))return 0;let left=payment,total=0;parts.forEach(p=>p.balance+=p.balance*p.apr/1200);if(budget.loan._cardParts)parts.forEach(p=>{const paid=Math.min(left,p.minimum,p.balance);p.balance-=paid;left-=paid;total+=paid;});parts.forEach(p=>{const paid=Math.min(left,p.balance);p.balance-=paid;left-=paid;total+=paid;});return total;}
+  const paidToday=budget.todayPayment?charge():0;let cash=budget.start+budget.todayPayment-paidToday,lowest={amount:cash,date:budget.asOf},totalPaid=paidToday;
+  budget.rows.forEach(r=>{cash+=r.net+r.oldPayment;if(r.oldPayment){const paid=charge();cash-=paid;totalPaid+=paid;}if(cash<lowest.amount)lowest={amount:cash,date:r.date};});
+  lowest.amount=fpRound2(lowest.amount);
+  const status=lowest.amount<0?'red':lowest.amount<budget.comfortableBuffer?'amber':'green';
+  const title=status==='green'?'Fits your budget':status==='amber'?'Leaves little room':"Doesn’t fit your budget";
+  const text=status==='red'?'This leaves a projected $'+fmt(-lowest.amount)+' shortfall on '+fpDateLabel(lowest.date)+'.':status==='amber'?'About $'+fmt(lowest.amount)+' would be left on '+fpDateLabel(lowest.date)+' at your lowest point'+(lowest.amount<budget.buffer?', using part of your $'+fmt(budget.buffer)+' cash cushion.':'. There is little room for surprises.'):'Your lowest projected spendable balance is $'+fmt(lowest.amount)+' on '+fpDateLabel(lowest.date)+', after bills, spending and goal savings.';
+  return {status,title,text,lowest,totalPaid,through:budget.through};
+}
+let _fpPaymentBudgetCache=null,_fpWhatIfInputInvalid=false,_fpWhatIfBandCache=null;
+function fpWhatIfBudget(loan,force) {
+  const signature=JSON.stringify([currentUser&&currentUser.id,fpIso(new Date()),loan.id,_dataLoadVersion,_fpMutationVersion,_fpSettingsVersion,_fpGoalVersion,_fpBillMarkVersion,_fpGoalsReady,_fpBillMarksReady,userSettings,monthBalances,_fpGoals,transactions,_fpBillMarkRows]);
+  if(!force&&_fpPaymentBudgetCache&&_fpPaymentBudgetCache.signature===signature)return _fpPaymentBudgetCache.budget;
+  const model=fpGoalFinancialModel(new Date()),ids=new Set(loan._cardIds||[loan.id]),events=[],marks=fpReadPaidMarks();let map,month='';
+  for(let D=fpParseIso(model.asOf);fpIso(D)<=(model.rows.at(-1)?.date||model.asOf);D=fpAddDays(D,1)){const iso=fpIso(D);if(month!==iso.slice(0,7)){month=iso.slice(0,7);map=fpDayEvents(D.getFullYear(),D.getMonth(),{paidMarks:marks});}map[D.getDate()].loans.filter(l=>ids.has(l.id)).forEach(l=>events.push({id:l.id,date:iso,amount:fpAmountDue(l)}));}
+  const budget=fpPaymentBudget(model,_fpGoals,loan,events);_fpPaymentBudgetCache={signature,budget};_fpWhatIfBandCache=null;return budget;
+}
+function fpPaymentBands(budget,min,max) {
+  const samples=64,segments=[],green=[];
+  for(let i=0;i<samples;i++){const value=fpRound2(min+(max-min)*(i+.5)/samples),a=fpPaymentAssessment(budget,value),last=segments.at(-1);if(a.status==='green')green.push(value);if(last&&last.status===a.status)last.to=(i+1)/samples;else segments.push({status:a.status,from:i/samples,to:(i+1)/samples});}
+  if(fpPaymentAssessment(budget,max).status==='green')green.push(max);
+  const suggested=green.length?Math.max(...green):fpPaymentAssessment(budget,min).status==='green'?min:null;
+  const rounded=suggested==null?null:Math.max(min,Math.floor(suggested));return {segments,suggested:rounded!=null&&fpPaymentAssessment(budget,rounded).status==='green'?rounded:suggested,approximate:true};
+}
+function fpWhatIfAmountInput(value) {
+  const payment=fpParseMoney(value,true),slider=document.getElementById('whatif-slider');
+  _fpWhatIfInputInvalid=payment===null||payment<Number(slider.min);
+  if(!_fpWhatIfInputInvalid){if(payment>Number(slider.max))slider.max=String(payment);slider.value=String(payment);}
+  updateWhatIf(true);
+}
+function fpWhatIfChoose(payment) {const input=document.getElementById('whatif-amount');input.value=Number(payment).toFixed(2);fpWhatIfAmountInput(input.value);}
+function fpWhatIfNextStep() {
+  const loan=currentWhatIfLoan;if(!loan)return;const b=fpWhatIfBudget(loan),text=b.missing[0]||'';closeWhatIf();
+  fpOpenPriority(/balance/i.test(text)?'balance':/income|payday|paycheck/i.test(text)?'income':/goal/i.test(text)?'plan':/paid|payment|Bills/i.test(text)?'bills':/debt|rate|Loans/i.test(text)?'loans':'expenses');
+}
+
 function openWhatIf(loanId) {
   const loan = fpManagedLoan(loanId);
   if (!loan) return;
@@ -4960,37 +5021,13 @@ function openWhatIf(loanId) {
   const bal = parseFloat(loan.balance) || 0;
   const apr = parseFloat(loan.apr) || 0;
   // Always use the ORIGINAL minimum, not any previously applied value
-  const minPay = parseFloat(loan.original_min_payment || loan.min_payment || loan.amount) || 0;
-  const dayMap = buildDayMap(currentYear, currentMonth);
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  const endBal = dayMap[daysInMonth] ? dayMap[daysInMonth].balance : 0; // keep real signed value
-  endBalGlobal = endBal;
-
-  // Slider range: min = original minimum, max = enough to pay off in ~3 months or 4x min
-  const sliderMax = Math.round(Math.max(minPay * 4, bal / 3 + minPay));
-
-  // Zone thresholds: what can the user actually afford?
-  // Available = endBal - minPay (what's left after making the minimum)
-  // If available <= 0, user can barely afford the minimum, almost everything is red
-  const available = endBal - minPay;
-  let greenCeil, yellowCeil;
-  if (!fpAllocationEnabled()) {
-    // v149 (audit C1): no affordability zones while the allocation switch is off (updateWhatIf shows a neutral view)
-    greenCeil = sliderMax; yellowCeil = sliderMax;
-  } else if (available <= 0) {
-    // Broke/negative: only the minimum is green, everything above is red
-    greenCeil = minPay;
-    yellowCeil = minPay + Math.floor((sliderMax - minPay) * 0.05); // tiny sliver of yellow
-  } else {
-    // Can afford some extra: green up to 40% of available, yellow up to 70%
-    greenCeil = minPay + Math.floor(available * 0.4);
-    yellowCeil = minPay + Math.floor(available * 0.7);
-  }
-
+  const minPay=fpPaymentMinimum(loan),currentCommitted=Number(loan.min_payment==null?loan.amount:loan.min_payment)||0;
+  const sliderMax=Math.max(minPay,Math.ceil(Math.max(minPay*4,bal/3+minPay,currentCommitted)));
+  _fpWhatIfInputInvalid=false;_fpPaymentBudgetCache=null;_fpWhatIfBandCache=null;
+  fpWhatIfBudget(loan,true);
   const el = document.getElementById('whatif-content');
   if (!el) return;
 
-  const currentCommitted = parseFloat(loan.min_payment || loan.amount) || 0;
   const showCommitted = currentCommitted > minPay;
   // Slider starts at current committed payment (so user sees where they are now)
   const sliderStartVal = Math.min(Math.max(currentCommitted || minPay, minPay), sliderMax);
@@ -5001,31 +5038,15 @@ function openWhatIf(loanId) {
     + (showCommitted ? ' &middot; <strong style="color:var(--accent);">$' + fmt(currentCommitted) + '/mo committed</strong>' : '')
     + '</div>'
     + '</div>'
-    + '<label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text2);display:block;margin-bottom:10px;">What if I paid this much per month?</label>'
-    + '<div style="margin-bottom:6px;">'
-    + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">'
-    + '<div style="flex:1;position:relative;height:36px;display:flex;align-items:center;">'
-    + '<div id="wi-track" style="position:absolute;left:0;right:0;height:6px;border-radius:99px;background:#e4e2db;overflow:hidden;">'
-    + '<div id="wi-fill" style="height:100%;width:0%;border-radius:99px;transition:background 0.15s;"></div>'
-    + '</div>'
-    + '<input type="range" id="whatif-slider" min="' + minPay + '" max="' + sliderMax + '" step="5" value="' + sliderStartVal + '"'
-    + ' style="position:relative;width:100%;height:36px;cursor:pointer;-webkit-appearance:none;appearance:none;background:transparent;"'
-    + ' oninput="updateWhatIf()">'
-    + '</div>'
-    + '<span id="whatif-amt" style="font-family:\'DM Serif Display\',serif;font-size:26px;min-width:90px;text-align:right;transition:color 0.15s;">$' + fmt(sliderStartVal) + '</span>'
-    + '</div>'
-    // Zone gradient bar, fixed proportions
-    + '<div id="whatif-zone-bar" style="height:5px;border-radius:99px;margin-bottom:3px;"></div>'
-    + '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-bottom:12px;">'
-    + '<span>$' + fmt(minPay) + ' min</span>'
-    + '<span id="wi-zone-label" style="font-weight:600;"></span>'
-    + '<span>$' + fmt(sliderMax) + ' max</span>'
-    + '</div>'
-    + '</div>'
-    + '<div id="whatif-result" style="margin-bottom:12px;"></div>'
-    + '<div id="whatif-coach" style="border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;line-height:1.6;min-height:72px;margin-bottom:12px;"></div>'
-    + '<button id="whatif-apply-btn" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-family:\'Inter\',sans-serif;font-weight:700;font-size:13px;cursor:pointer;" onclick="applyWhatIfPayment(\'' + loan.id + '\')">&#10003; Set this as my monthly payment</button>'
-    + '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:6px;">Updates your calendar plan. It does not change your lender payment or send money.</div>';
+    + '<div id="whatif-coach" class="wi-budget-status" role="status" aria-live="polite"><strong id="wi-zone-label"></strong><p id="wi-assessment-text"></p><button id="wi-check-details" class="btn btn-outline" onclick="fpWhatIfNextStep()" hidden>Check my numbers</button></div>'
+    + '<div class="wi-payment-heading"><label id="wi-payment-label" for="whatif-slider">Monthly payment</label><label class="wi-amount-field"><span aria-hidden="true">$</span><input id="whatif-amount" type="text" inputmode="decimal" aria-label="Monthly payment in dollars" value="'+sliderStartVal.toFixed(2)+'" oninput="fpWhatIfAmountInput(this.value)"></label><span id="whatif-amt" class="sr-only"></span></div>'
+    + '<div class="wi-budget-legend"><span><b class="wi-green-dot" aria-hidden="true">✓</b> Fits</span><span><b class="wi-amber-dot" aria-hidden="true">!</b> Stretch</span><span><b class="wi-red-dot" aria-hidden="true">×</b> Does not fit</span></div>'
+    + '<div class="wi-range-wrap"><div id="whatif-zone-bar" class="wi-budget-band" aria-hidden="true"></div><input type="range" id="whatif-slider" aria-labelledby="wi-payment-label" aria-describedby="wi-assessment-text" min="'+minPay+'" max="'+sliderMax+'" step="0.01" value="'+sliderStartVal+'" oninput="_fpWhatIfInputInvalid=false;updateWhatIf()"></div>'
+    + '<div class="wi-range-limits"><span>$'+fmt(minPay)+' minimum</span><span>$'+fmt(sliderMax)+' shown</span></div>'
+    + '<div id="wi-suggestion"></div><div id="whatif-result" style="margin:14px 0;"></div>'
+    + '<details class="wi-budget-details"><summary>What we counted</summary><div id="wi-budget-details"></div></details>'
+    + '<button id="whatif-apply-btn" class="save-btn" style="width:100%;margin-top:14px;" onclick="applyWhatIfPayment(\''+loan.id+'\')">Set this as my monthly payment</button>'
+    + '<p class="goal-note" style="text-align:center;margin-top:8px;">Updates your calendar plan. It does not change your lender payment or send money.</p>';
 
   // Inject slider thumb CSS once
   if (!document.getElementById('wi-thumb-style')) {
@@ -5033,21 +5054,16 @@ function openWhatIf(loanId) {
     s.id = 'wi-thumb-style';
     s.textContent = '#whatif-slider::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid #ccc;box-shadow:0 1px 4px rgba(0,0,0,0.18);cursor:pointer;transition:border-color 0.15s;}'
       + '#whatif-slider::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid #ccc;box-shadow:0 1px 4px rgba(0,0,0,0.18);cursor:pointer;}'
-      + '#whatif-slider:focus{outline:none;}';
+      + '#whatif-slider:focus-visible{outline:2px solid var(--accent);outline-offset:5px;border-radius:8px;}';
     document.head.appendChild(s);
   }
 
-  // Store zone thresholds globally for updateWhatIf
-  window._wiGreenCeil = greenCeil;
-  window._wiYellowCeil = yellowCeil;
-  window._wiSliderMax = sliderMax;
-  window._wiMinPay = minPay;
-
+  window._wiSliderMax=sliderMax;window._wiMinPay=minPay;
   document.getElementById('whatif-overlay').style.display = 'flex';
   updateWhatIf();
 }
 
-function updateWhatIf() {
+function updateWhatIf(fromAmount) {
   const loan = currentWhatIfLoan;
   if (!loan) return;
   const bal = parseFloat(loan.balance) || 0;
@@ -5061,104 +5077,30 @@ function updateWhatIf() {
   const sliderMax = parseFloat(sliderEl.max) || minPay * 4;
   const endBal = endBalGlobal;
 
-  // Zone thresholds (stored when modal opened)
-  const greenCeil = window._wiGreenCeil || (minPay + (sliderMax - minPay) * 0.6);
-  const yellowCeil = window._wiYellowCeil || (minPay + (sliderMax - minPay) * 0.8);
-
-  // Which zone is the current payment in?
-  // Use fill percentage to match the visual bar exactly
-  const fillPct2 = sliderMax > sliderMin ? (payment - sliderMin) / (sliderMax - sliderMin) : 0;
-  const greenEndFrac = sliderMax > sliderMin ? (greenCeil - sliderMin) / (sliderMax - sliderMin) : 0.6;
-  const yellowEndFrac = sliderMax > sliderMin ? (yellowCeil - sliderMin) / (sliderMax - sliderMin) : 0.8;
-
-  let zone, amtColor, coachBg, coachBorder, coachColor, coachMsg;
-  const extra = payment - minPay;
-  if (!fpAllocationEnabled()) {
-    // v149 (audit C1): the zones came from the calendar's undated month-end balance. With the allocation switch off FinPulse makes
-    // no claim about what is affordable; the payoff maths for the amount the user picks stays.
-    zone = 'neutral'; amtColor = 'var(--text)';
-    coachBg = 'var(--surface2)'; coachBorder = 'var(--border)'; coachColor = 'var(--text2)';
-    coachMsg = 'This shows how the payment you pick changes your payoff time and total interest. FinPulse is not checking whether it fits your budget, so look at your balance and upcoming bills before you commit to it.';
-  } else if (fillPct2 <= greenEndFrac) {
-    zone = 'green'; amtColor = '#1a6b4a';
-    coachBg = 'var(--accent-light)'; coachBorder = '#c3ddd1'; coachColor = '#2d5a46';
-    coachMsg = extra <= 0
-      ? "You're at the minimum. Even $20–30 more per month compounds fast. Try sliding up."
-      : 'This works. Paying $' + fmt(extra) + '/month extra leaves $' + fmt(Math.max(0, endBalGlobal - payment + minPay)) + ' breathing room at month end.';
-  } else if (fillPct2 <= yellowEndFrac) {
-    zone = 'yellow'; amtColor = '#b7791f';
-    coachBg = 'var(--warning-light)'; coachBorder = '#e9d5aa'; coachColor = '#7a5c1e';
-    coachMsg = 'Getting tight, about $' + fmt(Math.max(0, endBalGlobal - payment + minPay)) + ' left at month end. Doable, but watch your spending this month.';
-  } else {
-    zone = 'red'; amtColor = '#c0392b';
-    coachBg = 'var(--danger-light)'; coachBorder = '#f5c4bb'; coachColor = '#7a1f1f';
-    coachMsg = 'This is more than your budget can handle right now. Consistency at a lower amount beats one big payment you can\'t sustain.';
-  }
-
-  // Update amount display
-  const amtEl = document.getElementById('whatif-amt');
-  if (amtEl) { amtEl.textContent = '$' + fmt(payment); amtEl.style.color = amtColor; }
-
-  // Update fill track (shows how far slider has moved)
-  const fillPct = sliderMax > sliderMin ? ((payment - sliderMin) / (sliderMax - sliderMin)) * 100 : 0;
-  const fill = document.getElementById('wi-fill');
-  if (fill) { fill.style.width = fillPct + '%'; fill.style.background = amtColor; }
-
-  // Paint the fixed gradient zone bar, green up to greenCeil, yellow to yellowCeil, red after
-  const sliderRange = sliderMax - sliderMin;
-  const greenEndPct = sliderRange > 0 ? Math.round(((greenCeil - sliderMin) / sliderRange) * 100) : 60;
-  const yellowEndPct = sliderRange > 0 ? Math.round(((yellowCeil - sliderMin) / sliderRange) * 100) : 80;
-  const zonebar = document.getElementById('whatif-zone-bar');
-  if (zonebar && zone === 'neutral') zonebar.style.background = 'var(--border)';
-  else if (zonebar) {
-    zonebar.style.background = 'linear-gradient(to right,'
-      + '#1a6b4a 0%,#1a6b4a ' + greenEndPct + '%,'
-      + '#b7791f ' + greenEndPct + '%,#b7791f ' + yellowEndPct + '%,'
-      + '#c0392b ' + yellowEndPct + '%,#c0392b 100%)';
-  }
-  // Zone label (center, changes with zone)
-  const zoneLabel = document.getElementById('wi-zone-label');
-  if (zoneLabel) {
-    zoneLabel.textContent = zone === 'neutral' ? '' : zone === 'green' ? '✓ Can afford' : zone === 'yellow' ? 'Getting tight' : '✕ Too much';
-    zoneLabel.style.color = amtColor;
-  }
-  // Color thumb border to match zone
-  const thumbBorderColor = amtColor;
-  const thumbStyle = document.getElementById('wi-thumb-style');
-  if (thumbStyle) {
-    thumbStyle.textContent = '#whatif-slider::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;border:2.5px solid ' + thumbBorderColor + ';box-shadow:0 1px 4px rgba(0,0,0,0.18);cursor:pointer;}'
-      + '#whatif-slider::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:2.5px solid ' + thumbBorderColor + ';box-shadow:0 1px 4px rgba(0,0,0,0.18);cursor:pointer;}'
-      + '#whatif-slider:focus{outline:none;}';
-  }
-
-  // Update coach box
-  const coachEl = document.getElementById('whatif-coach');
-  if (coachEl) {
-    coachEl.style.background = coachBg;
-    coachEl.style.border = '1px solid ' + coachBorder;
-    coachEl.style.borderLeft = '3px solid ' + amtColor;
-    coachEl.style.color = coachColor;
-    coachEl.textContent = coachMsg;
-  }
-
-  // Apply button: disabled in the red zone, exploring is fine, committing isn't
-  const applyBtn = document.getElementById('whatif-apply-btn');
-  if (applyBtn) {
-    if (zone === 'red') {
-      applyBtn.disabled = true;
-      applyBtn.style.background = 'var(--surface3)';
-      applyBtn.style.color = 'var(--text3)';
-      applyBtn.style.cursor = 'not-allowed';
-      applyBtn.innerHTML = 'Beyond your budget, slide back to commit';
-    } else {
-      applyBtn.disabled = false;
-      applyBtn.style.background = 'var(--accent)';
-      applyBtn.style.color = '#fff';
-      applyBtn.style.cursor = 'pointer';
-      applyBtn.innerHTML = '&#10003; Set this as my monthly payment';
-    }
-  }
-
+  if(!fromAmount)document.getElementById('whatif-amount').value=payment.toFixed(2);
+  const budget=fpWhatIfBudget(loan),assessment=_fpWhatIfInputInvalid?{status:'invalid',title:'Check the payment amount',text:'Enter at least $'+fmt(budget.minimum)+'.'}:fpPaymentAssessment(budget,payment);
+  const colours={green:'#166534',amber:'#8a4b00',red:'#b42318',unknown:'#5b6570',invalid:'#5b6570'},icons={green:'✓',amber:'!',red:'×',unknown:'?',invalid:'?'};
+  const amtColor=colours[assessment.status],extra=payment-minPay;
+  document.getElementById('whatif-amt').textContent='$'+fmt(payment);
+  document.getElementById('whatif-amount').style.color=amtColor;
+  sliderEl.setAttribute('aria-valuetext','$'+fmt(payment)+' per month. '+assessment.title);
+  const status=document.getElementById('whatif-coach');status.dataset.state=assessment.status;
+  document.getElementById('wi-zone-label').textContent=icons[assessment.status]+' '+assessment.title;
+  document.getElementById('wi-assessment-text').textContent=assessment.text;
+  const fix=document.getElementById('wi-check-details');fix.hidden=assessment.status!=='unknown';
+  const bandKey=String(sliderMin)+':'+sliderMax;
+  if(!_fpWhatIfBandCache||_fpWhatIfBandCache.budget!==budget||_fpWhatIfBandCache.key!==bandKey)_fpWhatIfBandCache={budget,key:bandKey,bands:fpPaymentBands(budget,sliderMin,sliderMax)};
+  const bands=_fpWhatIfBandCache.bands;
+  document.getElementById('whatif-zone-bar').style.background='linear-gradient(to right,'+bands.segments.flatMap(seg=>[colours[seg.status]+' '+(seg.from*100)+'%',colours[seg.status]+' '+(seg.to*100)+'%']).join(',')+')';
+  const suggestion=document.getElementById('wi-suggestion');suggestion.replaceChildren();
+  if(bands.suggested!==null&&fpPaymentAssessment(budget,bands.suggested).status==='green'&&Math.abs(payment-bands.suggested)>0.005){const button=document.createElement('button');button.className='btn btn-outline';button.textContent='Try $'+fmt(bands.suggested)+'/month';button.onclick=()=>fpWhatIfChoose(bands.suggested);suggestion.appendChild(button);}
+  const details=document.getElementById('wi-budget-details');
+  details.textContent='Checks dated income, bills, all debt payments, everyday spending, planned expenses and goal savings through '+fpDateLabel(budget.through)+'. Recorded goal savings stay protected. Green keeps the $'+fmt(budget.buffer)+' starter cushion plus some spare room (20% of monthly room before this debt). Everyday spending uses recent history plus a 25% allowance. This debt stops being budgeted when the repayment estimate clears it; other debts stay budgeted until their records change. Estimates do not include new purchases or future raises.';
+  const current=Number(loan.min_payment==null?loan.amount:loan.min_payment)||0,unchanged=Math.abs(payment-current)<0.005,lower=payment<current&&payment>=budget.minimum-0.005;
+  const applyBtn=document.getElementById('whatif-apply-btn');
+  applyBtn.disabled=_fpWhatIfInputInvalid||assessment.status==='invalid'||(!unchanged&&!lower&&['red','unknown'].includes(assessment.status));
+  applyBtn.textContent=unchanged?'Keep my current plan':lower?'Lower my planned payment':assessment.status==='unknown'?'Check your numbers first':assessment.status==='red'?'Choose a payment that fits':'Set $'+fmt(payment)+'/month';
+  if(_fpWhatIfInputInvalid){document.getElementById('whatif-result').textContent='Enter a valid monthly amount to compare payoff time.';return;}
   // Payoff calculations
   function calcPayoff(pay) {
     if (loan._cardParts) return fpDebtPayoff(loan,pay);
@@ -5204,6 +5146,8 @@ async function applyWhatIfPayment(loanId) {
   if(!Number.isFinite(newPayment) || newPayment<=0) return;
   const originalMin=parseFloat(loan.original_min_payment != null ? loan.original_min_payment : (loan.min_payment != null ? loan.min_payment : loan.amount)) || 0;
   const currentCommitted=parseFloat(loan.min_payment != null ? loan.min_payment : loan.amount) || 0;
+  const budget=fpWhatIfBudget(loan,true),assessment=fpPaymentAssessment(budget,newPayment);
+  if(_fpWhatIfInputInvalid||assessment.status==='invalid'||(newPayment>currentCommitted+0.005&&['red','unknown'].includes(assessment.status))){showToast(assessment.status==='unknown'?'Check your financial details before increasing this payment.':'Choose an amount that fits the projection.','error');updateWhatIf();return;}
   if(newPayment===currentCommitted) { closeWhatIf(); return; }
   if(!await fpSaveManagedLoan(fpManagedLoan(loanId), {min_payment:newPayment,amount:newPayment,original_min_payment:originalMin})) return;
   closeWhatIf();
