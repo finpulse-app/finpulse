@@ -1161,8 +1161,13 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>fpRenderTodayFocus({asOf:'2026-10-08',balanceBasis:{status:'undated'},overdue:[{kind:'bill',dueDate:'2026-10-05'},{kind:'loan',dueDate:'2026-09-20'}],nextPayday:null}));await page.locator('#today-focus-secondary button').click();
   ok('T47 overdue reminder opens the oldest payment type without recording a payment',await page.isVisible('#view-loans')&&db.bill_paid_marks.length===0,'wrong payment shortcut or mutation');await page.evaluate(()=>showView('calendar',null));
   seed();db.transactions=[{id:'repair',user_id:'user-A',type:'expense',description:'Car repair',amount:250.25,date:'2026-10-09',category:'transport',recurring:false}];Object.assign(db.user_settings[0],{starting_balance:1000,pay_amount:0,payday:null,month_balances_json:JSON.stringify({__dated_balance:{amount:1000,asOf:'2026-10-08',monthStart:1000}})});await load();
-  const repairShown=/Car repair is coming up/.test(await page.textContent('#today-focus-title'));await page.locator('#today-focus-button').click();
+  const repairShown=/Car repair is scheduled for tomorrow/.test(await page.textContent('#today-focus-title'));await page.locator('#today-focus-button').click();
   ok('T47 a scheduled one-time expense opens spending review directly',repairShown&&await page.isVisible('#view-expenses'),'scheduled expense omitted from next step');await page.evaluate(()=>showView('calendar',null));
+  const beforeDayWrites=reqlog.filter(r=>r.op!=='select').length;
+  await page.clock.setFixedTime(new Date(2026,9,9,12,0,0));await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  ok('Returning after a date change updates the reminder to today',/Car repair is scheduled for today/.test(await page.textContent('#today-focus-title'))&&/Oct 9, 2026/.test(await page.textContent('#today-focus-date')),'stale tomorrow reminder');
+  ok('Daily reminder refresh does not change saved financial records',reqlog.filter(r=>r.op!=='select').length===beforeDayWrites,'date refresh wrote finances');
+  await page.clock.setFixedTime(new Date(2026,9,8,12,0,0));await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
   await page.setViewportSize({width:312,height:900});
   ok('T47 next-step action fits a narrow screen',await page.locator('#today-focus-button').evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth}), 'primary action clipped');
 

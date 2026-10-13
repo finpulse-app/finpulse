@@ -4055,19 +4055,29 @@ function ordinal(n) {
   return n + (s[(v-20)%10] || s[v] || s[0]);
 }
 
+function fpDueDateText(iso, asOf) {
+  if (iso === asOf) return 'today';
+  if (asOf) {
+    const next = fpParseIso(asOf); next.setDate(next.getDate() + 1);
+    if (iso === fpIso(next)) return 'tomorrow';
+    next.setDate(next.getDate() - 2);
+    if (iso === fpIso(next)) return 'yesterday';
+  }
+  return fpDateLabel(iso);
+}
 function fpTodayFocus(snap,paidStatusReady=true) {
   const overdue=snap.overdue||[],basis=snap.balanceBasis||{},lateCount=overdue.length;
   const newMonth=basis.asOf&&snap.asOf&&basis.asOf.slice(0,7)<snap.asOf.slice(0,7);
   if(basis.status!=='ok'||newMonth){const oldest=overdue.slice().sort((a,b)=>a.dueDate.localeCompare(b.dueDate))[0];return {code:newMonth?'month_balance':'balance',tone:'attention',title:newMonth?'Start this month with a balance check.':basis.status==='stale'?'Bring your balance up to date.':'Start with your bank balance.',description:newMonth?'Your last balance is from '+fpDateLabel(basis.asOf)+'. Enter what your account shows now to bring this month’s plan up to date.':'Enter what is in your account and the date it is from. That gives your upcoming bills a starting point.',label:'Update balance',destination:'balance',secondary:lateCount?lateCount+' past-due payment'+(lateCount===1?' also needs':'s also need')+' review.':null,secondaryDestination:oldest?(oldest.kind==='loan'?'loans':'bills'):null,secondaryLabel:oldest?(oldest.kind==='loan'?'Review loans':'Review bills'):null};}
   if(!paidStatusReady)return {code:'paid_status',tone:'attention',title:'Check your saved bill status.',description:'Refresh the paid status before relying on the next step.',label:'Review bills',destination:'bills'};
-  if(lateCount){const first=overdue.slice().sort((a,b)=>a.dueDate.localeCompare(b.dueDate))[0];return {code:'overdue',tone:'urgent',title:lateCount+' payment'+(lateCount===1?' needs':'s need')+' a check.',description:'Start with '+first.description+', due '+fpDateLabel(first.dueDate)+'. If you already paid it, record that so your plan can catch up.',label:first.kind==='loan'?'Review loan':'Review bill',destination:first.kind==='loan'?'loans':'bills'};}
+  if(lateCount){const first=overdue.slice().sort((a,b)=>a.dueDate.localeCompare(b.dueDate))[0];return {code:'overdue',tone:'urgent',title:lateCount===1?first.description+' is overdue.':lateCount+' payments are overdue.',description:'Start with '+first.description+', which was due '+fpDueDateText(first.dueDate,snap.asOf)+'. If you already paid it, record that so your plan can catch up.',label:first.kind==='loan'?'Review loan':'Review bill',destination:first.kind==='loan'?'loans':'bills'};}
   if((snap.unconfirmedIncome||[]).length||(snap.uncertainIncome||[]).length)return {code:'income',tone:'attention',title:'Check your scheduled paycheck.',description:((snap.uncertainIncome||[]).length?'FinPulse cannot tell whether the paycheck is already in your balance. Confirm that when you update it.':'If the paycheck arrived, update your balance to include it.')+(snap.firstNegative?' Until that is confirmed, the calendar shows a possible shortfall on '+fpDateLabel(snap.firstNegative.date)+'.':''),label:'Update balance',destination:'balance'};
   if(snap.firstNegative)return {code:'shortfall',tone:'urgent',title:'Your calendar shows a shortfall.',description:'The balance could dip below zero on '+fpDateLabel(snap.firstNegative.date)+'. Review the spending scheduled before then.',label:'Review spending',destination:'expenses'};
   const uncertain=(snap.unverified||[])[0];
   if(uncertain)return {code:'unverified',tone:'attention',title:'Check whether '+uncertain.description+' was paid.',description:'Its due date is before the record was added. Confirm the payment status to complete your plan.',label:uncertain.kind==='loan'?'Review loan':'Review bill',destination:uncertain.kind==='loan'?'loans':'bills'};
   if((snap.possiblePayments||[]).length)return {code:'possible_payment',tone:'attention',title:'Match a payment to its bill.',description:'A saved expense may cover a bill. Review its paid status so the same payment is not counted twice.',label:'Review bills',destination:'bills'};
   const due=(snap.dueThisWeek||[]).concat((snap.upcomingOneTime||[]).filter(o=>o.date>=snap.asOf&&o.date<=snap.weekEnd).map(o=>({...o,kind:'expense'}))).sort((a,b)=>a.date.localeCompare(b.date))[0];
-  if(due)return {code:'due',tone:'attention',title:due.description+' is coming up.',description:'$'+fmt(due.amount)+' is scheduled for '+fpDateLabel(due.date)+'. Check that the record and payment status are right.',label:due.kind==='loan'?'Review loan':due.kind==='bill'?'Review bill':'Review expense',destination:due.kind==='loan'?'loans':due.kind==='bill'?'bills':'expenses'};
+  if(due){const when=fpDueDateText(due.date,snap.asOf),relative=when==='today'||when==='tomorrow';return {code:'due',tone:'attention',title:due.description+(relative?(due.kind==='expense'?' is scheduled for ':' is due ')+when+'.':' is coming up.'),description:'$'+fmt(due.amount)+' is scheduled for '+when+(relative?' ('+fpDateLabel(due.date)+')':'')+'. Check that the record and payment status are right.',label:due.kind==='loan'?'Review loan':due.kind==='bill'?'Review bill':'Review expense',destination:due.kind==='loan'?'loans':due.kind==='bill'?'bills':'expenses'};}
   if(snap.monthNet!==null&&snap.monthNet<-.005)return {code:'shrinking',tone:'attention',title:'More is going out than coming in.',description:'Your calendar shows $'+fmt(snap.monthNet)+' more in outflows than income through month end. Review what is coming up.',label:'Review spending',destination:'expenses'};
   if((snap.loans||[]).some(l=>!l.paidOff&&(l.balance===null||!(l.minPayment>0))))return {code:'loan_details',tone:'attention',title:'Fill in a missing loan detail.',description:'A loan needs its current balance or statement payment before the plan can account for it.',label:'Review loans',destination:'loans'};
   if(!(snap.upcoming||[]).length&&!(snap.upcomingOneTime||[]).length&&!(snap.loans||[]).some(l=>!l.paidOff))return {code:'add_bills',tone:'neutral',title:'Add the bills you need to cover.',description:'Give rent, subscriptions and other repeating charges a place in your calendar.',label:'Add a bill',destination:'bill_entry'};
@@ -4085,6 +4095,23 @@ function fpRenderTodayFocus(snap) {
   if(focus.secondary){secondary.className='today-focus-secondary';const label=document.createElement('span');label.textContent=focus.secondary;secondary.appendChild(label);const review=document.createElement('button');review.className='btn btn-outline';review.type='button';review.textContent=focus.secondaryLabel;review.onclick=()=>fpOpenPriority(focus.secondaryDestination);secondary.appendChild(review);}
   const pay=document.getElementById('today-focus-payday');pay.textContent=snap.nextPayday?'Next scheduled pay: $'+fmt(snap.nextPayday.amount)+' · '+fpDateLabel(snap.nextPayday.date):'No paycheck is scheduled. Your plan can still track the bills you need to cover.';
 }
+
+let _fpDisplayedDay = fpIso(new Date());
+let _fpDayRefreshTimer = null;
+function fpRefreshDay() {
+  const day = fpIso(new Date());
+  if (!currentUser || day === _fpDisplayedDay) return;
+  _fpDisplayedDay = day;
+  renderCalendar(); updateStats(); renderBillsView(); renderPriorityReport(); updateBillBadge();
+}
+function fpScheduleDayRefresh() {
+  clearTimeout(_fpDayRefreshTimer);
+  const now = new Date(), midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  _fpDayRefreshTimer = setTimeout(function() { fpRefreshDay(); fpScheduleDayRefresh(); }, Math.max(1000, midnight.getTime() - now.getTime() + 50));
+}
+document.addEventListener('visibilitychange', function() { if (!document.hidden) { fpRefreshDay(); fpScheduleDayRefresh(); } });
+window.addEventListener('focus', function() { fpRefreshDay(); fpScheduleDayRefresh(); });
+fpScheduleDayRefresh();
 
 function fpPriorityShortcut(code) {
   if(['balance_needed','balance_stale','income_inclusion_unknown','income_unconfirmed'].includes(code))return {label:'Update balance',destination:'balance'};
