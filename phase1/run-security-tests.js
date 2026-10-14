@@ -215,7 +215,7 @@ async function test(name,fn){try{await fn();pass++;console.log('PASS '+name)}cat
   });
   await test('expense summary uses monthly events while library retains historical records',()=>{
     const old={id:'old',type:'expense',description:'Old payment',amount:999,date:'2025-06-15',category:'loan_payment'},weekly={id:'weekly',type:'expense',description:'Weekly item',amount:10,date:'2026-10-01',anchor_date:'2026-10-01',recurring:true,frequency:'weekly'},expense={id:'other',type:'expense',description:'One time',amount:2,date:'2026-10-09'};
-    const c=make(['renderExpensesView','fpExpenseRecordLabel','fpEscHtml','fmt'],{currentYear:2026,currentMonth:9,transactions:[old,weekly,expense],fpMonthlySpendingBreakdown(y,m){assert.equal(y,2026);assert.equal(m,9);return{fixedTotal:50,varTotal:2,total:52}},catIconSvg:()=>''});
+    const c=make(['renderExpensesView','fpExpenseRecordLabel','fpEscHtml','fmt'],{currentYear:2026,currentMonth:9,transactions:[old,weekly,expense],fpRenderSpendingReviewPrompt(){},fpMonthlySpendingBreakdown(y,m){assert.equal(y,2026);assert.equal(m,9);return{fixedTotal:50,varTotal:2,total:52}},catIconSvg:()=>''});
     c.renderExpensesView();assert.equal(c._els['exp-stat-total'].textContent,'-$52');assert.equal(c._els['exp-stat-recurring'].textContent,'-$50');assert.equal(c._els['fv-fixed-total'].textContent,'2 saved records');assert(c._els['fv-fixed-list'].innerHTML.includes('Old payment'));assert(c._els['fv-fixed-list'].innerHTML.includes('2025'));assert(c._els['fv-fixed-list'].innerHTML.includes('Weekly'));assert(!c._els['fv-fixed-list'].innerHTML.includes('/mo'));assert.equal(c.transactions[0],old);
   });
   for (const end of [-50,50]) await test('month-end estimate '+end+' avoids unsupported bank-balance claims',()=>{

@@ -1381,6 +1381,34 @@ const loan = id => txns().find(t => t.id === id);
   ok('T56 monthly Future Value help follows contribution timing',/saved each month/.test(await page.textContent('#d-number-explanation'))&&/24,000/.test(await page.textContent('#d-number-explanation')),'wrong monthly calculation');await page.fill('#d-amt-input','oops');
   ok('T56 invalid Future Value input clears the explanation too',/Add an amount/.test(await page.textContent('#d-number-explanation'))&&!/Money you put in/.test(await page.textContent('#d-number-explanation')),'stale future value help');
 
+
+  // T57 Large-purchase review changes only future spending assumptions.
+  seed();db.transactions=[{...db.transactions[0],balance:430,original_balance:430,apr:20,amount:40,min_payment:40,original_min_payment:40}];
+  Object.assign(db.user_settings[0],{starting_balance:1800,pay_amount:1800,pay_frequency:'monthly',payday:'2026-10-12',month_balances_json:JSON.stringify({__dated_balance:{v:2,amount:1800,asOf:'2026-10-08',monthStart:1800,paycheck:null}})});
+  db.transactions.push({id:'review-rent',user_id:'user-A',type:'bill',description:'Rent',amount:800,date:'2026-10-18',anchor_date:'2026-10-18',recurring:true,frequency:'monthly',category:'home'});
+  for(let i=0;i<24;i++){const d=new Date(2026,8,15+i,12);db.transactions.push({id:'review-h'+i,user_id:'user-A',type:'expense',description:'Everyday purchase',amount:10,date:[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'),recurring:false,category:'food'});}
+  db.transactions.push({id:'review-large',user_id:'user-A',type:'expense',description:'Example furniture purchase',amount:2000,date:'2026-09-18',recurring:false,category:'shopping',lender:'import:card:Example'});
+  await load();await hideStage();await page.evaluate(()=>{showView('loans',null);openWhatIf('loan-car')});
+  const originalPurchases=JSON.stringify(db.transactions),originalSettings=JSON.stringify(db.user_settings);
+  ok('T57 uncertain large purchase gives a grey check state instead of an all-red hard limit',await page.getAttribute('#whatif-coach','data-state')==='unknown'&&/Check spending/.test(await page.textContent('#wi-zone-label'))&&await page.isHidden('.wi-budget-legend'),'large purchase declared unaffordable');
+  ok('T57 focused card is identified and exact extra amounts can still be compared',await page.textContent('.wi-focus-chip')==='Focus card','no focused context');await page.fill('#whatif-amount','100');
+  ok('T57 extra remains blocked until spending has been checked',await page.isDisabled('#whatif-apply-btn')&&/months|month/.test(await page.textContent('#whatif-result')),'unknown extra save enabled');
+  await page.click('#wi-check-details');
+  ok('T57 quick check defaults to including the purchase and explains history stays intact',await page.isVisible('#spending-review-overlay')&&!await page.isChecked('[data-spending-index="0"]')&&/stay in your history/.test(await page.textContent('#spending-review-content')),'silent exclusion');
+  await page.check('[data-spending-index="0"]');await page.keyboard.press('Escape');
+  ok('T57 cancel makes no changes and retains the compared payment',JSON.stringify(db.transactions)===originalPurchases&&JSON.stringify(db.user_settings)===originalSettings&&await page.inputValue('#whatif-amount')==='100','cancel changed records');
+  await page.click('#wi-check-details');await page.check('[data-spending-index="0"]');writeFault='settings-reject';await page.click('#spending-review-save');await wait(200);
+  ok('T57 failed preference save retains the check and leaves old estimate intact',await page.isVisible('#spending-review-overlay')&&await page.isChecked('[data-spending-index="0"]')&&!await page.isDisabled('#spending-review-save')&&JSON.stringify(db.user_settings)===originalSettings,'failed save applied or lost choice');
+  await page.click('#spending-review-save');await wait(250);
+  const reviewed=JSON.parse(db.user_settings[0].month_balances_json);
+  ok('T57 confirmed unusual purchase unlocks an affordable extra without editing history',reviewed.__spending_review.decisions['review-large'].oneOff===true&&reviewed.__dated_balance.amount===1800&&JSON.stringify(db.transactions)===originalPurchases&&await page.getAttribute('#whatif-coach','data-state')==='green'&&!await page.isDisabled('#whatif-apply-btn')&&loan('loan-car').min_payment===40,'review changed records or lost extra capacity');
+  await page.setViewportSize({width:312,height:900});await page.evaluate(()=>fpOpenSpendingReview());
+  ok('T57 review controls fit a narrow phone',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&Array.from(document.querySelectorAll('#spending-review-overlay input,#spending-review-save')).every(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth})),'review overflow');await page.keyboard.press('Escape');await page.setViewportSize({width:1280,height:900});
+  await load();await hideStage();await page.evaluate(()=>{showView('expenses',null);fpOpenSpendingReview()});
+  ok('T57 saved review survives reload and can be revised from Expenses',await page.isChecked('[data-spending-index="0"]')&&await page.isVisible('#expense-spending-check'),'preference lost or cannot revise');
+  await page.uncheck('[data-spending-index="0"]');await page.click('#spending-review-save');await wait(200);await page.evaluate(()=>{showView('loans',null);openWhatIf('loan-car')});await page.fill('#whatif-amount','100');
+  ok('T57 restoring normal spending restores its forecast cost and blocks unaffordable extra',JSON.parse(db.user_settings[0].month_balances_json).__spending_review.decisions['review-large'].oneOff===false&&await page.getAttribute('#whatif-coach','data-state')==='red'&&await page.isDisabled('#whatif-apply-btn')&&JSON.stringify(db.transactions)===originalPurchases,'review cannot be reversed');await page.evaluate(()=>closeWhatIf());
+
   const privateWrite=await page.evaluate(async()=>{
     const ok=await fpInsertTransactions([{type:'expense',description:'Privacy memo 1111222233334444',amount:5,date:'2026-10-08',category:'other',recurring:false,rawText:'Jane Sample',address:'123 Main Street',fileName:'private.pdf'}]);
     const row=transactions.find(t=>String(t.description).startsWith('Privacy memo'));

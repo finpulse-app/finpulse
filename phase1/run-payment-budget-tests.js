@@ -1,6 +1,6 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');const html=fs.readFileSync(process.argv[2]||'finpulse-v2-150.html','utf8');
 function grab(n){const m=new RegExp('(?:async )?function '+n+'\\s*\\(').exec(html);if(!m)throw Error(n);let a=html.indexOf('{',m.index),d=0,j=a;for(;j<html.length;j++){if(html[j]==='{')d++;else if(html[j]==='}'&&!--d)break;}return html.slice(m.index,j+1);}
-const c=vm.createContext({Date,Math,Number,Set,Map,JSON});for(const n of ['fmt','fpRound2','fpPad2','fpIso','fpParseIso','fpAddDays','fpDateLabel','fpLoanBalanceAmount','fpGoalProgress','fpGoalSchedule','fpGoalDepositDate','fpPaymentMinimum','fpPaymentBudget','fpPaymentAssessment','fpPaymentBands','fpPaymentPresentation','fpSimpleMissing','fpPaymentMonthlyPicture'])vm.runInContext(grab(n),c);
+const c=vm.createContext({Date,Math,Number,Set,Map,JSON});for(const n of ['fmt','fpRound2','fpPad2','fpIso','fpParseIso','fpAddDays','fpDateLabel','fpLoanBalanceAmount','fpGoalProgress','fpGoalSchedule','fpGoalDepositDate','fpPaymentMinimum','fpPaymentBudget','fpPaymentAssessment','fpPaymentBands','fpPaymentPresentation','fpSimpleMissing','fpPaymentMonthlyPicture','fpSpendingEstimate'])vm.runInContext(grab(n),c);
 const loan={id:'L',type:'loan',description:'Example',balance:10000,apr:0,amount:100,min_payment:100,original_min_payment:100};
 function model(start=2000){return{asOf:'2026-10-08',start,buffer:500,missing:[],risks:[],monthly:{income:2000,bills:600,debt:100,spending:800,other:0},rows:Array.from({length:12},(_,i)=>({date:c.fpGoalDepositDate(new Date(2026,9,8,12),i+1),net:400}))};}
 function budget(m=model(),goals=[],l=loan){return c.fpPaymentBudget(m,goals,l,m.rows.map(r=>({id:'L',date:r.date,amount:100})));}
@@ -37,4 +37,17 @@ t('the visible forecast arithmetic reconciles exactly with its projected low',()
 t('spending receipt remains separate from confirmed lender payments',()=>{const m=model();m.historyTotal=300;m.historyDays=30;m.daily=12.5;const b=budget(m);assert.equal(b.historyTotal,300);assert.equal(b.historyDays,30);assert.equal(b.daily,12.5);assert.equal(b.minimum,100);});
 t('cleared card components do not retain a phantom required minimum',()=>assert.equal(c.fpPaymentMinimum({_cardParts:[{...loan,balance:0,original_min_payment:5},{...loan,balance:800,original_min_payment:40}]}),40));
 t('monthly picture uses the chosen payment without changing annual affordability',()=>{const b=budget(),p=c.fpPaymentMonthlyPicture(b,100),q=c.fpPaymentMonthlyPicture(b,150);assert.equal(p.income-p.costs,p.left);assert.equal(q.left,p.left-50);assert.equal(c.fpPaymentAssessment(b,100).status,'green');});
+
+const spendCfg={MIN_DAILY_SPEND:10,SPEND_MARGIN:.25};
+const history=Array.from({length:24},(_,i)=>({id:'h'+i,amount:10,date:'2026-09-'+String(i+1).padStart(2,'0')}));
+const big={id:'big',amount:2000,date:'2026-09-05'};
+const review=(oneOff,userId='A',amount=2000)=>({v:1,userId,decisions:{big:{oneOff,date:big.date,amount}}});
+t('one unusually large purchase needs review rather than becoming a confident limit',()=>{const e=c.fpSpendingEstimate([...history,big],24,spendCfg,null,'A');assert.equal(e.pending.length,1);assert.equal(e.ordinaryTotal,2240);assert.equal(e.excluded.length,0);});
+t('confirmed unusual purchase stays in history but no longer repeats in the estimate',()=>{const rows=[...history,big],before=JSON.stringify(rows),e=c.fpSpendingEstimate(rows,24,spendCfg,review(true),'A');assert.equal(e.pending.length,0);assert.equal(e.total,2240);assert.equal(e.ordinaryTotal,240);assert.equal(e.daily,12.5);assert.equal(JSON.stringify(rows),before);});
+t('confirming normal spending retains the full cost',()=>{const e=c.fpSpendingEstimate([...history,big],24,spendCfg,review(false),'A');assert.equal(e.pending.length,0);assert.equal(e.ordinaryTotal,2240);assert.equal(e.excluded.length,0);});
+t('another owner cannot supply a spending exclusion',()=>{const e=c.fpSpendingEstimate([...history,big],24,spendCfg,review(true,'B'),'A');assert.equal(e.pending.length,1);assert.equal(e.excluded.length,0);});
+t('changed amount invalidates an old one-off decision',()=>{const e=c.fpSpendingEstimate([...history,big],24,spendCfg,review(true,'A',1800),'A');assert.equal(e.pending.length,1);assert.equal(e.excluded.length,0);});
+t('changed date invalidates an old one-off decision',()=>{const r=review(true);r.decisions.big.date='2026-09-06';assert.equal(c.fpSpendingEstimate([...history,big],24,spendCfg,r,'A').pending.length,1);});
+t('normal high-cost spending is not automatically flagged or excluded',()=>{const e=c.fpSpendingEstimate([{id:'a',amount:300,date:'2026-09-01'},{id:'b',amount:350,date:'2026-09-10'}],10,spendCfg,null,'A');assert.equal(e.pending.length,0);assert.equal(e.ordinaryTotal,650);});
+t('empty or excluded history cannot remove the basic daily allowance',()=>{const e=c.fpSpendingEstimate([big],24,spendCfg,review(true),'A');assert.equal(e.daily,12.5);assert.equal(c.fpSpendingEstimate([],0,spendCfg,null,'A').daily,0);});
 console.log('PAYMENT BUDGET TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;

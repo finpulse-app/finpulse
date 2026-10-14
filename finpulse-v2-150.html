@@ -468,6 +468,44 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .wi-budget-status{padding:10px 12px;margin-bottom:12px;border-left-width:3px;}.wi-budget-status strong{font-size:13px;}.wi-budget-status p{font-size:12px;margin-top:4px;line-height:1.5;}.wi-budget-status[data-state="minimum"]{background:var(--surface2);color:var(--text);border-left-color:#66756b;}.wi-status-line{display:flex;align-items:center;justify-content:space-between;gap:8px;}.wi-payment-heading>label:first-child{flex:1;}.wi-payment-heading{gap:6px;}.wi-payment-heading .wi-amount-field input{width:105px;font-size:30px;border-color:transparent;padding:3px;background:transparent;}.wi-amount-field input:hover{border-color:var(--border);}.wi-range-hint{font-size:11px;color:var(--text2);margin:8px 0 0;}.wi-budget-legend{font-size:11px;margin:8px 0 2px;gap:8px;}.wi-range-wrap{height:36px;}.wi-range-wrap input{height:36px;}.number-with-help{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}.number-help-summary{display:flex;align-items:center;gap:6px;cursor:pointer;}.loan-stat-label .number-info{width:21px;height:21px;min-width:21px;font-size:11px;margin-left:3px;}.number-info{display:inline-flex;align-items:center;justify-content:center;background:var(--surface);color:var(--text2);border:1px solid #66756b;border-radius:50%;width:25px;height:25px;min-width:25px;padding:0;font:600 12px Inter,sans-serif;cursor:pointer;vertical-align:middle;}.number-info:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}.explanation-close{display:block;margin:0 0 6px auto;border:0;background:transparent;color:var(--accent);font:600 12px Inter,sans-serif;padding:6px;cursor:pointer;}.number-explanation{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:12px;line-height:1.6;margin:12px 0;}.number-explanation p,.wi-budget-details p{margin:8px 0;}.money-math{font-size:12px;line-height:1.5;margin:10px 0;}.money-math>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border);}.money-math dt{flex:1;overflow-wrap:anywhere;}.money-math dd{margin:0;flex-shrink:0;font-variant-numeric:tabular-nums;font-weight:600;}.money-math>div:last-child{border-bottom:0;}.debt-payment-review{background:#fff3d6;border:1px solid #e5cc97;border-radius:12px;padding:16px;margin-bottom:16px;line-height:1.6;font-size:13px;color:#654010;}.debt-plan-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid #e5cc97;}.debt-plan-row span{flex:1;}.debt-plan-row button{white-space:normal;}@media(max-width:480px){.debt-plan-row{align-items:flex-start;flex-direction:column;}.wi-payment-heading .wi-amount-field input{max-width:26vw;}.money-math{font-size:11px;}.money-math>div{gap:8px;}}
 
 .simple-money-picture{margin:12px 0;}.simple-money-row{display:grid;grid-template-columns:1fr auto;gap:6px 12px;margin:14px 0;font-size:13px;}.simple-money-row strong,.simple-money-left strong{font-variant-numeric:tabular-nums;}.simple-money-track{grid-column:1/-1;height:10px;background:var(--surface3);border-radius:99px;overflow:hidden;}.simple-money-track span{display:block;height:100%;border-radius:99px;}.simple-money-left{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--border);padding-top:12px;font-size:13px;}.simple-money-left[data-money-left="gap"] strong{color:var(--danger);}.simple-money-left[data-money-left="left"] strong{color:var(--accent);}.simple-money-note{font-size:12px;color:var(--text2);line-height:1.5;}.number-explanation{line-height:1.5;}.money-math>div{padding:7px 0;}
+
+/* A compact payment decision, with uncertainty kept separate from unaffordability. */
+#whatif-overlay>.fp-dialog-card{width:430px!important;padding:22px!important;}
+.wi-card-summary{margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);}
+.wi-card-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.wi-focus-chip{font:600 10px Inter,sans-serif;color:var(--accent);background:var(--accent-light);border-radius:20px;padding:4px 7px;}
+#whatif-content .number-info{width:20px;height:20px;min-width:20px;font-size:10px;margin:0;}
+#whatif-content .wi-budget-status{border:0;border-radius:8px;padding:10px 12px;margin:12px 0 8px;background:var(--surface2);}
+#whatif-content .wi-budget-status p{line-height:1.45;font-size:11px;}
+#whatif-content .wi-budget-status strong{font-size:12px;}
+#whatif-content .wi-budget-status[data-state="red"]{background:#fdecea;color:#b42318;}
+#whatif-content .wi-budget-status[data-state="green"]{background:#eaf6ed;color:#166534;}
+#whatif-content .wi-budget-status[data-state="amber"]{background:#fff3d6;color:#8a4b00;}
+#whatif-content .wi-payment-heading{margin:8px 0 3px;gap:5px;}
+#whatif-content .wi-amount-field{border:1px solid var(--border);border-radius:9px;padding:4px 7px;gap:1px;font-size:24px;}
+#whatif-content .wi-amount-field:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-light);}
+#whatif-content .wi-amount-field input{font-size:26px;width:90px;max-width:29vw;padding:0;outline:none;border:0;}
+#whatif-content .wi-range-hint{font-size:11px;line-height:1.5;margin:4px 0 10px;}
+#whatif-content .wi-budget-legend{font-size:10px;margin:2px 0;}
+#whatif-content .wi-budget-legend[hidden]{display:none;}
+#whatif-content .wi-budget-legend b{width:14px;height:14px;font-size:10px;}
+#whatif-content .wi-range-limits{margin:1px 0 8px;}
+#whatif-content .goal-note{font-size:10px;line-height:1.5;}
+#whatif-content #whatif-apply-btn{margin-top:8px!important;}
+.spending-review-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+.spending-review-heading h3{font:600 20px 'Playfair Display',serif;margin:0;}
+.spending-review-heading button{background:transparent;border:0;color:var(--text2);font-size:18px;padding:5px;cursor:pointer;}
+#spending-review-content{font-size:12px;line-height:1.5;}
+.spending-review-row{display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;}
+.spending-review-row input{margin-top:4px;accent-color:var(--accent);width:17px;height:17px;flex-shrink:0;}
+.spending-review-row>span{min-width:0;overflow-wrap:anywhere;}
+.spending-review-row small{display:block;color:var(--text2);margin:3px 0;}
+.spending-review-row>span>span{font-size:11px;color:var(--accent);}
+.spending-review-estimate{background:var(--accent-light);padding:12px;border-radius:8px;margin:12px 0;color:var(--accent);font-weight:600;}
+.spending-check-prompt{display:flex;align-items:center;gap:14px;justify-content:space-between;background:var(--surface);border:1px solid var(--border);padding:14px;border-radius:12px;margin-bottom:14px;font-size:12px;}
+.spending-check-prompt[hidden]{display:none;}.spending-check-prompt p{margin:4px 0;color:var(--text2);}.spending-check-prompt button{flex-shrink:0;}
+@media(max-width:480px){.spending-check-prompt{align-items:flex-start;flex-direction:column;}#whatif-overlay>.fp-dialog-card{padding:18px!important;}}
+
 </style>
 </head>
 <body>
@@ -708,6 +746,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
         <button class="btn btn-solid" onclick="showView('calendar',null);openBottomSheet(null);">+ Add Expense</button>
       </div>
 
+      <div id="expense-spending-check" class="spending-check-prompt" hidden></div>
       <!-- Fixed vs Variable explainer -->
       <div id="fv-explainer" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;margin-bottom:18px;">
         <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="toggleFvExplainer()">
@@ -884,6 +923,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       </div>
     </div>
 
+    <div id="spending-review-overlay" style="position:fixed;inset:0;background:rgba(26,25,22,.5);backdrop-filter:blur(4px);z-index:320;display:none;align-items:center;justify-content:center;">
+      <div style="background:var(--surface);border-radius:16px;padding:24px;width:460px;max-width:95vw;">
+        <div class="spending-review-heading"><h3 id="spending-review-title">A quick spending check</h3><button type="button" aria-label="Close spending check" onclick="fpCloseSpendingReview()">✕</button></div>
+        <div id="spending-review-content"></div>
+      </div>
+    </div>
     <!-- WHAT IF MODAL -->
     <div id="whatif-overlay" style="position:fixed;inset:0;background:rgba(26,25,22,0.5);backdrop-filter:blur(4px);z-index:300;display:none;align-items:center;justify-content:center;">
       <div style="background:var(--surface);border-radius:16px;padding:28px;width:460px;max-width:95vw;box-shadow:var(--shadow-md);">
@@ -2873,6 +2918,7 @@ function fpExpenseRecordLabel(t) {
 }
 
 function renderExpensesView() {
+  fpRenderSpendingReviewPrompt();
   const query=_fpExpenseQuery.trim().toLowerCase();
   const allExp = transactions.filter(function(t) { return (t.type === 'expense' || t.type === 'bill') && (!query || [t.description,t.category,t.date,t.anchor_date].join(' ').toLowerCase().includes(query)); });
   // Fixed = recurring (bills, subscriptions, rent) OR a recorded loan payment (the obligation is fixed
@@ -4990,7 +5036,7 @@ function fpPaymentBudget(model,goals,loan,events) {
   const rows=model.rows.map(r=>{let saving=0;if(dates.has(r.date))plans.forEach(p=>{const v=Math.min(p.remaining,p.amount);p.remaining-=v;saving+=v;});goalTotal+=saving;return {...r,net:r.net-saving,goalDeposit:saving,oldPayment:due.get(r.date)||0};});
   const originalCost=Array.from(due.entries()).filter(([date])=>date>model.asOf).reduce((n,[date,v])=>n+v,0),m=model.monthly;
   const room=m.income-m.bills-Math.max(0,m.debt-originalCost/12)-m.spending-m.other-goalTotal/12;
-  return {asOf:model.asOf,through:rows.length?rows[rows.length-1].date:model.asOf,start:model.start==null?null:model.start-reserved,rows,todayPayment:due.get(model.asOf)||0,firstDue:Array.from(due.keys()).sort()[0]||null,loan,minimum:fpPaymentMinimum(loan),buffer:model.buffer,comfortableBuffer:fpRound2(model.buffer+Math.max(0,room)*0.2),missing:[...new Set(missing.concat(risks))],reservedSavings:reserved,goalTotal,monthly:model.monthly,monthlyRoom:fpRound2(room),daily:model.daily,historyTotal:model.historyTotal,historyDays:model.historyDays,historyFrom:model.historyFrom,historyTo:model.historyTo,largePurchases:model.largePurchases};
+  return {asOf:model.asOf,through:rows.length?rows[rows.length-1].date:model.asOf,start:model.start==null?null:model.start-reserved,rows,todayPayment:due.get(model.asOf)||0,firstDue:Array.from(due.keys()).sort()[0]||null,loan,minimum:fpPaymentMinimum(loan),buffer:model.buffer,comfortableBuffer:fpRound2(model.buffer+Math.max(0,room)*0.2),missing:[...new Set(missing.concat(risks))],reservedSavings:reserved,goalTotal,monthly:model.monthly,monthlyRoom:fpRound2(room),daily:model.daily,historyTotal:model.historyTotal,historyDays:model.historyDays,historyFrom:model.historyFrom,historyTo:model.historyTo,largePurchases:model.largePurchases,spendingReview:model.spendingReview};
 }
 function fpPaymentAssessment(budget,payment) {
   if(!Number.isFinite(payment)||payment<budget.minimum-0.005)return {status:'invalid',title:'Check the payment amount',text:'Enter at least $'+fmt(budget.minimum)+' per month.'};
@@ -5035,12 +5081,12 @@ function fpWhatIfAmountInput(value) {
 }
 function fpWhatIfChoose(payment) {const input=document.getElementById('whatif-amount');input.value=Number(payment).toFixed(2);fpWhatIfAmountInput(input.value);}
 function fpWhatIfNextStep() {
-  const loan=currentWhatIfLoan;if(!loan)return;const b=fpWhatIfBudget(loan),text=b.missing[0]||'';closeWhatIf();
+  const loan=currentWhatIfLoan;if(!loan)return;const b=fpWhatIfBudget(loan),text=b.missing[0]||'';if(/large purchases/i.test(text)){fpOpenSpendingReview();return;}closeWhatIf();
   fpOpenPriority(/balance/i.test(text)?'balance':/income|payday|paycheck/i.test(text)?'income':/goal/i.test(text)?'plan':/paid|payment|Bills/i.test(text)?'bills':/debt|rate|Loans/i.test(text)?'loans':'expenses');
 }
 
 function fpPaymentPresentation(budget,payment,a) {
-  if(a.status==='unknown')return {...a,text:fpSimpleMissing(budget.missing[0]||a.text||'')};if(a.status==='invalid')return a;
+  if(a.status==='unknown')return {...a,title:budget.spendingReview?.pending.length?'Check spending first':'Check your numbers',text:fpSimpleMissing(budget.missing[0]||a.text||'')};if(a.status==='invalid')return a;
   const extra=fpRound2(Math.max(0,payment-budget.minimum)),base=fpPaymentAssessment(budget,budget.minimum);
   if(extra<0.005)return {status:'minimum',title:'Minimum payment',text:base.status==='red'?'Keep the minimum for now. Check your usual spending before adding extra.':base.status==='amber'?'Keep the minimum while money is tight. Extra can wait.':'This is the minimum due. Extra is optional.'};
   if(a.status==='red')return {...a,title:base.status==='red'?'Hold at the minimum for now':'Too much extra right now',text:base.status==='red'?'Keep money for bills and everyday life. Stay with the $'+fmt(budget.minimum)+' minimum for now.':'Lower the extra amount so you have enough for bills and everyday life.'};
@@ -5057,7 +5103,7 @@ function fpPaymentMonthlyPicture(budget,payment) {
   const income=fpRound2(budget.monthly.income),costs=fpRound2(Math.max(0,income-budget.monthlyRoom+payment));return {income,costs,left:fpRound2(income-costs)};
 }
 function fpSimpleMissing(text) {
-  return /balance/i.test(text)?'Add your current bank balance first.':/income|payday|paycheck/i.test(text)?'Check your income and next payday first.':/spending|statements/i.test(text)?'Add recent spending so we can see what everyday life costs.':/goal/i.test(text)?'Check your saved goals first.':/rate|debt|loan/i.test(text)?'Check the missing loan details first.':'Check the missing details first.';
+  return /large purchases/i.test(text)?'Check the large purchases in your statements before we suggest extra.':/balance/i.test(text)?'Add your current bank balance first.':/income|payday|paycheck/i.test(text)?'Check your income and next payday first.':/spending|statements/i.test(text)?'Add recent spending so we can see what everyday life costs.':/goal/i.test(text)?'Check your saved goals first.':/rate|debt|loan/i.test(text)?'Check the missing loan details first.':'Check the missing details first.';
 }
 function fpPaymentCalculationHTML(budget,a,payment) {
   if(a.status==='invalid')return '<strong>Check the amount</strong><p>Choose at least $'+fmt(budget.minimum)+' per month.</p>';
@@ -5125,20 +5171,21 @@ function openWhatIf(loanId) {
   if (!el) return;
 
   const showCommitted = currentCommitted > minPay;
+  const focused=fpLoanDisplayEntries(transactions.filter(t=>t.type==='loan'&&(!t.user_id||currentUser&&t.user_id===currentUser.id))).filter(l=>!fpLoanPaidOff(l)&&fpLoanBalanceAmount(l)>0).sort((a,b)=>fpLoanBalanceAmount(a)-fpLoanBalanceAmount(b))[0]?.id===loan.id;
   // Slider starts at current committed payment (so user sees where they are now)
   const sliderStartVal = Math.min(Math.max(currentCommitted || minPay, minPay), sliderMax);
 
-  el.innerHTML = '<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;">'
-    + '<div style="font-size:12px;color:var(--text3);margin-bottom:2px;">' + fpEscHtml(loan.description) + '</div>'
+  el.innerHTML = '<div class="wi-card-summary">'
+    + '<div class="wi-card-name">' + fpEscHtml(loan.description) + (focused?' <span class="wi-focus-chip">Focus card</span>':'') + '</div>'
     + '<div style="font-size:13px;color:var(--text2);">$' + fmt(bal) + ' balance &middot; ' + fpCardRateLabel(loan) + ' &middot; $' + fmt(minPay) + '/month minimum'
     + (showCommitted ? ' &middot; <strong style="color:var(--accent);">$' + fmt(currentCommitted) + '/month current plan</strong>' : '')
     + '</div>'
     + '</div>'
-    + '<div id="whatif-coach" class="wi-budget-status" role="status" aria-live="polite"><div class="wi-status-line"><strong id="wi-zone-label"></strong>'+fpNumberBadge('budget','Explain this money picture')+' </div><p id="wi-assessment-text"></p><button id="wi-check-details" class="btn btn-outline" onclick="fpWhatIfNextStep()" hidden>Check my numbers</button></div>'
     + '<div class="wi-payment-heading"><label id="wi-payment-label" for="whatif-slider">Monthly payment</label><label class="wi-amount-field"><span aria-hidden="true">$</span><input id="whatif-amount" type="text" inputmode="decimal" aria-label="Monthly payment in dollars" value="'+sliderStartVal.toFixed(2)+'" oninput="fpWhatIfAmountInput(this.value)"></label>'+fpNumberBadge('payment','Explain this monthly payment')+'<span id="whatif-amt" class="sr-only"></span></div>'
-    + '<p class="wi-range-hint">Minimum first · add extra only if there is room</p><div class="wi-budget-legend"><span><b class="wi-green-dot" aria-hidden="true">✓</b> Fits</span><span><b class="wi-amber-dot" aria-hidden="true">!</b> Stretch</span><span><b class="wi-red-dot" aria-hidden="true">×</b> Does not fit</span></div>'
+    + '<p class="wi-range-hint">' + (focused?'Your extra goes here first. Keep the minimums on your other debts.':'Choose your payment. Keep the minimums on your other debts.') + '</p><div class="wi-budget-legend"><span><b class="wi-green-dot" aria-hidden="true">✓</b> Fits</span><span><b class="wi-amber-dot" aria-hidden="true">!</b> Stretch</span><span><b class="wi-red-dot" aria-hidden="true">×</b> Does not fit</span></div>'
     + '<div class="wi-range-wrap"><div id="whatif-zone-bar" class="wi-budget-band" aria-hidden="true"></div><input type="range" id="whatif-slider" aria-labelledby="wi-payment-label" aria-describedby="wi-assessment-text" min="'+minPay+'" max="'+sliderMax+'" step="0.01" value="'+sliderStartVal+'" oninput="_fpWhatIfInputInvalid=false;updateWhatIf()"></div>'
     + '<div class="wi-range-limits"><span>$'+fmt(minPay)+' minimum</span><span id="wi-range-max">$'+fmt(sliderMax)+' shown</span></div>'
+    + '<div id="whatif-coach" class="wi-budget-status" role="status" aria-live="polite"><div class="wi-status-line"><strong id="wi-zone-label"></strong>'+fpNumberBadge('budget','Explain this money picture')+' </div><p id="wi-assessment-text"></p><button id="wi-check-details" class="btn btn-outline" onclick="fpWhatIfNextStep()" hidden>Check my numbers</button></div>'
     + '<div id="wi-suggestion"></div><div id="whatif-result" style="margin:14px 0;"></div>'
     + '<div id="wi-number-explanation" class="number-explanation" tabindex="-1" hidden></div>'
     + '<button id="whatif-apply-btn" class="save-btn" style="width:100%;margin-top:14px;" onclick="applyWhatIfPayment(\''+loan.id+'\')">Set this as my monthly payment</button>'
@@ -5178,14 +5225,14 @@ function updateWhatIf(fromAmount) {
   const presentation=fpPaymentPresentation(budget,payment,assessment);
   const colours={minimum:'#26362d',green:'#166534',amber:'#8a4b00',red:'#b42318',unknown:'#5b6570',invalid:'#5b6570'},icons={minimum:'',green:'✓',amber:'!',red:'×',unknown:'?',invalid:'?'};
   const amtColor=colours[presentation.status],extra=payment-minPay;
-  document.getElementById('wi-range-max').textContent='$'+fmt(sliderMax)+' shown';
+  document.getElementById('wi-range-max').textContent='$'+fmt(sliderMax)+' /month';
   document.getElementById('whatif-amt').textContent='$'+fmt(payment);
   document.getElementById('whatif-amount').style.color=amtColor;
   sliderEl.setAttribute('aria-valuetext','$'+fmt(payment)+' per month. '+presentation.title);
   const status=document.getElementById('whatif-coach');status.dataset.state=presentation.status;
   document.getElementById('wi-zone-label').textContent=(icons[presentation.status]?icons[presentation.status]+' ':'')+presentation.title;
   document.getElementById('wi-assessment-text').textContent=presentation.text;
-  const fix=document.getElementById('wi-check-details');fix.hidden=assessment.status!=='unknown';
+  const fix=document.getElementById('wi-check-details');fix.hidden=assessment.status!=='unknown';fix.textContent=budget.spendingReview?.pending.length?'Check large purchases':'Check my numbers';document.querySelector('.wi-budget-legend').hidden=assessment.status==='unknown';
   const bandKey=String(sliderMin)+':'+sliderMax;
   if(!_fpWhatIfBandCache||_fpWhatIfBandCache.budget!==budget||_fpWhatIfBandCache.key!==bandKey)_fpWhatIfBandCache={budget,key:bandKey,bands:fpPaymentBands(budget,sliderMin,sliderMax)};
   const bands=_fpWhatIfBandCache.bands;
@@ -5867,6 +5914,58 @@ function fpGoalDepositDate(asOf, months) {
   const month=new Date(asOf.getFullYear(),asOf.getMonth()+months,1,12);
   return fpIso(month);
 }
+
+// Large purchases are review candidates, never silently deleted or treated as monthly habits.
+function fpSpendingEstimate(valid,span,cfg,review,uid) {
+  const amounts=valid.map(t=>Number(t.amount)).sort((a,b)=>a-b),mid=Math.floor(amounts.length/2),median=amounts.length?(amounts.length%2?amounts[mid]:(amounts[mid-1]+amounts[mid])/2):0;
+  const decisions=review&&review.v===1&&review.userId===uid&&review.decisions&&typeof review.decisions==='object'?review.decisions:{};
+  const candidates=valid.filter(t=>Number(t.amount)>=250&&Number(t.amount)>median*5);
+  function decision(t){const d=decisions[String(t.id)];return d&&d.date===t.date&&d.amount===Number(t.amount)&&typeof d.oneOff==='boolean'?d:null;}
+  const excluded=valid.filter(t=>decision(t)?.oneOff===true),excludedIds=new Set(excluded.map(t=>String(t.id))),total=valid.reduce((n,t)=>n+Number(t.amount),0),ordinaryTotal=valid.filter(t=>!excludedIds.has(String(t.id))).reduce((n,t)=>n+Number(t.amount),0);
+  const pending=candidates.filter(t=>!decision(t));
+  return {candidates,excluded,pending,total:fpRound2(total),ordinaryTotal:fpRound2(ordinaryTotal),daily:span>0?Math.max(cfg.MIN_DAILY_SPEND,ordinaryTotal/span)*(1+cfg.SPEND_MARGIN):0,decisions};
+}
+function fpSpendingHistory(A,snap) {
+  const used=new Set();transactions.filter(t=>t.type==='bill'||t.type==='expense'&&t.recurring).forEach(t=>fpConfidentPayments(t,transactions,snap.asOf).forEach(p=>used.add(String(p.id))));
+  const hist=transactions.filter(t=>t.type==='expense'&&!t.recurring&&!used.has(String(t.id))&&!['loan_payment','card_transfer'].includes(t.category)&&t.date>=fpIso(fpAddDays(A,-89))&&t.date<=snap.asOf);
+  const valid=hist.filter(t=>fpParseIso(t.date)&&Number.isFinite(Number(t.amount))&&Number(t.amount)>0),days=new Set(valid.map(t=>t.date)),oldest=valid.map(t=>t.date).sort()[0],latest=valid.map(t=>t.date).sort().pop(),span=oldest?fpDaysBetween(fpParseIso(oldest),fpParseIso(latest))+1:0,cfg=fpPriorityConfig();
+  const imported=valid.some(t=>String(t.lender||'').startsWith('import:'));
+  const reliable=hist.length===valid.length&&days.size>=cfg.MIN_SPEND_DAYS&&span>=cfg.MIN_SPEND_SPAN&&latest&&fpDaysBetween(fpParseIso(latest),A)<=(imported?45:cfg.MAX_SPEND_GAP);
+  return {...fpSpendingEstimate(valid,span,cfg,monthBalances.__spending_review,currentUser&&currentUser.id),reliable,valid,oldest,latest,span};
+}
+let _fpSpendingReview=null;
+function fpOpenSpendingReview() {
+  if(!currentUser)return;const A=fpParseIso(fpIso(new Date())),h=fpSpendingHistory(A,fpPrioritySnapshot(A,{paidMarks:fpReadPaidMarks()}));
+  _fpSpendingReview={uid:currentUser.id,version:_fpDataVersionForSpending(),items:h.candidates,history:h};
+  const box=document.getElementById('spending-review-content');
+  box.innerHTML='<p>Were these unusual purchases? Check the ones you do not expect to repeat.</p>'+h.candidates.map((t,i)=>{const d=h.decisions[String(t.id)],checked=d&&d.date===t.date&&d.amount===Number(t.amount)&&d.oneOff===true;return '<label class="spending-review-row"><input type="checkbox" data-spending-index="'+i+'" '+(checked?'checked':'')+' onchange="fpSpendingReviewPreview()"><span><strong>'+fpEscHtml(t.description)+'</strong><small>'+fpDateLabel(t.date)+' · $'+fmt(t.amount)+'</small><span>Unusual purchase</span></span></label>';}).join('')+'<div id="spending-review-estimate" class="spending-review-estimate" role="status" aria-live="polite"></div><p class="goal-note">Purchases stay in your history. This only changes what we expect you to spend again.</p><button id="spending-review-save" class="save-btn" onclick="fpSaveSpendingReview()">Update estimate</button>';
+  if(!h.candidates.length){box.innerHTML='<p>No large purchases need checking right now.</p>';}
+  document.getElementById('spending-review-overlay').style.display='flex';fpSpendingReviewPreview();
+}
+function _fpDataVersionForSpending(){return JSON.stringify([_dataLoadVersion,_fpMutationVersion,_fpSettingsVersion]);}
+function fpSpendingReviewDecisions() {
+  const r=_fpSpendingReview;if(!r)return null;const decisions={...r.history.decisions};
+  document.querySelectorAll('#spending-review-content input[data-spending-index]').forEach(input=>{const t=r.items[Number(input.dataset.spendingIndex)];if(t)decisions[String(t.id)]={date:t.date,amount:Number(t.amount),oneOff:input.checked};});return decisions;
+}
+function fpSpendingReviewPreview() {
+  const r=_fpSpendingReview,box=document.getElementById('spending-review-estimate');if(!r||!box)return;const h=fpSpendingEstimate(r.history.valid,r.history.span,fpPriorityConfig(),{v:1,userId:r.uid,decisions:fpSpendingReviewDecisions()},r.uid);
+  box.textContent=r.history.reliable?'Everyday spending estimate: about $'+fmt(fpRound2(h.daily*365/12))+'/month, with room for variation.':'Add more recent spending to finish this estimate.';
+}
+async function fpSaveSpendingReview() {
+  const r=_fpSpendingReview;if(!r||!currentUser||currentUser.id!==r.uid||r.version!==_fpDataVersionForSpending()){showToast('Your information changed. Reopen this check.','error');return;}
+  const button=document.getElementById('spending-review-save');button.disabled=true;
+  const decisions=fpSpendingReviewDecisions(),validIds=new Set(transactions.filter(t=>t.type==='expense'&&!t.recurring).map(t=>String(t.id)));Object.keys(decisions).forEach(id=>{if(!validIds.has(id))delete decisions[id];});
+  const next={...monthBalances,__spending_review:{v:1,userId:r.uid,decisions}};
+  const saved=await saveUserSettings({...userSettings},next);if(!saved){if(button.isConnected)button.disabled=false;return;}
+  if(!currentUser||currentUser.id!==r.uid)return;fpCloseSpendingReview();_fpPaymentBudgetCache=null;_fpWhatIfBandCache=null;
+  renderExpensesView();renderLoans();renderPlan();renderPriorityReport();if(currentWhatIfLoan)updateWhatIf(true);showToast('Spending estimate updated');
+}
+function fpCloseSpendingReview(){document.getElementById('spending-review-overlay').style.display='none';_fpSpendingReview=null;}
+function fpRenderSpendingReviewPrompt() {
+  const el=document.getElementById('expense-spending-check');if(!el||!currentUser)return;const A=fpParseIso(fpIso(new Date())),h=fpSpendingHistory(A,fpPrioritySnapshot(A,{paidMarks:fpReadPaidMarks()}));el.hidden=!h.candidates.length;
+  el.innerHTML=h.candidates.length?'<div><strong>Your usual spending</strong><p>'+(h.pending.length?'Check '+h.pending.length+' large purchase'+(h.pending.length===1?'':'s')+' so we do not mistake them for everyday spending.':'Large purchases checked. You can change your choices.')+'</p></div><button class="btn btn-outline" onclick="fpOpenSpendingReview()">Check purchases</button>':'';
+}
+
 function fpGoalFinancialModel(asOf) {
   const A=fpParseIso(fpIso(asOf)),cfg=fpPriorityConfig(),marks=fpReadPaidMarks(),snap=fpPrioritySnapshot(A,{paidMarks:marks});
   const end=fpIso(new Date(A.getFullYear()+1,A.getMonth(),Math.min(A.getDate(),new Date(A.getFullYear()+1,A.getMonth()+1,0).getDate()),12)),start=snap.projectedToday,rows=[],missing=[],risks=[];
@@ -5883,15 +5982,10 @@ function fpGoalFinancialModel(asOf) {
   });
   if(!_fpGoalsReady)missing.push('Refresh your saved goals.');
   if(!_fpBillMarksReady)missing.push('Refresh Bills so paid items are counted correctly.');
-  // Recognized bill charges are covered by their bill budget, including subscriptions charged to a card.
-  const used=new Set();transactions.filter(t=>t.type==='bill'||t.type==='expense'&&t.recurring).forEach(t=>fpConfidentPayments(t,transactions,snap.asOf).forEach(p=>used.add(String(p.id))));
-  const hist=transactions.filter(t=>t.type==='expense'&&!t.recurring&&!used.has(String(t.id))&&!['loan_payment','card_transfer'].includes(t.category)&&t.date>=fpIso(fpAddDays(A,-89))&&t.date<=snap.asOf);
-  const valid=hist.filter(t=>fpParseIso(t.date)&&Number.isFinite(Number(t.amount))&&Number(t.amount)>0),days=new Set(valid.map(t=>t.date));
-  const oldest=valid.map(t=>t.date).sort()[0],latest=valid.map(t=>t.date).sort().pop(),span=oldest?fpDaysBetween(fpParseIso(oldest),fpParseIso(latest))+1:0;
-  const importedHistory=valid.some(t=>String(t.lender||'').startsWith('import:'));
-  const reliable=hist.length===valid.length&&days.size>=cfg.MIN_SPEND_DAYS&&span>=cfg.MIN_SPEND_SPAN&&latest&&fpDaysBetween(fpParseIso(latest),A)<=(importedHistory?45:cfg.MAX_SPEND_GAP);
+  const history=fpSpendingHistory(A,snap),{valid,oldest,latest,span,reliable}=history;
   if(!reliable)missing.push('Import recent statements or record more everyday spending. Use up to 3 months of statements. At least 8 spending days over 2 weeks are needed; statement history must be recent, or manual spending updated in the past week.');
-  const daily=reliable?Math.max(cfg.MIN_DAILY_SPEND,valid.reduce((n,t)=>n+Number(t.amount),0)/span)*(1+cfg.SPEND_MARGIN):0;
+  if(history.pending.length)missing.push('Check large purchases before estimating everyday spending.');
+  const daily=reliable?history.daily:0;
   let income=0,bills=0,debt=0,spending=0,otherCosts=0;
   const cardBills=transactions.filter(t=>String(t.lender||'').startsWith('import:card:')&&(t.type==='bill'||t.type==='expense'&&t.recurring));
   const cardDates=new Map();cardBills.forEach(t=>fpOccurrences(t,fpIso(fpAddDays(A,1)),end).forEach(d=>cardDates.set(d,(cardDates.get(d)||0)+Number(t.amount))));
@@ -5906,7 +6000,7 @@ function fpGoalFinancialModel(asOf) {
     rows.push({date:iso,net:fpRound2(inc-bill-loan-committed-everyday),income:inc,bills:bill,debt:loan,other:committed,spending:fpRound2(everyday)});
   }
   transactions.filter(t=>t.type==='loan'&&!fpLoanPaidOff(t)).forEach(t=>{const balance=Number(t.balance),apr=t.apr==null?null:Number(t.apr);if(apr>0&&balance>0&&fpAmountDue(t)<=balance*apr/1200)risks.push(t.description+' has a payment that may not cover its interest. Review it under Loans & Debt.');});
-  return {asOf:snap.asOf,start:Number.isFinite(start)?start:null,buffer:cfg.BUFFER,rows,missing:[...new Set(missing)],risks:[...new Set(risks)],monthly:{income:income/12,bills:bills/12,debt:debt/12,spending:spending/12,other:otherCosts/12},daily,historyDays:span,historyTotal:valid.reduce((n,t)=>n+Number(t.amount),0),historyFrom:oldest,historyTo:latest,largePurchases:valid.filter(t=>Number(t.amount)>Math.max(250,daily*3)).sort((a,b)=>Number(b.amount)-Number(a.amount)).slice(0,3)};
+  return {asOf:snap.asOf,start:Number.isFinite(start)?start:null,buffer:cfg.BUFFER,rows,missing:[...new Set(missing)],risks:[...new Set(risks)],monthly:{income:income/12,bills:bills/12,debt:debt/12,spending:spending/12,other:otherCosts/12},daily,historyDays:span,historyTotal:valid.reduce((n,t)=>n+Number(t.amount),0),historyFrom:oldest,historyTo:latest,largePurchases:history.pending,spendingReview:history};
 }
 function fpGoalCapacity(model,goals,excludeId) {
   const all=goals.filter(g=>!g.archived),others=all.filter(g=>g.id!==excludeId&&fpGoalProgress(g).remaining>0),A=fpParseIso(model.asOf),missing=model.missing.slice();
@@ -7812,13 +7906,13 @@ function rippleDismiss() {
 }
 
 // Shared dialog behavior: only the active dialog handles keys or backdrop clicks.
-const fpDialogIds = ['statement-record-overlay','paid-off-overlay','ripple-overlay','loan-delete-overlay','loan-edit-overlay','lp-info-overlay','add-income-overlay','connect-accounts-overlay','edit-expense-overlay','reassign-overlay','edit-balance-overlay','edit-income-overlay','setup-overlay','record-payment-overlay','rollover-overlay','whatif-overlay','stage-overlay','bottom-sheet'];
+const fpDialogIds = ['spending-review-overlay','statement-record-overlay','paid-off-overlay','ripple-overlay','loan-delete-overlay','loan-edit-overlay','lp-info-overlay','add-income-overlay','connect-accounts-overlay','edit-expense-overlay','reassign-overlay','edit-balance-overlay','edit-income-overlay','setup-overlay','record-payment-overlay','rollover-overlay','whatif-overlay','stage-overlay','bottom-sheet'];
 let _fpDialogSequence=0;
 function fpTopDialog() {
   return fpDialogIds.map(id=>document.getElementById(id)).filter(el=>el&&el.getClientRects().length&&getComputedStyle(el).visibility!=='hidden').sort((a,b)=>Number(getComputedStyle(b).zIndex||0)-Number(getComputedStyle(a).zIndex||0)||Number(b.dataset.fpOpened||0)-Number(a.dataset.fpOpened||0))[0]||null;
 }
 function fpDismissDialog(id) {
-  const close={'statement-record-overlay':fpCloseStatementRecord,'paid-off-overlay':fpClosePaidOff,'connect-accounts-overlay':closeConnectAccounts,'record-payment-overlay':closeRecordPayment,'whatif-overlay':closeWhatIf,'ripple-overlay':rippleDismiss,'setup-overlay':closeSetup,'stage-overlay':closeStageModal,'bottom-sheet':closeBottomSheet};
+  const close={'spending-review-overlay':fpCloseSpendingReview,'statement-record-overlay':fpCloseStatementRecord,'paid-off-overlay':fpClosePaidOff,'connect-accounts-overlay':closeConnectAccounts,'record-payment-overlay':closeRecordPayment,'whatif-overlay':closeWhatIf,'ripple-overlay':rippleDismiss,'setup-overlay':closeSetup,'stage-overlay':closeStageModal,'bottom-sheet':closeBottomSheet};
   if(close[id]){close[id]();return;}
   const el=document.getElementById(id);if(el)el.style.display='none';
   if(id==='loan-delete-overlay')_loanDeleteId=null;
