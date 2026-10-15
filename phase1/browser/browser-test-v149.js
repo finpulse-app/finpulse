@@ -1383,7 +1383,7 @@ const loan = id => txns().find(t => t.id === id);
 
 
   // T57 Large-purchase review changes only future spending assumptions.
-  seed();db.transactions=[{...db.transactions[0],balance:430,original_balance:430,apr:20,amount:40,min_payment:40,original_min_payment:40}];
+  seed();db.transactions=[{...db.transactions[0],category:'Credit Card',balance:430,original_balance:430,apr:20,amount:40,min_payment:40,original_min_payment:40}];
   Object.assign(db.user_settings[0],{starting_balance:1800,pay_amount:1800,pay_frequency:'monthly',payday:'2026-10-12',month_balances_json:JSON.stringify({__dated_balance:{v:2,amount:1800,asOf:'2026-10-08',monthStart:1800,paycheck:null}})});
   db.transactions.push({id:'review-rent',user_id:'user-A',type:'bill',description:'Rent',amount:800,date:'2026-10-18',anchor_date:'2026-10-18',recurring:true,frequency:'monthly',category:'home'});
   for(let i=0;i<24;i++){const d=new Date(2026,8,15+i,12);db.transactions.push({id:'review-h'+i,user_id:'user-A',type:'expense',description:'Everyday purchase',amount:10,date:[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'),recurring:false,category:'food'});}
@@ -1391,6 +1391,7 @@ const loan = id => txns().find(t => t.id === id);
   await load();await hideStage();await page.evaluate(()=>{showView('loans',null);openWhatIf('loan-car')});
   const originalPurchases=JSON.stringify(db.transactions),originalSettings=JSON.stringify(db.user_settings);
   ok('T57 uncertain large purchase gives a grey check state instead of an all-red hard limit',await page.getAttribute('#whatif-coach','data-state')==='unknown'&&/Check spending/.test(await page.textContent('#wi-zone-label'))&&await page.isHidden('.wi-budget-legend'),'large purchase declared unaffordable');
+  ok('T57 home priorities offer the spending check before extra-payment advice',/Check large purchases/.test(await page.textContent('#priority-report')),'spending review hidden from home');
   ok('T57 focused card is identified and exact extra amounts can still be compared',await page.textContent('.wi-focus-chip')==='Focus card','no focused context');await page.fill('#whatif-amount','100');
   ok('T57 extra remains blocked until spending has been checked',await page.isDisabled('#whatif-apply-btn')&&/months|month/.test(await page.textContent('#whatif-result')),'unknown extra save enabled');
   await page.click('#wi-check-details');
@@ -1408,6 +1409,30 @@ const loan = id => txns().find(t => t.id === id);
   ok('T57 saved review survives reload and can be revised from Expenses',await page.isChecked('[data-spending-index="0"]')&&await page.isVisible('#expense-spending-check'),'preference lost or cannot revise');
   await page.uncheck('[data-spending-index="0"]');await page.click('#spending-review-save');await wait(200);await page.evaluate(()=>{showView('loans',null);openWhatIf('loan-car')});await page.fill('#whatif-amount','100');
   ok('T57 restoring normal spending restores its forecast cost and blocks unaffordable extra',JSON.parse(db.user_settings[0].month_balances_json).__spending_review.decisions['review-large'].oneOff===false&&await page.getAttribute('#whatif-coach','data-state')==='red'&&await page.isDisabled('#whatif-apply-btn')&&JSON.stringify(db.transactions)===originalPurchases,'review cannot be reversed');await page.evaluate(()=>closeWhatIf());
+
+
+  // T58 Missing-number actions preserve drafts, and live guidance follows current data.
+  db.user_settings[0].month_balances_json='{}';await load();await hideStage();await page.evaluate(()=>{showView('plan',null);fpOpenGoal()});
+  await page.fill('#goal-name','A simple trip');await page.fill('#goal-target','2000');await page.fill('#goal-monthly','150');
+  ok('T58 unknown goal offers the exact next step for a missing bank balance',await page.locator('#goal-feasibility .goal-missing-action').textContent()==='Update bank balance','no direct balance action');
+  await page.click('#goal-feasibility .goal-missing-action');
+  ok('T58 fixing a number opens over the goal instead of sending the user elsewhere',await page.isVisible('#edit-balance-overlay')&&await page.isVisible('#view-plan')&&await page.inputValue('#goal-name')==='A simple trip','goal context lost');
+  await page.fill('#edit-balance-input','4500');await page.locator('#edit-balance-overlay button:text-is("Save")').click();await wait(200);
+  ok('T58 saving the balance refreshes goal guidance without losing any typed goal values',!await page.isVisible('#edit-balance-overlay')&&await page.inputValue('#goal-name')==='A simple trip'&&await page.inputValue('#goal-target')==='2000'&&await page.inputValue('#goal-monthly')==='150'&&!/bank balance first/.test(await page.textContent('#goal-feasibility'))&&!db.financial_goals.length,'stale check, lost draft or premature goal save');
+  await page.evaluate(()=>{fpCloseGoal();transactions=transactions.filter(t=>t.id!=='review-large');showView('loans',null);openWhatIf('loan-car')});await page.fill('#whatif-amount','100');
+  const liveLoanBefore=JSON.stringify(db.transactions);await page.evaluate(()=>{userSettings.payAmount=50;updateStats()});
+  ok('T58 income changes update an already-open payment verdict and save guard',await page.getAttribute('#whatif-coach','data-state')==='red'&&await page.isDisabled('#whatif-apply-btn')&&await page.inputValue('#whatif-amount')==='100'&&JSON.stringify(db.transactions)===liveLoanBefore,'payment verdict stale or input lost');
+  await page.evaluate(()=>{userSettings.payAmount=1800;updateStats()});
+  ok('T58 improving income restores the open comparison without another slider movement',await page.getAttribute('#whatif-coach','data-state')==='green'&&!await page.isDisabled('#whatif-apply-btn'),'stale red verdict');
+  await page.evaluate(()=>{const l=transactions.find(t=>t.id==='loan-car');l.balance=300;l.original_min_payment=60;l.min_payment=60;l.amount=60;updateStats()});
+  ok('T58 changed loan details update balance minimum and range while retaining typed amount',/\$300 balance/.test(await page.textContent('.wi-card-summary'))&&await page.textContent('#wi-range-min')==='$60 minimum'&&await page.getAttribute('#whatif-slider','min')==='60'&&await page.inputValue('#whatif-amount')==='100','stale header or minimum');
+  await page.evaluate(()=>{transactions.find(t=>t.id==='loan-car').apr=null;updateStats()});
+  ok('T58 a rate removed while comparing clears unsupported payoff numbers',/Add the interest rate/.test(await page.textContent('#whatif-result'))&&await page.isDisabled('#whatif-apply-btn'),'unknown rate displayed a payoff');
+  await page.evaluate(()=>{transactions.find(t=>t.id==='loan-car').balance=0;updateStats()});
+  ok('T58 a cleared debt closes an obsolete comparison without saving a payment',!await page.isVisible('#whatif-overlay')&&JSON.stringify(db.transactions)===liveLoanBefore,'obsolete debt comparison or unintended write');
+  await page.evaluate(()=>{showView('plan',null);fpOpenGoal();});await page.fill('#goal-name','Keep my draft');await page.fill('#goal-target','1000');await page.fill('#goal-monthly','50');
+  await page.clock.setFixedTime(new Date(2026,9,9,12));await page.evaluate(()=>fpRefreshDay());
+  ok('T58 the local-day refresh keeps the goal draft while updating current guidance',await page.inputValue('#goal-name')==='Keep my draft'&&await page.inputValue('#goal-target')==='1000'&&await page.inputValue('#goal-monthly')==='50','day refresh lost goal input');await page.clock.setFixedTime(new Date(2026,9,8,12));await page.evaluate(()=>{fpRefreshDay();fpCloseGoal();});
 
   const privateWrite=await page.evaluate(async()=>{
     const ok=await fpInsertTransactions([{type:'expense',description:'Privacy memo 1111222233334444',amount:5,date:'2026-10-08',category:'other',recurring:false,rawText:'Jane Sample',address:'123 Main Street',fileName:'private.pdf'}]);
