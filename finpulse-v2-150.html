@@ -4283,7 +4283,6 @@ function getIsoWeekKey(d) {
 }
 
 function updateStats() {
-  if(document.getElementById('view-plan').style.display==='block')renderPlan();
   const dayMap = buildDayMap(currentYear, currentMonth);
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const startBal = getStartingBalanceForMonth(currentYear, currentMonth);
