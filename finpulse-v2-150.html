@@ -976,7 +976,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
         
       </div>
       <div class="card" style="max-width:600px;">
-        <div class="card-header"><span class="card-title">Is it worth buying now?</span><span class="card-meta">Hypothetical annual growth</span></div>
+        <div class="card-header"><span class="card-title">Is it worth buying now?</span><span class="card-meta">Example only</span></div>
         <div class="card-body">
           <div class="slider-row">
             <label for="d-amt-input">Cost</label>
@@ -1009,7 +1009,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
           <div id="d-number-explanation" class="number-explanation" tabindex="-1" hidden></div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:12px;" id="d-milestones"></div>
           <div style="display:flex;gap:10px;font-size:11px;color:var(--text3);margin-bottom:7px;">
-            <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:2px;background:var(--accent);display:inline-block;border-radius:2px;"></span>Hypothetical growth</span>
+            <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:2px;background:var(--accent);display:inline-block;border-radius:2px;"></span>Possible growth</span>
             <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:0;border-top:2px dashed var(--danger);display:inline-block;"></span>Left to grow after spending</span>
           </div>
           <div style="position:relative;width:100%;height:190px;margin-bottom:12px;"><canvas id="d-chart" role="img" aria-label="Investment growth chart"></canvas></div>
@@ -5820,7 +5820,7 @@ function renderBillsView() {
   const paid = sorted.filter(function(row){return row.open.length===0});
   let html = '';
   if (unpaid.length > 0) {
-    html += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:8px;">' + unpaidCount + ' payments open &middot; $' + fmt(unpaidTotal) + '</div>';
+    html += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:8px;">' + unpaidCount + (unpaidCount===1?' payment open':' payments open')+' &middot; $' + fmt(unpaidTotal) + '</div>';
     html += unpaid.map(b => billRow(b, false)).join('');
   }
   if (paid.length > 0) {
@@ -6112,7 +6112,9 @@ function fpGoalEditorAssessment() {
 }
 function fpRenderGoalCheck() {
   const box=document.getElementById('goal-feasibility');if(!box||document.getElementById('goal-editor').style.display!=='block')return;
-  const a=fpGoalEditorAssessment();box.innerHTML=a?fpGoalAssessmentHTML(a,'fpApplyGoalSuggestion()'):'<p class="goal-note">Add your target and savings to see what fits your finances.</p>';
+  const a=fpGoalEditorAssessment(),html=a?fpGoalAssessmentHTML(a,'fpApplyGoalSuggestion()'):'<p class="goal-note">Add your target and savings to see what fits your finances.</p>';
+  // Blur can fire change between pointer-down and click. Keep the action in place when its content has not changed.
+  if(box._fpRenderedHTML!==html){box.innerHTML=html;box._fpRenderedHTML=html;}
 }
 function fpApplyGoalSuggestion() {
   if(_fpGoalBusy)return;const a=fpGoalEditorAssessment();if(!a||a.status!=='adjust'||!a.date)return;
@@ -6244,7 +6246,7 @@ function renderInsights() {
   Object.keys(dm).forEach(function(day){const e=dm[day];expenses.push.apply(expenses,e.expenses.concat(e.bills,e.loans).map(function(t){return Object.assign({},t,{amount:fpAmountDue(t)})}));income.push.apply(income,e.income);});
   const label=document.getElementById('insights-month-label');if(label)label.textContent=new Date(currentYear,currentMonth,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
   function grouped(rows){const groups={};rows.forEach(function(t){const key=JSON.stringify([t.description||'Income',t.category||t.type||'income']);if(!groups[key])groups[key]={description:t.description||'Income',category:t.category||t.type||'income',amount:0,count:0};groups[key].amount+=Number(t.amount)||0;groups[key].count++;});return Object.values(groups).sort(function(a,b){return b.amount-a.amount}).slice(0,4);}
-  function render(id,rows,sign){const el=document.getElementById(id);el.textContent=rows.length?'':'No calendar entries in this month.';if(rows.length)el.innerHTML=grouped(rows).map(function(t){return '<div class="ins-row"><div><div class="ins-name">'+fpEscHtml(t.description)+'</div><div class="ins-sub">'+fpEscHtml(t.category)+' · '+t.count+' scheduled occurrence'+(t.count===1?'':'s')+'</div></div><div class="ins-amt '+(sign==='+'?'pos':'neg')+'">'+sign+'$'+fmt(t.amount)+'</div></div>';}).join('');}
+  function render(id,rows,sign){const el=document.getElementById(id);el.textContent=rows.length?'':'No calendar entries in this month.';if(rows.length)el.innerHTML=grouped(rows).map(function(t){return '<div class="ins-row"><div><div class="ins-name">'+fpEscHtml(t.description)+'</div><div class="ins-sub">'+fpEscHtml(t.category)+' · '+t.count+' entr'+(t.count===1?'y':'ies')+'</div></div><div class="ins-amt '+(sign==='+'?'pos':'neg')+'">'+sign+'$'+fmt(t.amount)+'</div></div>';}).join('');}
   render('insights-expenses',expenses,'-');render('insights-income',income,'+');
   const totalIncome=income.reduce(function(sum,t){return sum+(Number(t.amount)||0)},0),totalOut=expenses.reduce(function(sum,t){return sum+t.amount},0);
   document.getElementById('insights-tip').textContent='This calendar month: +$'+fmt(totalIncome)+' coming in and -$'+fmt(totalOut)+' in planned spending and payments. Check your bank for your current balance.';
@@ -7507,7 +7509,7 @@ function dUpdate() {
   setEl('d-future', dFmt(future));dRenderCalculation(true);
   setEl('d-sub', 'in ' + years + ' year' + (years===1?'':'s'));
   const gain = fpRound2(future-total);
-  setEl('d-tradeoff','You put in '+dFmt(total)+'. '+(gain>=0?'Illustrated growth: '+dFmt(gain)+'.':'Illustrated loss: '+dFmt(Math.abs(gain))+'.'));
+  setEl('d-tradeoff','You put in '+dFmt(total)+'. '+(gain>=0?'Possible growth: '+dFmt(gain)+'.':'Possible loss: '+dFmt(Math.abs(gain))+'.'));
   const coachLines = 'Spend '+dFmt(dAmount)+(monthly?' every month':' now')+', or see what it could become: '+dFmt(future)+' after '+years+' years at an assumed '+Math.round(RATE*1000)/10+'% annual rate. Actual returns can differ or be negative.';
   setEl('d-coach', coachLines);
   const milestones = [5,10,20,50];
@@ -7531,7 +7533,7 @@ function dUpdate() {
     dChart = new Chart(canvas, {
       type:'line',
       data:{labels,datasets:[
-        {label:'Hypothetical growth',data:gd,borderColor:'#1a6b4a',backgroundColor:'rgba(26,107,74,0.07)',fill:true,tension:0.4,pointRadius:2,borderWidth:2},
+        {label:'Possible growth',data:gd,borderColor:'#1a6b4a',backgroundColor:'rgba(26,107,74,0.07)',fill:true,tension:0.4,pointRadius:2,borderWidth:2},
         {label:'Amount left to grow after spending',data:fd,borderColor:'#c0392b',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1.5,borderDash:[5,4]}
       ]},
       options:{animation:false,responsive:true,maintainAspectRatio:false,layout:{padding:{top:20}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+': '+dFmt(ctx.parsed.y);}}}},scales:{x:{grid:{display:false},ticks:{font:{size:10},maxTicksLimit:8}},y:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{size:10},callback:function(v){return v>=1000000?'$'+(v/1000000).toFixed(1)+'M':v>=1000?'$'+Math.round(v/1000)+'k':'$'+v;}}}}}
