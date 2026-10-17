@@ -1,0 +1,34 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const source=fs.readFileSync(process.argv[2]||'finpulse-v2-150.html','utf8');
+function grab(name){const m=new RegExp('function '+name+'\\s*\\(').exec(source);if(!m)throw Error('Missing '+name);let start=source.indexOf('{',m.index),depth=0,end=start;for(;end<source.length;end++){if(source[end]==='{')depth++;else if(source[end]==='}'&&--depth===0)break;}return source.slice(m.index,end+1);}
+const c=vm.createContext({Date,Math,Number,Set,Map,JSON});
+for(const n of ['fpRound2','fpLoanBalanceAmount','fpStageCatalog','fpStageAssessment','fpStageNextStep','fpStagePriorityActions','fpSnowballOrder','fpMissingMoneyAction','fpSimpleMissing','fpPad2','fpIso','fpParseIso','fpDateLabel','fmt','fpDueDateText','fpTodayFocus'])vm.runInContext(grab(n),c);
+const snap=()=>({asOf:'2026-10-08',balanceBasis:{status:'ok'},overdue:[],unverified:[],possiblePayments:[],unconfirmedIncome:[],uncertainIncome:[],firstNegative:null,loans:[]});
+const budget=()=>({low:800,available:200,buffer:500,missing:[],risks:[]});
+let pass=0,fail=0;function t(name,fn){try{fn();pass++;console.log('PASS '+name)}catch(e){fail++;console.log('FAIL '+name+' -> '+e.message)}}
+t('the three stage names use the product language everywhere',()=>assert.deepEqual(Array.from(c.fpStageCatalog(),x=>x.label),['Stop the Bleed','Stabilize','Build']));
+for(const status of ['undated','stale','future','mismatch'])t(status+' bank information cannot produce Build',()=>assert.equal(c.fpStageAssessment({...snap(),balanceBasis:{status}},budget()).stage,null));
+for(const key of ['unconfirmedIncome','uncertainIncome'])t(key+' prevents assuming the paycheck is available',()=>assert.equal(c.fpStageAssessment({...snap(),[key]:[{amount:650}]},budget()).stage,null));
+t('an overdue obligation takes priority even with plenty of saved cash',()=>assert.equal(c.fpStageAssessment({...snap(),overdue:[{amount:50}]},budget()).stage,1));
+t('a known dated shortfall remains Stop the Bleed with incomplete noncash details',()=>assert.equal(c.fpStageAssessment({...snap(),firstNegative:{date:'2026-10-10'}},{...budget(),missing:['Add a rate.']}).stage,1));
+for(const key of ['unverified','possiblePayments'])t(key+' prevents a stable claim',()=>assert.equal(c.fpStageAssessment({...snap(),[key]:[{}]},budget()).stage,null));
+t('missing statement history produces an information check instead of Build',()=>{const a=c.fpStageAssessment(snap(),{...budget(),missing:['Import recent statements.']});assert.equal(a.stage,null);assert.equal(a.reason,'spending_unknown')});
+t('unknown rates do not become an affordable payment claim',()=>assert.equal(c.fpStageAssessment(snap(),{...budget(),missing:['Add missing debt interest rates.']}).stage,null));
+t('invalid cash model data remains unknown',()=>assert.equal(c.fpStageAssessment(snap(),{...budget(),low:NaN}).stage,null));
+t('a longer forecast cash shortage overrides a positive short calendar',()=>assert.equal(c.fpStageAssessment(snap(),{...budget(),low:-25}).stage,1));
+t('negative recurring room overrides a high current bank balance',()=>assert.equal(c.fpStageAssessment(snap(),{...budget(),available:-10,low:9000}).stage,1));
+t('saved goals and protected savings affect the stage through the shared capacity',()=>assert.equal(c.fpStageAssessment(snap(),{...budget(),low:499.99}).stage,2));
+t('exactly the planning cushion does not falsely fall below it',()=>assert.equal(c.fpStageAssessment(snap(),{...budget(),low:500}).stage,3));
+t('a payment not covering interest needs review before growth',()=>assert.equal(c.fpStageAssessment(snap(),{...budget(),risks:['Payment may not cover interest.']}).stage,1));
+t('Build can focus debt reduction rather than pretending the user is debt free',()=>{const s={...snap(),loans:[{id:'small',balance:100,paidOff:false}]},a=c.fpStageAssessment(s,budget()),step=c.fpStageNextStep(a,s);assert.equal(a.stage,3);assert.equal(step.destination,'focus_payment');assert(step.description.includes('other minimums'));});
+t('Build without remaining debts leads to the existing goals tool',()=>assert.equal(c.fpStageNextStep(c.fpStageAssessment(snap(),budget()),snap()).destination,'plan'));
+t('Stabilize protects everyday money before extra debt payments',()=>{const a=c.fpStageNextStep(c.fpStageAssessment(snap(),{...budget(),low:300}),snap());assert.equal(a.destination,'expenses');assert(a.description.includes('before adding extra'));});
+t('missing large purchase review opens the existing check',()=>{const a=c.fpStageAssessment(snap(),{...budget(),missing:['Check large purchases before estimating everyday spending.']});assert.equal(c.fpStageNextStep(a,snap()).destination,'money_detail:spending');});
+t('Stop the Bleed reviews excessive debt commitments without changing them',()=>{const s={...snap(),loans:[{balance:500,minPayment:100,trueMinimum:25}]};assert.equal(c.fpStageNextStep(c.fpStageAssessment(s,{...budget(),available:-20}),s).destination,'loans');});
+t('urgencies cannot be displaced by an extra-payment review inserted last',()=>{const a=c.fpStagePriorityActions([{code:'payment_plan_review'},{code:'overdue_bill'},{code:'paycheck_conflict'},{code:'balance_needed'}],{stage:1});assert.deepEqual(Array.from(a,x=>x.code),['balance_needed','paycheck_conflict','overdue_bill','payment_plan_review']);});
+t('unknown or tight stages remove reassuring and optional allocation messages',()=>{const a=[{code:'on_track'},{code:'extra_debt'},{code:'goal_room'},{code:'due_loan'}];for(const stage of [null,1,2])assert.deepEqual(Array.from(c.fpStagePriorityActions(a,{stage}),x=>x.code),['due_loan']);assert.equal(a.length,4);});
+t('snowball order includes student loans and zero-rate debt by balance',()=>{const a=c.fpSnowballOrder([{id:'card',balance:600,apr:25},{id:'student',balance:100,apr:5},{id:'zero',balance:200,apr:0},{id:'paid',balance:0}]);assert.deepEqual(Array.from(a,x=>x.id),['student','zero','card','paid']);});
+t('snowball tie order is deterministic and does not mutate records',()=>{const rows=[{id:'b',description:'Same',balance:100},{id:'a',description:'Same',balance:100}],before=JSON.stringify(rows);assert.equal(c.fpSnowballOrder(rows)[0].id,'a');assert.equal(JSON.stringify(rows),before);});
+t('stage classification and next steps do not modify financial data',()=>{const s=snap(),b=budget(),before=JSON.stringify([s,b]);c.fpStageNextStep(c.fpStageAssessment(s,b),s);assert.equal(JSON.stringify([s,b]),before);});
+t('a monthly gap is explained as a positive missing amount',()=>{const a=c.fpTodayFocus({...snap(),monthNet:-45.67,upcoming:[{date:'2026-10-30'}]});assert(a.description.includes('$45.67 more'));assert(!a.description.includes('$-'));});
+console.log('STAGE TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
