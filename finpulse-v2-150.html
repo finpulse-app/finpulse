@@ -506,6 +506,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .spending-check-prompt[hidden]{display:none;}.spending-check-prompt p{margin:4px 0;color:var(--text2);}.spending-check-prompt button{flex-shrink:0;}
 @media(max-width:480px){.spending-check-prompt{align-items:flex-start;flex-direction:column;}#whatif-overlay>.fp-dialog-card{padding:18px!important;}}
 
+.payday-check,.payday-day{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:13px;line-height:1.5;}.payday-check[hidden]{display:none;}.payday-check p,.payday-day p{font-size:12px;color:var(--text2);margin:5px 0 10px;}.payday-actions{display:flex;gap:8px;flex-wrap:wrap;}.payday-day{padding:12px;}.payday-day p{margin-bottom:8px;}
+.card-cycle-plan{border:1px solid var(--border);background:var(--surface);border-radius:14px;padding:18px;margin-bottom:18px;font-size:13px;line-height:1.6;}.card-cycle-plan[hidden]{display:none;}.card-cycle-plan h3{font:600 20px 'Playfair Display',serif;margin:6px 0;}.card-cycle-plan p{margin:8px 0;}.card-cycle-plan details{font-size:12px;color:var(--text2);}.card-cycle-plan summary{cursor:pointer;font-weight:600;}.card-cycle-figures{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0;}.card-cycle-figures span{font-size:11px;color:var(--text2);flex:1;min-width:90px;}.card-cycle-figures strong{display:block;font-size:16px;color:var(--text);}.explanation-link{border:0;background:transparent;padding:0;font:inherit;text-decoration:underline;color:var(--accent);cursor:pointer;}
 </style>
 </head>
 <body>
@@ -637,6 +639,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       </div>
 
 
+      <section id="payday-check" class="payday-check" aria-label="Payday check" hidden></section>
       <section class="today-focus" id="today-focus" aria-labelledby="today-focus-title">
         <div class="today-focus-main"><div class="eyebrow" id="today-focus-date">Your next step</div><h3 id="today-focus-title">Getting your plan ready</h3><p id="today-focus-description">Your saved numbers will show what needs attention first.</p><div id="today-focus-secondary"></div></div>
         <div class="today-focus-action"><button class="btn btn-solid" id="today-focus-button" type="button" hidden>Review</button><p id="today-focus-payday"></p></div>
@@ -909,7 +912,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
           <div style="background:var(--accent-light);border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;color:#2d5a46;line-height:1.6;"><strong>The approach:</strong> Keep making the minimum payments on all debts. If you have extra money after essentials, put it toward the smallest balance. Once that debt is paid off, move its payment to the next one.<br><a href="https://www.consumerfinance.gov/archive/blog/how-reduce-your-debt/" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:8px;color:inherit;">Compare the two approaches at the CFPB ↗</a></div>
         </div>
       </div>
-      <section id="debt-payment-review" class="debt-payment-review" aria-label="Recommended payment changes" hidden></section><div id="loans-list"></div>
+      <section id="card-use-plan" class="card-cycle-plan" hidden></section><section id="debt-payment-review" class="debt-payment-review" aria-label="Recommended payment changes" hidden></section><div id="loans-list"></div>
       <div id="loans-empty" style="display:none;">
         <div class="empty-state">
           <div class="empty-state-icon" style="color:var(--accent);display:flex;justify-content:center;"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.5 2.5 5-6"/></svg></div>
@@ -927,6 +930,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <div style="background:var(--surface);border-radius:16px;padding:24px;width:460px;max-width:95vw;">
         <div class="spending-review-heading"><h3 id="spending-review-title">A quick spending check</h3><button type="button" aria-label="Close spending check" onclick="fpCloseSpendingReview()">✕</button></div>
         <div id="spending-review-content"></div>
+      </div>
+    </div>
+    <div id="payday-overlay" style="position:fixed;inset:0;background:rgba(26,25,22,.5);backdrop-filter:blur(4px);z-index:330;display:none;align-items:center;justify-content:center;">
+      <div style="background:var(--surface);border-radius:16px;padding:24px;width:420px;max-width:95vw;">
+        <div class="spending-review-heading"><h3 id="payday-title">What did you receive?</h3><button type="button" aria-label="Close paycheck" onclick="fpClosePayday()">✕</button></div>
+        <p id="payday-date-label" class="goal-note"></p>
+        <label class="form-label" for="payday-actual">Amount received ($)</label><input class="form-input" id="payday-actual" inputmode="decimal" type="text">
+        <label class="form-label" for="payday-received" style="margin-top:12px;">Date received</label><input class="form-input" id="payday-received" type="date">
+        <p class="goal-note" style="margin:12px 0;">Only this payday changes. Future paychecks stay at your usual estimate. We check the date of your saved bank balance to avoid counting the deposit twice.</p>
+        <button id="payday-save" class="save-btn" onclick="fpSavePayday()">Save received paycheck</button><button type="button" class="btn btn-outline" onclick="fpClosePayday()">Cancel</button>
       </div>
     </div>
     <!-- WHAT IF MODAL -->
@@ -1104,10 +1117,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 <div id="edit-income-overlay" style="position:fixed;inset:0;background:rgba(26,25,22,0.5);backdrop-filter:blur(4px);z-index:300;display:none;align-items:center;justify-content:center;">
   <div style="background:var(--surface);border-radius:16px;padding:28px;width:420px;max-width:95vw;box-shadow:var(--shadow-md);max-height:88vh;overflow-y:auto;">
     <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:600;margin-bottom:4px;">Edit Your Income</div>
-    <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">Update your paycheck details anytime.</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">Use your usual amount to plan ahead. Confirm the actual amount each payday, especially if your hours change.</div>
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:10px;">Primary income</div>
     <div class="form-group">
-      <label class="form-label" for="ei-amount">How much do you take home each paycheck?</label>
+      <label class="form-label" for="ei-amount">What is your usual take-home pay?</label>
       <input class="form-input" type="number" id="ei-amount" min="0" step="0.01" placeholder="e.g. 1400" style="font-size:18px;padding:12px;">
     </div>
     <div class="form-group">
@@ -1247,7 +1260,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label" for="setup-payamount">How much do you take home each paycheck?</label>
+      <label class="form-label" for="setup-payamount">What is your usual take-home pay?</label>
       <input class="form-input" type="number" id="setup-payamount" placeholder="e.g. 1400" oninput="fpRefreshPayQuestion('setup-balance')">
       <p class="goal-note" style="font-size:11px;margin-top:6px;">No regular paycheck? Leave this blank or enter 0. You can add other income later.</p>
     </div>
@@ -2733,15 +2746,17 @@ function fpDayEvents(year, month, opts) {
   for (let d = 1; d <= daysInMonth; d++) dayMap[d] = { income: [], expenses: [], bills: [], loans: [], balance: 0 };
 
   const payAmt = parseFloat(userSettings.payAmount) || 0;
-  const recordedIncome = transactions.filter(function(t) { return t.type === 'income' && !t.recurring && fpIsPaycheckRecord(t) && (parseFloat(t.amount) || 0) >= payAmt * 0.5 && fpParseIso(String(t.date).slice(0, 10)); });
+  const effectiveRows=fpEffectiveIncomeRows(transactions);
+  const recordedIncome = effectiveRows.filter(function(t) { return t.type === 'income' && !t.recurring && fpIsPaycheckRecord(t) && ((parseFloat(t.amount) || 0) >= payAmt * 0.5 || fpPrimaryPaydayKey(t)) && fpParseIso(String(t.date).slice(0, 10)); });
   getPayDatesForMonth(year, month).forEach(pd => {
     const day = pd.getDate();
-    const covered = recordedIncome.some(function(r) { return Math.abs(fpDaysBetween(fpParseIso(String(r.date).slice(0, 10)), pd)) <= 3; });
-    if (dayMap[day] && !covered) dayMap[day].income.push({ description: 'Paycheck', amount: userSettings.payAmount, id: 'pay_' + day });
+    const linked=fpRecordedPayday(fpIso(pd),transactions,payAmt);
+    const covered = linked.linked||recordedIncome.some(function(r) { return fpPrimaryPaydayKey(r)?fpPrimaryPaydayKey(r)===fpIso(pd):Math.abs(fpDaysBetween(fpParseIso(String(r.date).slice(0, 10)), pd)) <= 3; });
+    if (dayMap[day] && !covered) dayMap[day].income.push({ description: 'Paycheck', amount: userSettings.payAmount, id: 'pay_' + day, date:fpIso(pd), type:'income', _payday:fpIso(pd), _estimated:true });
   });
 
   const prefix = year + '-' + String(month + 1).padStart(2, '0');
-  transactions.forEach(t => {
+  effectiveRows.forEach(t => {
     if (t.type === 'note') return;
     // Card charges increase card debt; they do not leave the bank account at purchase time.
     if (String(t.lender||'').startsWith('import:card:') && t.type !== 'loan') return;
@@ -2852,6 +2867,101 @@ function renderCalendar() {
 
 function fmt(n) { const amount=Math.abs(parseFloat(n));return amount.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(Math.round(amount*100)/100)?0:2, maximumFractionDigits: 2 }); }
 function fpLoanBalanceAmount(loan) { return Math.max(0,parseFloat(loan.balance == null || loan.balance === '' ? loan.amount : loan.balance) || 0); }
+// A received paycheck belongs to one scheduled payday; the usual pay amount stays an estimate.
+function fpPrimaryPaydayKey(t) {
+  const m=String(t.lender||'').match(/^paycheck:primary:(\d{4}-\d{2}-\d{2})$/);return m?m[1]:null;
+}
+
+function fpPaydayBankMatches(rows) {
+  const manual=rows.filter(t=>t.type==='income'&&fpPrimaryPaydayKey(t)&&fpParseIso(t.date)),banks=rows.filter(t=>t.type==='income'&&!t.recurring&&String(t.lender||'').startsWith('import:bank:')&&fpIsPaycheckRecord(t)&&fpParseIso(t.date)),matched=new Map();
+  manual.forEach(t=>{const candidates=banks.filter(b=>(!t.user_id||!b.user_id||t.user_id===b.user_id)&&Math.abs(Number(b.amount)-Number(t.amount))<.005&&Math.abs(fpDaysBetween(fpParseIso(b.date),fpParseIso(t.date)))<=3);if(candidates.length===1){const b=candidates[0],owners=manual.filter(m=>(!m.user_id||!b.user_id||m.user_id===b.user_id)&&Math.abs(Number(b.amount)-Number(m.amount))<.005&&Math.abs(fpDaysBetween(fpParseIso(b.date),fpParseIso(m.date)))<=3);if(owners.length===1)matched.set(String(t.id),b);}});return matched;
+}
+
+function fpPaydayConflicts(rows) {
+  const manual=rows.filter(t=>t.type==='income'&&fpPrimaryPaydayKey(t)&&fpParseIso(t.date)),banks=rows.filter(t=>t.type==='income'&&String(t.lender||'').startsWith('import:bank:')&&fpIsPaycheckRecord(t)&&fpParseIso(t.date));
+  return manual.filter(t=>manual.filter(m=>fpPrimaryPaydayKey(m)===fpPrimaryPaydayKey(t)).length>1||banks.filter(b=>(!t.user_id||!b.user_id||t.user_id===b.user_id)&&Math.abs(Number(b.amount)-Number(t.amount))<.005&&Math.abs(fpDaysBetween(fpParseIso(b.date),fpParseIso(t.date)))<=3).length>1);
+}
+function fpReviewPaycheckRecords() {
+  const first=fpPaydayConflicts(transactions)[0];if(!first)return;const d=fpParseIso(first.date);currentYear=d.getFullYear();currentMonth=d.getMonth();showView('calendar',null);renderCalendar();updateStats();openDayPanel(d.getDate());
+}
+
+function fpEffectiveIncomeRows(rows) {
+  const matched=fpPaydayBankMatches(rows);return rows.filter(t=>!matched.has(String(t.id)));
+}
+
+function fpRecordedPayday(date,rows,expected) {
+  const eligible=rows.filter(t=>t.type==='income'&&!t.recurring&&fpIsPaycheckRecord(t)&&Number(t.amount)>0&&fpParseIso(t.date));
+  const exact=eligible.filter(t=>fpPrimaryPaydayKey(t)===date);
+  if(exact.length){const matches=fpPaydayBankMatches(rows);return {record:exact.length===1?(matches.get(String(exact[0].id))||exact[0]):null,ambiguous:exact.length>1,linked:true};}
+  const close=eligible.filter(t=>!fpPrimaryPaydayKey(t)&&Number(t.amount)>=expected*.5&&Math.abs(fpDaysBetween(fpParseIso(t.date),fpParseIso(date)))<=3);
+  return {record:close.length===1?close[0]:null,ambiguous:close.length>1,linked:false};
+}
+function fpPaydayDatesAround(asOf,back=35,ahead=3) {
+  const A=fpParseIso(asOf),from=fpIso(fpAddDays(A,-back)),to=fpIso(fpAddDays(A,ahead)),dates=[];
+  for(let D=new Date(A.getFullYear(),A.getMonth()-2,1,12);fpIso(D)<=to;D=new Date(D.getFullYear(),D.getMonth()+1,1,12))getPayDatesForMonth(D.getFullYear(),D.getMonth()).forEach(d=>{const iso=fpIso(d);if(iso>=from&&iso<=to)dates.push(iso);});
+  return [...new Set(dates)].sort();
+}
+function fpPaydayPrompt(asOf,dates,rows,expected) {
+  if(!(expected>0))return null;
+  return dates.filter(date=>date<=asOf&&fpDaysBetween(fpParseIso(date),fpParseIso(asOf))<=7).sort().reverse().map(date=>({date,...fpRecordedPayday(date,rows,expected)})).find(x=>!x.record&&!x.ambiguous)||null;
+}
+let _fpPaydayDraft=null;
+let _fpPaydaySaving=false;
+function fpOpenPayday(date) {
+  if(!currentUser||_fpMutationBusy||_fpPaydaySaving)return;
+  const today=fpIso(new Date()),scheduled=fpPaydayDatesAround(date,3,3).includes(date),found=fpRecordedPayday(date,transactions,Number(userSettings.payAmount)||0);
+  if(!scheduled&&!found.linked){showToast('Check your payday schedule first.','error');return;}
+  if(found.ambiguous){showToast('Several deposits may match. Review your income records before adding another.','error');return;}
+  if(found.record&&fpIsStatementRecord(found.record)){fpOpenStatementRecord(found.record.id);return;}
+  if(date>today&&!found.record){showToast('This is an estimate. Confirm it after the money arrives.');return;}
+  _fpPaydayDraft={uid:currentUser.id,date,id:found.record?.id||null,version:_dataLoadVersion};
+  document.getElementById('payday-date-label').textContent='For your '+fpDateLabel(date)+' payday';
+  document.getElementById('payday-actual').value=Number(found.record?.amount||userSettings.payAmount).toFixed(2);
+  document.getElementById('payday-received').value=found.record?.date||date;
+  document.getElementById('payday-received').max=today;
+  document.getElementById('payday-save').textContent=found.record?'Update this paycheck':'Save received paycheck';
+  document.getElementById('payday-save').disabled=false;
+  document.getElementById('payday-overlay').style.display='flex';
+}
+function fpClosePayday(){if(_fpMutationBusy||_fpPaydaySaving)return;document.getElementById('payday-overlay').style.display='none';_fpPaydayDraft=null;}
+async function fpSavePayday() {
+  const draft=_fpPaydayDraft;if(!draft||!currentUser||currentUser.id!==draft.uid||draft.version!==_dataLoadVersion||_fpMutationBusy||_fpPaydaySaving)return false;
+  const amount=fpParseMoney(document.getElementById('payday-actual').value),date=document.getElementById('payday-received').value,today=fpIso(new Date());
+  if(!(amount>0)||!fpParseIso(date)||fpIso(fpParseIso(date))!==date||date>today||Math.abs(fpDaysBetween(fpParseIso(draft.date),fpParseIso(date)))>7){showToast('Enter the amount received and a date within a week of this payday, no later than today.','error');return false;}
+  const found=fpRecordedPayday(draft.date,transactions,Number(userSettings.payAmount)||0);
+  if(found.ambiguous||found.record&&String(found.record.id)!==String(draft.id)||draft.id&&!found.record){showToast('The matching income changed. Reopen this paycheck before saving.','error');return false;}
+  const button=document.getElementById('payday-save');button.disabled=true;_fpPaydaySaving=true;
+  try {
+  if(!draft.id){
+    let fresh;try{fresh=await sb.from('transactions').select('*').eq('user_id',draft.uid).eq('lender','paycheck:primary:'+draft.date);}catch(e){fresh={error:e};}
+    if(!currentUser||currentUser.id!==draft.uid||draft.version!==_dataLoadVersion)return false;
+    const pending=fpPendingOperation('insert'),ownIds=new Set(pending&&pending.records?pending.records.map(r=>r.id):[]);
+    if(fresh.error||!Array.isArray(fresh.data)||fresh.data.some(r=>!ownIds.has(r.id))){button.disabled=false;showToast(fresh.error?'Could not check this payday. Try again.':'This payday was already saved. Refresh to review the recorded paycheck.','error');return false;}
+  }
+  const record={type:'income',description:'Paycheck',amount,date,category:'paycheck',recurring:false,frequency:null,anchor_date:null,lender:'paycheck:primary:'+draft.date};
+  const saved=draft.id?await fpUpdateTransaction(draft.id,record):await saveTxn(record);
+  if(!currentUser||currentUser.id!==draft.uid||draft.version!==_dataLoadVersion)return false;
+  button.disabled=false;if(!saved)return false;
+  _fpPaydaySaving=false;fpClosePayday();renderCalendar();updateStats();renderBottomSheetBody();renderHistory();
+  showToast('This paycheck updated. Future paychecks still use your usual estimate.');return true;
+  } finally {_fpPaydaySaving=false;button.disabled=false;}
+}
+function fpConfirmUsualPayday(date){fpOpenPayday(date);if(_fpPaydayDraft&&_fpPaydayDraft.date===date)fpSavePayday();}
+function fpPaydayNotYet(date){if(_fpPaydaySaving||_fpMutationBusy)return;try{sessionStorage.setItem('fp_payday_later_'+currentUser.id+'_'+date,fpIso(new Date()));}catch(e){}fpRenderPaydayPrompt();}
+function fpRenderPaydayPrompt() {
+  const box=document.getElementById('payday-check');if(!box||!currentUser)return;
+  const today=fpIso(new Date()),p=fpPaydayPrompt(today,fpPaydayDatesAround(today),transactions,Number(userSettings.payAmount)||0);
+  let dismissed=false;try{dismissed=p&&sessionStorage.getItem('fp_payday_later_'+currentUser.id+'_'+p.date)===today;}catch(e){}
+  box.hidden=!p||dismissed;if(box.hidden){box.innerHTML='';return;}
+  box.innerHTML='<div><strong>'+(p.date===today?'It’s payday.':'A quick payday check.')+'</strong><p>Did your usual $'+fmt(userSettings.payAmount)+' arrive for '+fpDateLabel(p.date)+'?</p></div><div class="payday-actions"><button class="btn btn-solid" onclick="fpConfirmUsualPayday(\''+p.date+'\')">Confirm $'+fmt(userSettings.payAmount)+'</button><button class="btn btn-outline" onclick="fpOpenPayday(\''+p.date+'\')">Different amount</button><button class="btn btn-outline" onclick="fpPaydayNotYet(\''+p.date+'\')">Not yet</button></div>';
+}
+function fpPaydayDayHTML(date) {
+  const expected=Number(userSettings.payAmount)||0,found=fpRecordedPayday(date,transactions,expected),scheduled=getPayDatesForMonth(fpParseIso(date).getFullYear(),fpParseIso(date).getMonth()).some(d=>fpIso(d)===date),today=fpIso(new Date());
+  if(!expected||!scheduled&&!found.linked)return '';
+  const record=found.record,label=record?'Received paycheck':'Estimated paycheck',amount=record?Number(record.amount):expected;
+  return '<div class="payday-day"><div><strong>'+label+' · $'+fmt(amount)+'</strong><p>'+(record?'For '+fpDateLabel(date)+(record.date!==date?' · received '+fpDateLabel(record.date):''):'Future paychecks use your usual amount. Confirm what arrived for this date.')+'</p></div>'+(found.ambiguous?'<p>Several deposits may match. Review your income records.</p>':date<=today?'<button class="btn btn-outline" onclick="fpOpenPayday(\''+date+'\')">'+(record?(fpIsStatementRecord(record)?'View paycheck':'Edit this paycheck'):'Confirm paycheck')+'</button>':'')+'</div>';
+}
+
 function fpIsPaycheckRecord(txn) { return txn.category === 'paycheck' || /\b(?:paycheck|payroll|salary|wages|pay deposit)\b/i.test(txn.description || ''); }
 
 // ── ICON SYSTEM ──────────────────────────────────────────────────
@@ -3281,10 +3391,10 @@ function fpNearPaycheck(asOfIso) {
   const found = [];
   [0, 1].forEach(function(k) {
     const mo = new Date(a.getFullYear(), a.getMonth() + k, 1, 12);
-    getPayDatesForMonth(mo.getFullYear(), mo.getMonth()).forEach(function(pd) { const iso = fpIso(pd); if (iso >= asOfIso && iso <= endIso) found.push(iso); });
+    getPayDatesForMonth(mo.getFullYear(), mo.getMonth()).forEach(function(pd) { const iso = fpIso(pd); const actual=fpRecordedPayday(iso,transactions,Number(userSettings.payAmount)||0).record;const receipt=actual?actual.date:iso;if(receipt>=asOfIso&&receipt<=endIso)found.push({date:receipt,amount:actual?Number(actual.amount):Number(userSettings.payAmount)||0}); });
   });
-  found.sort();
-  return found.length ? { date: found[0], amount: parseFloat(userSettings.payAmount) || 0 } : null;
+  found.sort((a,b)=>a.date.localeCompare(b.date));
+  return found.length?found[0]:null;
 }
 // { status: 'ok' | 'stale' | 'undated' | 'mismatch' | 'future', amount, asOf, ageDays, paycheck: { date, amount, included } | null }
 // paycheck.included is true / false only when the stored answer is about the paycheck the current schedule puts near the balance date.
@@ -3421,7 +3531,7 @@ function fpDatedTimeline(A, anchor, days, paidMarks) {
         const amt = parseFloat(i.amount) || 0, isPay = String(i.id || '').indexOf('pay_') === 0, oneTime = !isPay && !i.recurring;
         const entry = { date: iso, amount: amt, description: i.description || 'Income', primary: isPay };
         const add = function(projected) { bal += amt; counted.push({ description: entry.description, amount: amt, id: i.id, primary: isPay, projected: projected }); };
-        const isAsked = pc && (isPay ? iso === pc.date : (oneTime && fpIsPaycheckRecord(i) && Math.abs(fpDaysBetween(fpParseIso(iso), fpParseIso(pc.date))) <= 3 && amt >= pc.amount * 0.5));
+        const isAsked = pc && (isPay ? iso === pc.date : (oneTime && fpIsPaycheckRecord(i) && Math.abs(fpDaysBetween(fpParseIso(iso), fpParseIso(pc.date))) <= 3 && (fpPrimaryPaydayKey(i)||amt >= pc.amount * 0.5)));
         if (isAsked) {
           if (pc.included === true) return;                          // already in the entered balance
           if (pc.included === null) { uncertain.push(entry); return; }
@@ -3625,7 +3735,7 @@ function fpPrioritySnapshot(asOf, opts) {
   // everyday spending. (v149: only confident matches are excluded; a same-named purchase still counts as spending.)
   const usedIds = {};
   obligations.forEach(function(o) { if (o.kind !== 'loan') fpConfidentPayments(o.t, txns, asOfIso).forEach(function(p) { usedIds[String(p.id)] = 1; }); });
-  const varTx = txns.filter(function(t) { return t.type === 'expense' && !t.recurring && t.category !== 'loan_payment' && t.category !== 'card_transfer' && !usedIds[String(t.id)]; });
+  const varTx = txns.filter(function(t) { return t.type === 'expense' && !t.recurring && !fpIsCardInterestRow(t) && t.category !== 'loan_payment' && t.category !== 'card_transfer' && !usedIds[String(t.id)]; });
   const lbFrom = fpIso(fpAddDays(A, -(cfg.LOOKBACK - 1)));
   let sum30 = 0, n30 = 0, badRows = 0, firstSpend = null, lastSpend = null;
   const spendDays = {};
@@ -3739,6 +3849,7 @@ function fpPrioritySnapshot(asOf, opts) {
 
   // --- cash available for anything optional (extra debt payments, savings): every check must pass, see the safety model above
   const blockers = [];
+  if(fpPaydayConflicts(txns).length)blockers.push('paycheck_conflict');
   if (anchor.status !== 'ok') blockers.push('balance_' + (anchor.status === 'stale' ? 'stale' : anchor.status));
   if (!hasPay) blockers.push('no_income');
   else {
@@ -4177,11 +4288,15 @@ function fpPriorityShortcut(code) {
   if(['overdue_loan','unverified_loan','due_loan','extra_debt'].includes(code))return {label:'Review loan',destination:'loans'};
   if(['goal_room','on_track','payday_buffer'].includes(code))return {label:'Plan a goal',destination:'plan'};
   if(['shortfall','negative_month','below_buffer','due_expense'].includes(code))return {label:'Review spending',destination:'expenses'};
+  if(code==='paycheck_conflict')return {label:'Review paychecks',destination:'paycheck_records'};
+  if(code==='card_cycle')return {label:'Review everyday card plan',destination:'loans'};
   if(code==='spending_review')return {label:'Check large purchases',destination:'spending_review'};
   if(code==='setup_income')return {label:'Add income',destination:'income'};
   return null;
 }
 function fpOpenPriority(destination) {
+  if(destination==='paycheck_records'){fpReviewPaycheckRecords();return;}
+  if(destination==='payday'){const p=fpPaydayPrompt(fpIso(new Date()),fpPaydayDatesAround(fpIso(new Date())),transactions,Number(userSettings.payAmount)||0);if(p)fpOpenPayday(p.date);return;}
   if(destination==='spending_review'){fpOpenSpendingReview();return;}
   if(destination==='balance'||destination==='income') {
     const today=new Date();currentYear=today.getFullYear();currentMonth=today.getMonth();showView('calendar',null);renderCalendar();updateStats();
@@ -4206,6 +4321,7 @@ function renderPriorityReport() {
   const dateEl = document.getElementById('priority-date');
   if (!el) return;
   const today = new Date();
+  fpRenderPaydayPrompt();
   const dayOfWeek = today.getDay(); // 0=Sun..6=Sat, matches the calendar grid's row layout
   const weekStart = new Date(today); weekStart.setDate(today.getDate() - dayOfWeek);
   const weekEnd = new Date(today); weekEnd.setDate(today.getDate() + (6 - dayOfWeek));
@@ -4239,6 +4355,8 @@ function renderPriorityReport() {
   const actions = built.actions;
   const spendingHistory=fpSpendingHistory(fpParseIso(snap.asOf),snap);
   if(spendingHistory.pending.length)actions.push({id:'spending-review',code:'spending_review',level:'p2',text:'Were these large purchases unusual? A quick check helps us estimate everyday spending before suggesting extra debt payments or savings.'});
+  if(fpPaydayConflicts(transactions).length)actions.unshift({id:'paycheck-conflict',code:'paycheck_conflict',level:'p1',text:'A deposit may be counted twice. Review the paycheck records before relying on your money estimates.'});
+  const cardCycle=fpCardCycleSnapshot();if(cardCycle&&(cardCycle.evidence.purchases>0||cardCycle.evidence.afterPayoff>0))actions.push({id:'card-cycle',code:'card_cycle',level:'p2',text:'Keep everyday purchases from undoing your payoff progress. Review a spending plan for '+fpEscHtml(cardCycle.loan.description)+'.'});
   const paymentChanges=fpDebtPaymentRecommendations();if(paymentChanges.length)actions.unshift({id:'review-extra-payments',code:'payment_plan_review',level:'p1',text:'Money is tight. Pause extra debt payments, including on the focused debt. Review lower payments: '+paymentChanges.map(l=>'<strong>'+fpEscHtml(l.name)+'</strong> ($'+fmt(l.current)+' → $'+fmt(l.minimum)+'/month)').join('; ')+'. Required minimums remain due.'});
   if (actions.length === 0) {
     if (transactions.some(t=>t.type==='bill'||t.type==='expense'||t.type==='loan')) {
@@ -4353,7 +4471,7 @@ function updateStats() {
   try { renderSpendingRings(); } catch(e) { console.error('rings:', e); }
   try { renderPriorityReport(); } catch(e) { console.error('priority:', e); }
   try { updateBillBadge(); } catch(e) {}
-  try { if(document.getElementById('view-loans').style.display==='block')fpRenderDebtPaymentRecommendations(); } catch(e) {}
+  try { if(document.getElementById('view-loans').style.display==='block'){fpRenderDebtPaymentRecommendations();fpRenderCardCycle();} } catch(e) {}
   // Update history graph live if that view is currently active
   try { if (document.getElementById('view-history') && document.getElementById('view-history').style.display !== 'none') renderHistory(); } catch(e) {}
 
@@ -4543,7 +4661,7 @@ function renderBottomSheetBody() {
     { id:'other',    label:'Other',     emoji:'＋' },
   ];
 
-  let html = '';
+  let html = day?fpPaydayDayHTML(currentYear+'-'+fpPad2(currentMonth+1)+'-'+fpPad2(day)):'';
 
   // Existing transactions for this day
   if (dayTxns.length > 0) {
@@ -4552,7 +4670,7 @@ function renderBottomSheetBody() {
       + dayTxns.map(function(t) {
           const isIncome = t.type === 'income';
           const isLoanAccount = t.type === 'loan'; // this IS the loan's own record, not a payment, never delete it from here
-          const actionBtn = fpIsStatementRecord(t)?'<button class="bs-txn-del" onclick="fpOpenStatementRecord(\''+t.id+'\')">View</button>':isLoanAccount
+          const actionBtn = fpPrimaryPaydayKey(t)?'<button class="bs-txn-del" onclick="fpOpenPayday(\''+fpPrimaryPaydayKey(t)+'\')">Edit</button><button class="bs-txn-del" aria-label="Remove manual paycheck" onclick="deleteTxnWithUndo(\''+t.id+'\').then(function(){renderBottomSheetBody();})">✕</button>':fpIsStatementRecord(t)?'<button class="bs-txn-del" onclick="fpOpenStatementRecord(\''+t.id+'\')">View</button>':isLoanAccount
             ? '<button class="bs-txn-del" title="Manage this loan from Loans & Debt" onclick="closeBottomSheet();showView(\'loans\',null);" style="font-size:10px;white-space:nowrap;">Manage &#8250;</button>'
             : '<button class="bs-txn-del" onclick="deleteTxnWithUndo(\'' + t.id + '\').then(function(){renderBottomSheetBody();})">&#10005;</button>';
           return '<div class="bs-txn-item">'
@@ -5110,7 +5228,7 @@ function fpPaymentMonthlyPicture(budget,payment) {
 }
 function fpSimpleMissing(text) {
   const next=fpMissingMoneyAction(text);
-  return ({spending:'Check the large purchases in your statements before we suggest extra.',balance:'Add your current bank balance first.',income:'Check your income and next payday first.',goals:'Refresh your saved goals first.',bills:'Check which bills and debt payments have already been paid.',loans:'Check the missing loan details first.',import:'Add recent spending so we can see what everyday life costs.',plan:'Check your saved goal plans first.'})[next.kind];
+  return ({paycheck_records:'Check the paycheck records that may count the same deposit twice.',spending:'Check the large purchases in your statements before we suggest extra.',balance:'Add your current bank balance first.',income:'Check your income and next payday first.',goals:'Refresh your saved goals first.',bills:'Check which bills and debt payments have already been paid.',loans:'Check the missing loan details first.',import:'Add recent spending so we can see what everyday life costs.',plan:'Check your saved goal plans first.'})[next.kind];
 }
 function fpPaymentCalculationHTML(budget,a,payment) {
   if(a.status==='invalid')return '<strong>Check the amount</strong><p>Choose at least $'+fmt(budget.minimum)+' per month.</p>';
@@ -5148,6 +5266,43 @@ function fpExplainPaymentNumber(kind,refresh) {
   box.innerHTML='<button type="button" class="explanation-close" onclick="fpClosePaymentExplanation()">Close explanation</button>'+html;box.dataset.kind=kind;box.hidden=false;document.querySelectorAll('[data-explain="'+kind+'"]').forEach(b=>b.setAttribute('aria-expanded','true'));if(!refresh){box.focus({preventScroll:true});box.scrollIntoView({block:'nearest'});}
 }
 function fpClosePaymentExplanation() {const box=document.getElementById('wi-number-explanation');if(!box)return;box.hidden=true;document.querySelectorAll('[data-explain]').forEach(b=>b.setAttribute('aria-expanded','false'));const button=document.querySelector('[data-explain="'+box.dataset.kind+'"]');if(button)button.focus();}
+// Coaching uses matched account evidence; it never changes a statement balance or infers a payment that was not recorded.
+function fpCardSource(loan) {
+  const m=String(loan.lender||'').match(/(?:^|\|)\s*account:([^|]+)/);return m?m[1].trim().replace(/:installments$/,''):null;
+}
+function fpCardUseEvidence(loan,rows,asOf) {
+  rows=rows.filter(t=>!loan.user_id||t.user_id===loan.user_id);
+  const source=fpCardSource(loan),ids=new Set(loan._cardIds||[loan.id]),cutoff=fpIso(fpAddDays(fpParseIso(asOf),-89));
+  const activity=source?rows.filter(t=>t.type==='expense'&&!t.recurring&&t.lender===source&&t.date>=cutoff&&t.date<=asOf&&Number(t.amount)>0&&!['card_transfer','loan_payment'].includes(t.category)):[];
+  const latest=activity.map(t=>t.date).sort().at(-1)||null,from=latest?fpIso(fpAddDays(fpParseIso(latest),-29)):null;
+  const recent=activity.filter(t=>t.date>=from),interest=recent.filter(t=>/\binterest\b/i.test(t.description||'')),fees=recent.filter(t=>!interest.includes(t)&&/\b(?:annual|late|membership|returned payment) fee\b/i.test(t.description||''));
+  const purchases=recent.filter(t=>!interest.includes(t)&&!fees.includes(t)),payments=rows.filter(t=>t.type==='expense'&&t.category==='loan_payment'&&ids.has(t.loan_id)&&t.date>=from&&t.date<=latest);
+  const sum=list=>fpRound2(list.reduce((n,t)=>n+Number(t.amount),0)),purchased=sum(purchases),chargedInterest=sum(interest),chargedFees=sum(fees),paid=sum(payments);
+  const payoff=String(loan.lender||'').match(/\| paid_off:(\d{4}-\d{2}-\d{2})/),afterPayoff=payoff?sum(activity.filter(t=>t.date>payoff[1]&&!/\binterest\b|\bfee\b/i.test(t.description||''))):0;
+  return {source,from,through:latest,purchases:purchased,interest:chargedInterest,fees:chargedFees,payments:paid,paymentCount:payments.length,stale:!latest||fpDaysBetween(fpParseIso(latest),fpParseIso(asOf))>45,afterPayoff,recordedPressure:payments.length?fpRound2(purchased+chargedInterest+chargedFees-paid):null};
+}
+function fpCardCycleAdvice(loan,evidence,budgetStatus) {
+  if(evidence.afterPayoff>0&&fpLoanBalanceAmount(loan)<=.005)return {kind:'reuse',title:'Keep this card from building up again',text:'New purchases appear after you marked this card paid off. Set aside the cost of those purchases and check the current card balance before moving all of its old payment to another debt.'};
+  if(budgetStatus==='red')return {kind:'cash_gap',title:'Make room for everyday life first',text:'Bigger debt payments could leave you needing the card again. Cover essentials and minimums first, then see what is left for extra payments.'};
+  if(evidence.stale)return {kind:'refresh',title:'Check what is still going on the card',text:'Your payoff estimate assumes no new purchases. Add recent statements so we can see whether everyday spending is rebuilding the balance.'};
+  if(evidence.purchases>0)return {kind:'pause',title:'Keep new spending off your payoff card',text:'Pause new purchases on '+loan.description+' when you can. Keep minimums on your other debts. Moving purchases to another card with debt can keep the cycle going.'};
+  return {kind:'steady',title:'Give each new purchase its own money',text:'Keep money aside for everyday purchases before adding extra to old debt. A payoff date assumes you stop adding to that balance.'};
+}
+function fpCardCycleSnapshot() {
+  const asOf=fpIso(new Date()),loans=fpLoanDisplayEntries(transactions.filter(t=>t.type==='loan'&&(!t.user_id||currentUser&&t.user_id===currentUser.id))),cards=loans.filter(l=>/credit card/i.test(l.category||l.lender||''));
+  const focused=cards.find(l=>l.id===fpFocusedLoanId())||cards.filter(l=>fpLoanBalanceAmount(l)>0).sort((a,b)=>fpLoanBalanceAmount(a)-fpLoanBalanceAmount(b))[0]||cards[0];
+  if(!focused)return null;
+  const reuse=cards.map(l=>({loan:l,evidence:fpCardUseEvidence(l,transactions,asOf)})).find(x=>x.evidence.afterPayoff>0&&fpLoanBalanceAmount(x.loan)<=.005);
+  if(reuse)return {...reuse,asOf};return {loan:focused,evidence:fpCardUseEvidence(focused,transactions,asOf),asOf};
+}
+function fpRenderCardCycle() {
+  const root=document.getElementById('card-use-plan');if(!root)return;const snap=fpCardCycleSnapshot();root.hidden=!snap;if(!snap){root.innerHTML='';return;}
+  const {loan,evidence:e}=snap,budget=fpLoanBalanceAmount(loan)>0&&fpLoanRateKnown(loan)?fpWhatIfBudget(loan):null,status=budget?fpPaymentAssessment(budget,budget.minimum).status:'unknown',a=fpCardCycleAdvice(loan,e,status);
+  const activity=e.through?'<p class="goal-note">Latest imported activity: '+fpDateLabel(e.from)+'–'+fpDateLabel(e.through)+'. '+(e.stale?'Add newer statements before relying on this view.':'')+'</p><div class="card-cycle-figures"><span>New purchases<strong>$'+fmt(e.purchases)+'</strong></span><span>Interest recorded<strong>$'+fmt(e.interest)+'</strong></span><span>Payments recorded<strong>'+(e.paymentCount?'$'+fmt(e.payments):'Not recorded')+'</strong></span></div>':'<p class="goal-note">Import this card’s statements to match its purchases and payments.</p>';
+  const pressure=e.paymentCount&&e.recordedPressure>0?'<p class="goal-note">New purchases, fees and interest were $'+fmt(e.recordedPressure)+' more than the payments recorded in this window.</p>':'';
+  root.innerHTML='<div class="eyebrow">Your everyday card plan</div><h3>'+fpEscHtml(a.title)+'</h3><p>'+fpEscHtml(a.text)+'</p>'+activity+pressure+'<details><summary>How to use a card without rebuilding debt</summary><p>Only use money you can spare after bills, minimums and essentials. If you use a separate card for everyday purchases, set aside their full cost and pay its statement in full. Do not assume a paid-off card has its interest-free period back; check with the issuer.</p><p>New purchases and interest need to be covered before the old balance can shrink. Imported purchases are spending; a bank payment to the card is a transfer, so the same purchase is not counted twice.</p><p><a href="https://www.consumerfinance.gov/ask-cfpb/what-is-a-grace-period-for-a-credit-card-en-47/" target="_blank" rel="noopener noreferrer">Why new purchases can accrue interest · CFPB</a></p></details><div class="goal-actions"><button class="btn btn-outline" onclick="openLoanEdit(\''+loan.id+'\')">Check current card balance</button>'+(fpLoanBalanceAmount(loan)>0?'<button class="btn btn-outline" onclick="openWhatIf(\''+loan.id+'\')">Review payment</button>':'')+'</div>';
+}
+
 function fpDebtPaymentRecommendations() {
   const loans=fpLoanDisplayEntries(transactions.filter(t=>t.type==='loan'&&fpLoanBalanceAmount(t)>0)),out=[];
   loans.forEach(l=>{const current=Number(l.min_payment==null?l.amount:l.min_payment)||0,minimum=fpPaymentMinimum(l);if(current<=minimum+.005||!fpLoanRateKnown(l))return;const budget=fpWhatIfBudget(l),a=fpPaymentAssessment(budget,current);if(['red','amber'].includes(a.status))out.push({id:l.id,name:l.description,current,minimum,freed:fpRound2(current-minimum),status:a.status});});return out;
@@ -5197,6 +5352,7 @@ function openWhatIf(loanId) {
     + '<div class="wi-range-wrap"><div id="whatif-zone-bar" class="wi-budget-band" aria-hidden="true"></div><input type="range" id="whatif-slider" aria-labelledby="wi-payment-label" aria-describedby="wi-assessment-text" min="'+minPay+'" max="'+sliderMax+'" step="0.01" value="'+sliderStartVal+'" oninput="_fpWhatIfInputInvalid=false;updateWhatIf()"></div>'
     + '<div class="wi-range-limits"><span id="wi-range-min">$'+fmt(minPay)+' minimum</span><span id="wi-range-max">$'+fmt(sliderMax)+' shown</span></div>'
     + '<div id="whatif-coach" class="wi-budget-status" role="status" aria-live="polite"><div class="wi-status-line"><strong id="wi-zone-label"></strong>'+fpNumberBadge('budget','Explain this money picture')+' </div><p id="wi-assessment-text"></p><button id="wi-check-details" class="btn btn-outline" onclick="fpWhatIfNextStep()" hidden>Check my numbers</button></div>'
+    + (/credit card/i.test(loan.category||loan.lender||'')?'<p class="goal-note" id="wi-card-assumption">Payoff dates assume no new purchases on this card. <button type="button" class="explanation-link" onclick="closeWhatIf();showView(\'loans\',null);document.getElementById(\'card-use-plan\').scrollIntoView({block:\'nearest\'});">Review everyday spending</button></p>':'')
     + '<div id="wi-suggestion"></div><div id="whatif-result" style="margin:14px 0;"></div>'
     + '<div id="wi-number-explanation" class="number-explanation" tabindex="-1" hidden></div>'
     + '<button id="whatif-apply-btn" class="save-btn" style="width:100%;margin-top:14px;" onclick="applyWhatIfPayment(\''+loan.id+'\')">Set this as my monthly payment</button>'
@@ -5645,7 +5801,7 @@ async function fpSaveManagedLoan(loan, changes) {
 }
 
 function renderLoans() {
-  fpRenderDebtPaymentRecommendations();
+  fpRenderDebtPaymentRecommendations();fpRenderCardCycle();
   const loans = fpLoanDisplayEntries(transactions.filter(function(t) { return t.type === 'loan'; }));
   const container = document.getElementById('loans-list');
   const empty = document.getElementById('loans-empty');
@@ -5937,9 +6093,10 @@ function fpSpendingEstimate(valid,span,cfg,review,uid) {
   const pending=candidates.filter(t=>!decision(t));
   return {candidates,excluded,pending,total:fpRound2(total),ordinaryTotal:fpRound2(ordinaryTotal),daily:span>0?Math.max(cfg.MIN_DAILY_SPEND,ordinaryTotal/span)*(1+cfg.SPEND_MARGIN):0,decisions};
 }
+function fpIsCardInterestRow(t) { return String(t.lender||'').startsWith('import:card:')&&t.type==='expense'&&/^(?:interest charge|purchase interest|interest on|finance charge)\b/i.test(String(t.description||'').trim()); }
 function fpSpendingHistory(A,snap) {
   const used=new Set();transactions.filter(t=>t.type==='bill'||t.type==='expense'&&t.recurring).forEach(t=>fpConfidentPayments(t,transactions,snap.asOf).forEach(p=>used.add(String(p.id))));
-  const hist=transactions.filter(t=>t.type==='expense'&&!t.recurring&&!used.has(String(t.id))&&!['loan_payment','card_transfer'].includes(t.category)&&t.date>=fpIso(fpAddDays(A,-89))&&t.date<=snap.asOf);
+  const hist=transactions.filter(t=>t.type==='expense'&&!t.recurring&&!fpIsCardInterestRow(t)&&!used.has(String(t.id))&&!['loan_payment','card_transfer'].includes(t.category)&&t.date>=fpIso(fpAddDays(A,-89))&&t.date<=snap.asOf);
   const valid=hist.filter(t=>fpParseIso(t.date)&&Number.isFinite(Number(t.amount))&&Number(t.amount)>0),days=new Set(valid.map(t=>t.date)),oldest=valid.map(t=>t.date).sort()[0],latest=valid.map(t=>t.date).sort().pop(),span=oldest?fpDaysBetween(fpParseIso(oldest),fpParseIso(latest))+1:0,cfg=fpPriorityConfig();
   const imported=valid.some(t=>String(t.lender||'').startsWith('import:'));
   const reliable=hist.length===valid.length&&days.size>=cfg.MIN_SPEND_DAYS&&span>=cfg.MIN_SPEND_SPAN&&latest&&fpDaysBetween(fpParseIso(latest),A)<=(imported?45:cfg.MAX_SPEND_GAP);
@@ -5984,6 +6141,7 @@ function fpGoalFinancialModel(asOf) {
   const codeText={spending_data_invalid:'Check the unreadable spending dates or amounts.',no_income:'Add your income and payday.',pay_schedule_unclear:'Confirm your payday schedule.',no_next_payday:'Confirm your next payday.',unconfirmed_income:'Update your bank balance to include pay that has arrived.',income_inclusion_unknown:'Confirm whether recent pay is included in your balance.',undated_items:'Add missing bill or debt due dates.',apr_missing:'Add the missing interest rates under Loans & Debt.',loan_data_missing:'Add missing debt balances and minimum payments.',payment_unmatched:'Confirm whether the matching bill payments were already paid.'};
   const incomeSources=transactions.filter(t=>t.type==='income'&&t.recurring&&Number(t.amount)>0);
   const usableSources=incomeSources.filter(t=>{const anchor=fpObligationStart(t);return anchor&&['weekly','biweekly','monthly','twicemonthly','yearly'].includes(t.frequency)&&(t.frequency!=='twicemonthly'||fpTwiceMonthlyDays(anchor,A.getFullYear(),A.getMonth()).certain)&&fpOccurrences(t,fpIso(fpAddDays(A,1)),end).length;});
+  if(fpPaydayConflicts(transactions).length)missing.push('Review repeated paycheck records before relying on income totals.');
   if(usableSources.length!==incomeSources.length)missing.push('Confirm the dates and repeat schedule for your additional income.');
   if(snap.unconfirmedIncome.length)missing.push(codeText.unconfirmed_income);
   snap.cash.blockers.forEach(code=>{
@@ -6054,6 +6212,7 @@ function fpGoalAssessment(goal,budget,asOf) {
 }
 
 function fpMissingMoneyAction(text) {
+  if(/repeated paycheck/i.test(text))return {kind:'paycheck_records',label:'Review paychecks'};
   if(/large purchases/i.test(text))return {kind:'spending',label:'Check large purchases'};
   if(/loan|debt|interest|rate/i.test(text)&&!/Refresh Bills|paid|outstanding|matching bill/i.test(text))return {kind:'loans',label:'Check loan details'};
   if(/balance|pay.*included|pay.*arrived/i.test(text))return {kind:'balance',label:'Update bank balance'};
@@ -6066,6 +6225,7 @@ function fpMissingMoneyAction(text) {
 }
 function fpResolveMoneyDetail(kind) {
   // Open these over the current screen: a typed goal stays exactly where it was.
+  if(kind==='paycheck_records'){fpReviewPaycheckRecords();return;}
   if(kind==='balance'){openEditBalance();return;}
   if(kind==='income'){openEditIncome();return;}
   if(kind==='spending'){fpOpenSpendingReview();return;}
@@ -7712,7 +7872,7 @@ function fpHistoryMonth(yr,mo,asOf) {
   const map=buildDayMap(yr,mo),startBal=getStartingBalanceForMonth(yr,mo),lastDay=new Date(yr,mo+1,0).getDate();
   let calendarIn=0,calendarOut=0;
   Object.values(map).forEach(function(day){day.income.forEach(function(t){calendarIn+=Number(t.amount)||0;});day.expenses.concat(day.bills,day.loans).forEach(function(t){calendarOut+=fpAmountDue(t);});});
-  const recorded=transactions.filter(function(t){return !t.recurring && t.category!=='card_transfer' && ['income','expense'].includes(t.type) && t.date>=first && t.date<=last && t.date<=today;});
+  const recorded=fpEffectiveIncomeRows(transactions).filter(function(t){return !t.recurring && t.category!=='card_transfer' && ['income','expense'].includes(t.type) && t.date>=first && t.date<=last && t.date<=today;});
   let recordedIn=0,recordedOut=0;const byCat={};
   recorded.forEach(function(t){const amount=Number(t.amount)||0;if(t.type==='income')recordedIn+=amount;else{recordedOut+=amount;const cat=t.category||'other';byCat[cat]=(byCat[cat]||0)+amount;}});
   const key=first.slice(0,7),anchor=monthBalances.__dated_balance;
@@ -7961,13 +8121,13 @@ function rippleDismiss() {
 }
 
 // Shared dialog behavior: only the active dialog handles keys or backdrop clicks.
-const fpDialogIds = ['spending-review-overlay','statement-record-overlay','paid-off-overlay','ripple-overlay','loan-delete-overlay','loan-edit-overlay','lp-info-overlay','add-income-overlay','connect-accounts-overlay','edit-expense-overlay','reassign-overlay','edit-balance-overlay','edit-income-overlay','setup-overlay','record-payment-overlay','rollover-overlay','whatif-overlay','stage-overlay','bottom-sheet'];
+const fpDialogIds = ['payday-overlay','spending-review-overlay','statement-record-overlay','paid-off-overlay','ripple-overlay','loan-delete-overlay','loan-edit-overlay','lp-info-overlay','add-income-overlay','connect-accounts-overlay','edit-expense-overlay','reassign-overlay','edit-balance-overlay','edit-income-overlay','setup-overlay','record-payment-overlay','rollover-overlay','whatif-overlay','stage-overlay','bottom-sheet'];
 let _fpDialogSequence=0;
 function fpTopDialog() {
   return fpDialogIds.map(id=>document.getElementById(id)).filter(el=>el&&el.getClientRects().length&&getComputedStyle(el).visibility!=='hidden').sort((a,b)=>Number(getComputedStyle(b).zIndex||0)-Number(getComputedStyle(a).zIndex||0)||Number(b.dataset.fpOpened||0)-Number(a.dataset.fpOpened||0))[0]||null;
 }
 function fpDismissDialog(id) {
-  const close={'spending-review-overlay':fpCloseSpendingReview,'statement-record-overlay':fpCloseStatementRecord,'paid-off-overlay':fpClosePaidOff,'connect-accounts-overlay':closeConnectAccounts,'record-payment-overlay':closeRecordPayment,'whatif-overlay':closeWhatIf,'ripple-overlay':rippleDismiss,'setup-overlay':closeSetup,'stage-overlay':closeStageModal,'bottom-sheet':closeBottomSheet};
+  const close={'payday-overlay':fpClosePayday,'spending-review-overlay':fpCloseSpendingReview,'statement-record-overlay':fpCloseStatementRecord,'paid-off-overlay':fpClosePaidOff,'connect-accounts-overlay':closeConnectAccounts,'record-payment-overlay':closeRecordPayment,'whatif-overlay':closeWhatIf,'ripple-overlay':rippleDismiss,'setup-overlay':closeSetup,'stage-overlay':closeStageModal,'bottom-sheet':closeBottomSheet};
   if(close[id]){close[id]();return;}
   const el=document.getElementById(id);if(el)el.style.display='none';
   if(id==='loan-delete-overlay')_loanDeleteId=null;
