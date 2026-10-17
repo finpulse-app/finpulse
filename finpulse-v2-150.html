@@ -4301,7 +4301,7 @@ function fpTodayFocus(snap,paidStatusReady=true) {
   if((snap.possiblePayments||[]).length)return {code:'possible_payment',tone:'attention',title:'Match a payment to its bill.',description:'A saved expense may cover a bill. Review its paid status so the same payment is not counted twice.',label:'Review bills',destination:'bills'};
   const due=(snap.dueThisWeek||[]).concat((snap.upcomingOneTime||[]).filter(o=>o.date>=snap.asOf&&o.date<=snap.weekEnd).map(o=>({...o,kind:'expense'}))).sort((a,b)=>a.date.localeCompare(b.date))[0];
   if(due){const when=fpDueDateText(due.date,snap.asOf),relative=when==='today'||when==='tomorrow';return {code:'due',tone:'attention',title:due.description+(relative?(due.kind==='expense'?' is scheduled for ':' is due ')+when+'.':' is coming up.'),description:'$'+fmt(due.amount)+' is scheduled for '+when+(relative?' ('+fpDateLabel(due.date)+')':'')+'. Check that the record and payment status are right.',label:due.kind==='loan'?'Review loan':due.kind==='bill'?'Review bill':'Review expense',destination:due.kind==='loan'?'loans':due.kind==='bill'?'bills':'expenses'};}
-  if(snap.monthNet!==null&&snap.monthNet<-.005)return {code:'shrinking',tone:'attention',title:'More is going out than coming in.',description:'Your calendar shows $'+fmt(snap.monthNet)+' more in outflows than income through month end. Review what is coming up.',label:'Review spending',destination:'expenses'};
+  if(snap.monthNet!==null&&snap.monthNet<-.005)return {code:'shrinking',tone:'attention',title:'More is going out than coming in.',description:'Your calendar shows $'+fmt(Math.abs(snap.monthNet))+' more in outflows than income through month end. Review what is coming up.',label:'Review spending',destination:'expenses'};
   if((snap.loans||[]).some(l=>!l.paidOff&&(l.balance===null||!(l.minPayment>0))))return {code:'loan_details',tone:'attention',title:'Fill in a missing loan detail.',description:'A loan needs its current balance or statement payment before the plan can account for it.',label:'Review loans',destination:'loans'};
   if(!(snap.upcoming||[]).length&&!(snap.upcomingOneTime||[]).length&&!(snap.loans||[]).some(l=>!l.paidOff))return {code:'add_bills',tone:'neutral',title:'Add the bills you need to cover.',description:'Give rent, subscriptions and other repeating charges a place in your calendar.',label:'Add a bill',destination:'bill_entry'};
   return {code:'purchase',tone:'neutral',title:'Check before you spend.',description:'Compare a purchase with your upcoming cash flow and see what keeping the money could mean for your future.',label:'Check a purchase',destination:'dreams'};
@@ -6284,10 +6284,10 @@ function fpResolveMoneyDetail(kind) {
   if(kind==='import'){openConnectAccounts();return;}
   fpOpenPriority(kind==='plan'?'plan':kind==='loans'?'loans':'bills');
 }
-function fpRefreshOpenMoneyViews() {
+function fpRefreshOpenMoneyViews(skipPlan=false) {
   if(!currentUser)return;
   const visible=id=>{const e=document.getElementById(id);return e&&e.style.display!=='none'&&e.getClientRects().length>0;};
-  if(visible('view-plan'))renderPlan();
+  if(!skipPlan&&visible('view-plan'))renderPlan();
   if(visible('whatif-overlay')&&currentWhatIfLoan) {
     const loan=fpManagedLoan(currentWhatIfLoan.id);
     if(!loan||fpLoanPaidOff(loan)){closeWhatIf();return;}
@@ -6345,9 +6345,9 @@ async function fpLoadGoals(render=true) {
       if(r.error)throw r.error;
       rows.push(...(r.data||[]));if(!r.data||r.data.length<500)break;
     }
-    _fpGoals=rows;_fpGoalsReady=true;if(render)renderPlan();return true;
+    _fpGoals=rows;_fpGoalsReady=true;if(render){renderPlan();renderPriorityReport();fpRefreshOpenMoneyViews(true);}return true;
   } catch(e) {
-    if(currentUser&&currentUser.id===uid&&version===_dataLoadVersion&&goalVersion===_fpGoalVersion){_fpGoalsReady=false;if(render)renderPlan();}
+    if(currentUser&&currentUser.id===uid&&version===_dataLoadVersion&&goalVersion===_fpGoalVersion){_fpGoalsReady=false;if(render){renderPlan();renderPriorityReport();fpRefreshOpenMoneyViews(true);}}
     return false;
   }
 }
@@ -6380,7 +6380,7 @@ async function fpWriteGoal(record) {
     if(!currentUser||currentUser.id!==uid||version!==_dataLoadVersion)return false;
     if(r.error||!r.data||r.data.id!==record.id||r.data.user_id!==uid)throw Error('Unconfirmed goal save');
     const index=_fpGoals.findIndex(g=>g.id===record.id);if(index<0)_fpGoals.push(r.data);else _fpGoals[index]=r.data;
-    renderPlan();return true;
+    renderPlan();renderPriorityReport();fpRefreshOpenMoneyViews(true);return true;
   } catch(e) {
     if(currentUser&&currentUser.id===uid&&version===_dataLoadVersion)showToast('Could not confirm the goal save. Your inputs are kept; retry to check the same goal.','error');
     return false;

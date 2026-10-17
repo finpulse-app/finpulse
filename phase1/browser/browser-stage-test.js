@@ -35,6 +35,10 @@ const hideStage=()=>page.evaluate(()=>{document.getElementById('stage-overlay').
   ok('T61 goal deposits are included in stage selection',await page.textContent('#priority-stage-badge')==='Stage 1: Stop the Bleed','saved goal commitments were ignored');
   await page.evaluate(()=>{_fpGoals[0].archived=true;updateStats();});
   ok('T61 removing a goal commitment refreshes stage guidance immediately',await page.textContent('#priority-stage-badge')==='Stage 3: Build','stage cache ignored changed goal plans');
+  db.financial_goals=[{id:'refreshed-goal',user_id:'user-A',name:'Updated plan',target_amount:100000,saved_amount:0,monthly_amount:5000,archived:false}];await page.evaluate(()=>fpLoadGoals());
+  ok('T61 reloading goals updates the calendar stage without a manual rerender',await page.textContent('#priority-stage-badge')==='Stage 1: Stop the Bleed','goal reload left stale calendar advice');
+  db.financial_goals=[];await page.evaluate(()=>fpLoadGoals());
+  ok('T61 a smaller refreshed goal plan restores Build without a manual rerender',await page.textContent('#priority-stage-badge')==='Stage 3: Build','goal reload did not restore current guidance');
   await page.evaluate(()=>{transactions.find(t=>t.id==='stage-student').apr=null;updateStats();});
   ok('T61 missing loan information asks for its editor instead of declaring Build',await page.textContent('#priority-stage-badge')==='Check your details'&&await page.textContent('#today-focus-button')==='Check loan details','missing loan information produced a confident stage');await page.click('#today-focus-button');
   ok('T61 missing-detail action opens Loans and preserves saved finances',await page.isVisible('#view-loans')&&JSON.stringify(db)===stageBefore&&reqlog.filter(r=>r.op!=='select').length===0,'stage review wrote finances or routed to the wrong page');

@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const source=fs.readFileSync(process.argv[2]||'finpulse-v2-150.html','utf8');
 function grab(name){const m=new RegExp('function '+name+'\\s*\\(').exec(source);if(!m)throw Error('Missing '+name);let start=source.indexOf('{',m.index),depth=0,end=start;for(;end<source.length;end++){if(source[end]==='{')depth++;else if(source[end]==='}'&&--depth===0)break;}return source.slice(m.index,end+1);}
 const c=vm.createContext({Date,Math,Number,Set,Map,JSON});
-for(const n of ['fpRound2','fpLoanBalanceAmount','fpStageCatalog','fpStageAssessment','fpStageNextStep','fpStagePriorityActions','fpSnowballOrder','fpMissingMoneyAction','fpSimpleMissing'])vm.runInContext(grab(n),c);
+for(const n of ['fpRound2','fpLoanBalanceAmount','fpStageCatalog','fpStageAssessment','fpStageNextStep','fpStagePriorityActions','fpSnowballOrder','fpMissingMoneyAction','fpSimpleMissing','fpPad2','fpIso','fpParseIso','fpDateLabel','fmt','fpDueDateText','fpTodayFocus'])vm.runInContext(grab(n),c);
 const snap=()=>({asOf:'2026-10-08',balanceBasis:{status:'ok'},overdue:[],unverified:[],possiblePayments:[],unconfirmedIncome:[],uncertainIncome:[],firstNegative:null,loans:[]});
 const budget=()=>({low:800,available:200,buffer:500,missing:[],risks:[]});
 let pass=0,fail=0;function t(name,fn){try{fn();pass++;console.log('PASS '+name)}catch(e){fail++;console.log('FAIL '+name+' -> '+e.message)}}
@@ -30,4 +30,5 @@ t('unknown or tight stages remove reassuring and optional allocation messages',(
 t('snowball order includes student loans and zero-rate debt by balance',()=>{const a=c.fpSnowballOrder([{id:'card',balance:600,apr:25},{id:'student',balance:100,apr:5},{id:'zero',balance:200,apr:0},{id:'paid',balance:0}]);assert.deepEqual(Array.from(a,x=>x.id),['student','zero','card','paid']);});
 t('snowball tie order is deterministic and does not mutate records',()=>{const rows=[{id:'b',description:'Same',balance:100},{id:'a',description:'Same',balance:100}],before=JSON.stringify(rows);assert.equal(c.fpSnowballOrder(rows)[0].id,'a');assert.equal(JSON.stringify(rows),before);});
 t('stage classification and next steps do not modify financial data',()=>{const s=snap(),b=budget(),before=JSON.stringify([s,b]);c.fpStageNextStep(c.fpStageAssessment(s,b),s);assert.equal(JSON.stringify([s,b]),before);});
+t('a monthly gap is explained as a positive missing amount',()=>{const a=c.fpTodayFocus({...snap(),monthNet:-45.67,upcoming:[{date:'2026-10-30'}]});assert(a.description.includes('$45.67 more'));assert(!a.description.includes('$-'));});
 console.log('STAGE TOTAL pass='+pass+' fail='+fail);process.exitCode=fail?1:0;
