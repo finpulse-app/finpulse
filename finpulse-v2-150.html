@@ -4162,28 +4162,84 @@ function fpBillPaidSetThisMonth() {
 }
 // v149 (audit M3): the stage may be null ("cannot tell": no usable balance, an out-of-date balance, or too little spending history).
 // v148 turned null into stage 2, which let the Plan and the stage modal show stage-2 figures with no balance behind them.
+function fpStageCatalog() {
+  return [
+    {num:1,label:'Stop the Bleed',desc:'Keep essentials covered and stop the plan from needing more borrowing.',priorities:['Review urgent bills and required payments','Pause extra payments if they leave too little for everyday life','Check which optional costs can wait'],color:'var(--danger)',bg:'var(--danger-light)',border:'#f5c4bb'},
+    {num:2,label:'Stabilize',desc:'Give upcoming bills and everyday life some breathing room.',priorities:['Keep required payments covered','Protect the provisional $500 planning cushion','Add extra payments only when the full plan has room'],color:'var(--warning)',bg:'var(--warning-light)',border:'#e9d5aa'},
+    {num:3,label:'Build',desc:'Use room in your plan to reduce debt and work toward your goals.',priorities:['Focus extra debt payments on one balance at a time','Keep new card spending from rebuilding debt','Review savings goals alongside bills and debt payments'],color:'var(--accent)',bg:'var(--accent-light)',border:'#c3ddd1'}
+  ];
+}
+function fpStageAssessment(snap,budget) {
+  const basis=snap.balanceBasis||{},result=(stage,reason)=>({stage,reason,budget});
+  if(basis.status!=='ok')return result(null,basis.status==='stale'?'balance_stale':'balance_unknown');
+  if((snap.uncertainIncome||[]).length||(snap.unconfirmedIncome||[]).length)return result(null,'income_unknown');
+  if((snap.overdue||[]).length)return result(1,'overdue');
+  if(snap.firstNegative)return result(1,'projected_shortfall');
+  if((snap.unverified||[]).length||(snap.possiblePayments||[]).length)return result(null,'payments_unknown');
+  if(!budget)return result(null,'details_unknown');
+  if(budget.missing.length)return result(null,/spending|statement/i.test(budget.missing[0])?'spending_unknown':'details_unknown');
+  if(budget.risks.length)return result(1,'payment_risk');
+  if(!Number.isFinite(budget.low)||!Number.isFinite(budget.available))return result(null,'details_unknown');
+  if(budget.low<-.005||budget.available<-.005)return result(1,'plan_shortfall');
+  if(budget.low<budget.buffer-.005)return result(2,'below_buffer');
+  return result(3,'room_to_build');
+}
+function fpStageContext(snap) {
+  if((snap.balanceBasis||{}).status!=='ok')return fpStageAssessment(snap,null);
+  const signature=JSON.stringify([currentUser&&currentUser.id,snap.asOf,_dataLoadVersion,_fpMutationVersion,_fpSettingsVersion,_fpGoalVersion,_fpBillMarkVersion,_fpGoalsReady,_fpBillMarksReady,userSettings,monthBalances,_fpGoals,transactions,_fpBillMarkRows]);
+  if(fpStageContext.cache?.signature===signature)return fpStageContext.cache.value;
+  const model=fpGoalFinancialModel(fpParseIso(snap.asOf)),budget=fpGoalCapacity(model,_fpGoals,null),value=fpStageAssessment(snap,budget);
+  fpStageContext.cache={signature,value};return value;
+}
+function fpStageNextStep(context,snap) {
+  const budget=context.budget;
+  if(context.stage==null){
+    const missing=budget?.missing[0];if(!missing)return null;
+    const next=fpMissingMoneyAction(missing);
+    return {code:'stage_details',tone:'attention',title:'A quick check before your next step.',description:fpSimpleMissing(missing),label:next.label,destination:'money_detail:'+next.kind};
+  }
+  if(context.stage===1){
+    if(context.reason==='payment_risk')return {code:'stage_payment_risk',tone:'attention',title:'Check a debt payment first.',description:'A saved payment may not cover its interest. Review the amount before adding new goals.',label:'Review loans',destination:'loans'};
+    const extras=(snap.loans||[]).some(l=>!l.paidOff&&l.minPayment>l.trueMinimum+.005);
+    return {code:'stage_shortfall',tone:'attention',title:'Make room for everyday life first.',description:'Your current plan may leave too little for bills and everyday spending. Review extra payments and goal deposits before adding more.',label:extras?'Review debt payments':'Review your plan',destination:extras?'loans':'plan'};
+  }
+  if(context.stage===2)return {code:'stage_cushion',tone:'attention',title:'Build a little breathing room.',description:'Keep upcoming bills and everyday costs covered. Protect some cash for surprises before adding extra payments.',label:'Review spending',destination:'expenses'};
+  const debts=(snap.loans||[]).some(l=>!l.paidOff&&Number(l.balance)>0);
+  return debts?{code:'stage_debt',tone:'neutral',title:'Focus on your next debt.',description:'Review extra for your smallest balance while keeping other minimums and everyday costs covered. Save a change only if it fits.',label:'Review focused debt',destination:'focus_payment'}:{code:'stage_goals',tone:'neutral',title:'Give your next goal a plan.',description:'Review a savings amount and finish date that fit alongside your bills and everyday spending.',label:'Review goals',destination:'plan'};
+}
+function fpStagePriorityActions(actions,context) {
+  const optional=['extra_debt','goal_room','payday_buffer','on_track'];
+  const order={balance_needed:0,balance_stale:0,paycheck_conflict:1,overdue_bill:2,overdue_loan:2,income_unconfirmed:3,income_inclusion_unknown:3,unverified_bill:4,unverified_loan:4,possible_payment:4,shortfall:5,negative_month:5,payment_plan_review:6,due_bill:7,due_loan:7,due_expense:7,spending_review:8,below_buffer:9,card_cycle:10};
+  return actions.filter(p=>context.stage===3||!optional.includes(p.code)).map((p,i)=>({p,i})).sort((a,b)=>(order[a.p.code]??11)-(order[b.p.code]??11)||a.i-b.i).map(x=>x.p);
+}
+function fpSnowballOrder(loans) {
+  return loans.slice().sort((a,b)=>{
+    const x=fpLoanBalanceAmount(a),y=fpLoanBalanceAmount(b);
+    return (x<=0)-(y<=0)||x-y||String(a.description||'').localeCompare(String(b.description||''))||String(a.id).localeCompare(String(b.id));
+  });
+}
+
 function fpStageInfo() {
   const s = fpPrioritySnapshot(new Date(), { paidMarks: fpReadPaidMarks() });
-  return { stage: s.stage, reason: s.stageReason };
+  return fpStageContext(s);
 }
 function detectStage() { return fpStageInfo().stage; }
 function fpStageNullText(reason) {
   if (reason === 'balance_stale') return 'Your balance is out of date. Update it (tap the Starting Balance card on the calendar) so FinPulse can tell where you stand.';
   if (reason === 'spending_unknown') return 'FinPulse needs more recorded everyday spending (at least 8 different days in the last 30) before it can tell where you stand.';
+  if(reason==='income_unknown')return 'Confirm recent pay before we choose your next step.';
+  if(reason==='payments_unknown')return 'Check outstanding payment records before we choose your next step.';
+  if(reason==='details_unknown')return 'A few details need checking before we can choose your stage. Your next step on the calendar shows where to start.';
   return 'Confirm your bank balance (tap the Starting Balance card on the calendar) so FinPulse can tell where you stand.';
 }
 
 function showStageModal() {
   const stage = detectStage();
-  const stages = [
-    { num:1, label:'Stop the bleeding', desc:'Your projected cash flow is negative, or your balance is projected to run short. Before anything else, we look at what is coming out.', priorities:['Find what\'s going out and cut what can wait','Make minimum payments only on all debts','Don\'t take on anything new until cash flow is positive'], color:'var(--danger)', bg:'var(--danger-light)', border:'#f5c4bb' },
-    { num:2, label:'Build your floor', desc:'Cash flow is positive, but your projected balance dips under a provisional $500 starter buffer. That number is a FinPulse starting point, not a target that fits everyone.', priorities:['Build the starter buffer before making extra debt payments','Keep all bills current, no late payments','Track every dollar until the buffer is built'], color:'var(--warning)', bg:'var(--warning-light)', border:'#e9d5aa' },
-    { num:3, label:'Grow', desc:'You\'re stable and above the starter buffer. FinPulse only suggests extra payments or savings when your projected cash supports it.', priorities:['Consider extra debt payments only from projected spare cash after upcoming bills','Choose a savings goal that fits your situation','Once debt-free, redirect old payment amounts toward your goals'], color:'var(--accent)', bg:'var(--accent-light)', border:'#c3ddd1' },
-  ];
-  const coachLines = [
-    'Right now the priority is stopping the bleeding. Your projected cash is negative or running short, so let\'s look at what is coming out before anything else. Your priority list will show you where to start.',
-    'The bleeding has stopped. Now we build a starter buffer, provisionally $500, before anything else. It is a FinPulse starting point, not a rule for everyone. Your priority list will track it.',
-    'You\'re stable. Now we grow carefully. Your priority list will only suggest extra payments or savings when your projected cash supports them.',
+  const stages=fpStageCatalog();
+  const coachLines=[
+    'Keep essentials and required payments covered. Review extras that could leave you needing to borrow again.',
+    'Give your plan breathing room. The provisional $500 planning cushion is a starting point, not a separate bill or a complete emergency fund.',
+    'Review your next debt or savings goal using the full plan. A stage is guidance, not a promise that every extra payment fits.'
   ];
   const el = document.getElementById('stage-cards');
   const coach = document.getElementById('stage-coach-msg');
@@ -4250,10 +4306,11 @@ function fpTodayFocus(snap,paidStatusReady=true) {
   if(!(snap.upcoming||[]).length&&!(snap.upcomingOneTime||[]).length&&!(snap.loans||[]).some(l=>!l.paidOff))return {code:'add_bills',tone:'neutral',title:'Add the bills you need to cover.',description:'Give rent, subscriptions and other repeating charges a place in your calendar.',label:'Add a bill',destination:'bill_entry'};
   return {code:'purchase',tone:'neutral',title:'Check before you spend.',description:'Compare a purchase with your upcoming cash flow and see what keeping the money could mean for your future.',label:'Check a purchase',destination:'dreams'};
 }
-function fpRenderTodayFocus(snap) {
+function fpRenderTodayFocus(snap,stageContext) {
   const root=document.getElementById('today-focus');if(!root)return;
   let focus=fpTodayFocus(snap,_fpBillMarksReady);const button=document.getElementById('today-focus-button');
   if(focus.code==='purchase'){const h=fpSpendingHistory(fpParseIso(snap.asOf),snap);if(h.pending.length)focus={code:'spending_review',tone:'attention',title:'A quick spending check.',description:'Were the large purchases in your statements unusual? Check them so your plan reflects everyday life.',label:'Check large purchases',destination:'spending_review'};}
+  if(focus.code==='purchase'&&stageContext)focus=fpStageNextStep(stageContext,snap)||focus;
   root.setAttribute('data-tone',focus.tone);
   document.getElementById('today-focus-date').textContent='Today · '+fpParseIso(snap.asOf).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   document.getElementById('today-focus-title').textContent=focus.title;
@@ -4295,6 +4352,8 @@ function fpPriorityShortcut(code) {
   return null;
 }
 function fpOpenPriority(destination) {
+  if(destination.startsWith('money_detail:')){fpResolveMoneyDetail(destination.slice(13));return;}
+  if(destination==='focus_payment'){const id=fpFocusedLoanId();if(id){showView('loans',null);openWhatIf(id);}return;}
   if(destination==='paycheck_records'){fpReviewPaycheckRecords();return;}
   if(destination==='payday'){const p=fpPaydayPrompt(fpIso(new Date()),fpPaydayDatesAround(fpIso(new Date())),transactions,Number(userSettings.payAmount)||0);if(p)fpOpenPayday(p.date);return;}
   if(destination==='spending_review'){fpOpenSpendingReview();return;}
@@ -4333,14 +4392,15 @@ function renderPriorityReport() {
   // Everything below is a view over the deterministic snapshot (fpPrioritySnapshot / fpPriorityActions).
   // It always uses today's date, never the month shown in the calendar.
   const snap = fpPrioritySnapshot(today, { paidMarks: fpReadPaidMarks() });
-  fpRenderTodayFocus(snap);
-  const stageNum = snap.stage;
+  const stageContext=fpStageContext(snap);
+  fpRenderTodayFocus(snap,stageContext);
+  const stageNum = stageContext.stage;
   const stageBadgeEl = document.getElementById('priority-stage-badge');
   if (stageBadgeEl) {
-    const stageLabels = {1:'Stage 1: Stop the bleeding', 2:'Stage 2: Build your floor', 3:'Stage 3: Grow'};
+    const stageLabels=Object.fromEntries(fpStageCatalog().map(s=>[s.num,'Stage '+s.num+': '+s.label]));
     const stageColors = {1:'var(--danger)', 2:'var(--warning)', 3:'var(--accent)'};
-    const nullLabels = { balance_stale: 'Balance out of date', spending_unknown: 'Needs spending history' };
-    stageBadgeEl.textContent = stageNum == null ? (nullLabels[snap.stageReason] || 'Balance needed') : stageLabels[stageNum];
+    const nullLabels = { balance_stale:'Balance out of date',spending_unknown:'Needs spending history',income_unknown:'Confirm recent pay',payments_unknown:'Check payment status',details_unknown:'Check your details' };
+    stageBadgeEl.textContent = stageNum == null ? (nullLabels[stageContext.reason] || 'Balance needed') : stageLabels[stageNum];
     stageBadgeEl.style.color = stageNum == null ? 'var(--text3)' : stageColors[stageNum];
   }
 
@@ -4352,7 +4412,7 @@ function renderPriorityReport() {
   }
 
   const built = fpPriorityActions(snap);
-  const actions = built.actions;
+  let actions = built.actions;
   const spendingHistory=fpSpendingHistory(fpParseIso(snap.asOf),snap);
   if(spendingHistory.pending.length)actions.push({id:'spending-review',code:'spending_review',level:'p2',text:'Were these large purchases unusual? A quick check helps us estimate everyday spending before suggesting extra debt payments or savings.'});
   if(fpPaydayConflicts(transactions).length)actions.unshift({id:'paycheck-conflict',code:'paycheck_conflict',level:'p1',text:'A deposit may be counted twice. Review the paycheck records before relying on your money estimates.'});
@@ -4369,6 +4429,11 @@ function renderPriorityReport() {
     }
   }
 
+  actions=fpStagePriorityActions(actions,stageContext);
+  if(!actions.length||actions.every(p=>['on_track','card_cycle'].includes(p.code))){
+    const next=fpStageNextStep(stageContext,snap);
+    if(next){actions=actions.filter(p=>p.code!=='on_track');actions.unshift({id:'stage-next-'+(stageContext.stage||'check'),code:'stage_next',level:'p3',text:fpEscHtml(next.description),shortcut:{label:next.label,destination:next.destination}});}
+  }
   // Restore this week's checked state from localStorage
   const weekKey = 'fp_priority_checked_' + getIsoWeekKey(today);
   let checkedIds = {};
@@ -4376,7 +4441,7 @@ function renderPriorityReport() {
 
   const listHtml = actions.map(function(p, i) {
     const isDone = !!checkedIds[p.id];
-    const shortcut=fpPriorityShortcut(p.code);
+    const shortcut=p.shortcut||fpPriorityShortcut(p.code);
     const shortcutHtml=shortcut?'<div style="margin-top:8px;"><button class="btn btn-outline" onclick="fpOpenPriority(\''+shortcut.destination+'\')">'+shortcut.label+'</button></div>':'';
     const optionsHtml = p.options ? '<details class="priority-options"><summary>Ways to make room</summary>' + p.options.map(function(o) { return '<div class="priority-option">' + o + '</div>'; }).join('') + '</details>' : '';
     return '<div class="priority-item">'
@@ -5317,7 +5382,7 @@ function fpRenderDebtPaymentRecommendations() {
 
 
 function fpFocusedLoanId() {
-  return fpLoanDisplayEntries(transactions.filter(t=>t.type==='loan'&&(!t.user_id||currentUser&&t.user_id===currentUser.id))).filter(l=>!fpLoanPaidOff(l)&&fpLoanBalanceAmount(l)>0).sort((a,b)=>fpLoanBalanceAmount(a)-fpLoanBalanceAmount(b))[0]?.id||null;
+  return fpSnowballOrder(fpLoanDisplayEntries(transactions.filter(t=>t.type==='loan'&&(!t.user_id||currentUser&&t.user_id===currentUser.id))).filter(l=>!fpLoanPaidOff(l)&&fpLoanBalanceAmount(l)>0))[0]?.id||null;
 }
 function fpWhatIfLoanSummary(loan,focused) {
   const minimum=fpPaymentMinimum(loan),current=Number(loan.min_payment==null?loan.amount:loan.min_payment)||0;
@@ -5809,13 +5874,7 @@ function renderLoans() {
   if (loans.length === 0) { container.innerHTML = ''; if(empty) empty.style.display = 'block'; return; }
   if(empty) empty.style.display = 'none';
 
-  function isStudLoan(l) {
-    const desc = (l.description || l.lender || '').toLowerCase();
-    return desc.includes('student') || desc.includes('school') || desc.includes('sallie') || desc.includes('navient') || desc.includes('fedloan') || (l.category||'').toLowerCase().includes('student');
-  }
-  const consumerLoans = loans.filter(function(l) { return !isStudLoan(l); }).sort(function(a,b) { return fpLoanBalanceAmount(a) - fpLoanBalanceAmount(b); });
-  const studentLoans = loans.filter(function(l) { return isStudLoan(l); });
-  const sorted = consumerLoans.concat(studentLoans);
+  const sorted=fpSnowballOrder(loans);
   const focusLoan = sorted.find(l=>fpLoanBalanceAmount(l)>0);
 
   container.innerHTML = sorted.map(function(l, idx) {
@@ -5826,7 +5885,6 @@ function renderLoans() {
     const minPay = parseFloat(l.min_payment || l.amount) || 0;
     const monthlyRate = apr / 100 / 12;
     const betterPay = Math.round(minPay * 1.5);
-    const isStudent = isStudLoan(l);
     const isFocus = !!focusLoan && l.id === focusLoan.id;
 
     function calcPayoff(payment) {
@@ -5848,18 +5906,11 @@ function renderLoans() {
     const debtRemainingPct = origBal > 0 ? Math.min(100, Math.max(0, (bal / origBal) * 100)) : 100;
     const paidPct = Math.min(99,Math.max(0,Math.floor(100-debtRemainingPct)));
 
-    const focusBadge = isStudent
-      ? '<span style="font-size:10px;font-weight:600;padding:2px 9px;border-radius:99px;background:#e8f0fe;color:#3b5bdb;border:1px solid #c5d3f5;">Student loan</span>'
-      : isFocus
+    const focusBadge=isFocus
       ? '<span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:99px;background:var(--accent);color:#fff;">Focus here</span>'
       : '<span style="font-size:10px;font-weight:600;padding:2px 9px;border-radius:99px;background:var(--surface2);color:var(--text3);border:1px solid var(--border);">Hold at minimum</span>';
-
-    // Coach note, one sentence, no padding
-    const focusLoanDesc = focusLoan ? focusLoan.description : 'your focus debt';
-    const minNote = isStudent
-      ? '<div style="font-size:12px;color:#3b5bdb;margin-bottom:10px;padding-left:2px;">Student loans are shown after consumer debts in this view. Keep required payments current.</div>'
-      : isFocus ? ''
-      : '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;padding-left:2px;">Your plan lists ' + fpEscHtml(focusLoanDesc) + ' first. Keep required payments current.</div>';
+    const focusLoanDesc=focusLoan?focusLoan.description:'your focus debt';
+    const minNote=isFocus?'':'<div style="font-size:12px;color:var(--text3);margin-bottom:10px;padding-left:2px;">Your plan lists '+fpEscHtml(focusLoanDesc)+' first. Keep required payments current.</div>';
 
     const whatIfBtn = '<div style="background:var(--accent-light);border:1px solid #c3ddd1;border-left:3px solid var(--accent);border-radius:var(--radius-sm);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;">'
         + '<div style="font-size:13px;color:#2d5a46;line-height:1.6;flex:1;">'
@@ -7921,7 +7972,7 @@ async function updateBrAiPhrase(endBal, stage, monthlyCashFlow, nextBillName, ne
   if (!brSub) return;
   // Build a tight context string for Claude
   const context = 'Personal finance app user. End-of-month projected balance: $' + fmt(Math.abs(endBal)) + (endBal<0?' (negative)':'')
-    + (stage != null ? '. Stage: ' + stage + ' (1=cash flow negative, 2=building buffer, 3=growing).' : '.')
+    + (stage != null ? '. Stage: ' + stage + ' (1=Stop the Bleed, 2=Stabilize, 3=Build).' : '.')
     + (nextBillName ? ' Next bill: ' + nextBillName + ' in ' + nextBillDays + ' day' + (nextBillDays===1?'':'s') + '.' : '')
     + (nextPayDays != null && nextPayDays >= 0 ? ' Payday in ' + nextPayDays + ' day' + (nextPayDays===1?'':'s') + '.' : '')
     + (monthlyCashFlow > 0 ? ' Cash flow positive by $' + fmt(monthlyCashFlow) + '.' : ' Cash flow negative by $' + fmt(Math.abs(monthlyCashFlow)) + '.')
