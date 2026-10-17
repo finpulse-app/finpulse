@@ -5275,7 +5275,7 @@ function fpCardUseEvidence(loan,rows,asOf) {
   const source=fpCardSource(loan),ids=new Set(loan._cardIds||[loan.id]),cutoff=fpIso(fpAddDays(fpParseIso(asOf),-89));
   const activity=source?rows.filter(t=>t.type==='expense'&&!t.recurring&&t.lender===source&&t.date>=cutoff&&t.date<=asOf&&Number(t.amount)>0&&!['card_transfer','loan_payment'].includes(t.category)):[];
   const latest=activity.map(t=>t.date).sort().at(-1)||null,from=latest?fpIso(fpAddDays(fpParseIso(latest),-29)):null;
-  const recent=activity.filter(t=>t.date>=from),interest=recent.filter(t=>/\binterest\b/i.test(t.description||'')),fees=recent.filter(t=>!interest.includes(t)&&/\b(?:annual|late|membership|returned payment) fee\b/i.test(t.description||''));
+  const recent=activity.filter(t=>t.date>=from),interest=recent.filter(fpIsCardInterestRow),fees=recent.filter(t=>!interest.includes(t)&&/\b(?:annual|late|membership|returned payment) fee\b/i.test(t.description||''));
   const purchases=recent.filter(t=>!interest.includes(t)&&!fees.includes(t)),payments=rows.filter(t=>t.type==='expense'&&t.category==='loan_payment'&&ids.has(t.loan_id)&&t.date>=from&&t.date<=latest);
   const sum=list=>fpRound2(list.reduce((n,t)=>n+Number(t.amount),0)),purchased=sum(purchases),chargedInterest=sum(interest),chargedFees=sum(fees),paid=sum(payments);
   const payoff=String(loan.lender||'').match(/\| paid_off:(\d{4}-\d{2}-\d{2})/),afterPayoff=payoff?sum(activity.filter(t=>t.date>payoff[1]&&!/\binterest\b|\bfee\b/i.test(t.description||''))):0;
