@@ -5291,10 +5291,9 @@ function fpCardCycleAdvice(loan,evidence,budgetStatus) {
 }
 function fpCardCycleSnapshot() {
   const asOf=fpIso(new Date()),loans=fpLoanDisplayEntries(transactions.filter(t=>t.type==='loan'&&(!t.user_id||currentUser&&t.user_id===currentUser.id))),cards=loans.filter(l=>/credit card/i.test(l.category||l.lender||''));
-  const focused=cards.find(l=>l.id===fpFocusedLoanId())||cards.filter(l=>fpLoanBalanceAmount(l)>0).sort((a,b)=>fpLoanBalanceAmount(a)-fpLoanBalanceAmount(b))[0]||cards[0];
-  if(!focused)return null;
+  const focused=cards.find(l=>l.id===fpFocusedLoanId())||cards.filter(l=>fpLoanBalanceAmount(l)>0).sort((a,b)=>fpLoanBalanceAmount(a)-fpLoanBalanceAmount(b))[0];
   const reuse=cards.map(l=>({loan:l,evidence:fpCardUseEvidence(l,transactions,asOf)})).find(x=>x.evidence.afterPayoff>0&&fpLoanBalanceAmount(x.loan)<=.005);
-  if(reuse)return {...reuse,asOf};return {loan:focused,evidence:fpCardUseEvidence(focused,transactions,asOf),asOf};
+  if(reuse)return {...reuse,asOf};if(!focused)return null;return {loan:focused,evidence:fpCardUseEvidence(focused,transactions,asOf),asOf};
 }
 function fpRenderCardCycle() {
   const root=document.getElementById('card-use-plan');if(!root)return;const snap=fpCardCycleSnapshot();root.hidden=!snap;if(!snap){root.innerHTML='';return;}
