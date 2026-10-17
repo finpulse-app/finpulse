@@ -48,7 +48,7 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: public.ecr.aws/docker/library/postgres:17
+        image: postgres:17
         env:
           POSTGRES_PASSWORD: finpulse-ci-only
           POSTGRES_DB: finpulse_test

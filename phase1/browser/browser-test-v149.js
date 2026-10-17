@@ -1459,6 +1459,12 @@ const loan = id => txns().find(t => t.id === id);
   await page.evaluate(()=>openDayPanel(2));await page.click('#bs-body button:text-is("Confirm paycheck")');await page.fill('#payday-actual','abc');await page.click('#payday-save');await wait(100);
   ok('T59 invalid pay remains in the dialog with no income write',await page.isVisible('#payday-overlay')&&db.transactions.length===0,'invalid paycheck accepted');await page.keyboard.press('Escape');await page.evaluate(()=>closeBottomSheet());
 
+
+  await page.evaluate(()=>fpOpenPayday('2026-10-02'));await page.fill('#payday-actual','92.42');writeFault='lost';await page.click('#payday-save');await wait(150);
+  ok('T59 a lost paycheck confirmation retains the draft and the one committed receipt',await page.isVisible('#payday-overlay')&&await page.inputValue('#payday-actual')==='92.42'&&db.transactions.length===1,'lost paycheck save discarded the draft or committed twice');
+  await page.click('#payday-save');await wait(200);
+  ok('T59 retry after a lost paycheck response confirms the original record without a duplicate',!await page.isVisible('#payday-overlay')&&db.transactions.length===1&&await page.evaluate(()=>fpDayEvents(2026,9)[2].income.reduce((n,t)=>n+Number(t.amount),0))===92.42,'lost paycheck retry duplicated or could not recover');
+
   // T60 Everyday card use and old debt must be planned together, using matched account evidence.
   seed();const cardRow=(id,name,balance,source)=>({id,user_id:'user-A',type:'loan',description:name,balance,original_balance:balance,min_payment:50,original_min_payment:50,amount:50,apr:25,category:'Credit Card',date:'2026-10-12',anchor_date:'2026-10-12',frequency:'monthly',recurring:true,lender:'Credit Card | account:'+source+' | statement:2026-10-01'});
   db.transactions=[cardRow('cycle-a','Example daily card',500,'import:card:Example A'),cardRow('cycle-b','Example second card',900,'import:card:Example B'),{id:'cycle-rent',user_id:'user-A',type:'bill',description:'Rent',amount:900,date:'2026-10-20',anchor_date:'2026-10-20',recurring:true,frequency:'monthly',category:'home'}];
