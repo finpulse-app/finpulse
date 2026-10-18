@@ -1,4 +1,4 @@
-// Stage-only browser checks with fictional amounts and an entirely read-only fake backend.
+// Paycheck-map browser checks with fictional amounts and an entirely read-only fake backend.
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const fs=require('fs'),path=require('path');
 const FILE=path.resolve(process.argv[2]||'finpulse-v2-150.html');
@@ -13,8 +13,8 @@ await ctx.route('**/cdn.jsdelivr.net/**',r=>r.fulfill({contentType:'application/
 await ctx.route(/fonts\.(googleapis|gstatic)\.com|cdnjs|chart/,r=>r.fulfill({contentType:'text/css',body:''}));
 const page=await ctx.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
 await page.clock.setFixedTime(new Date(2026,9,8,12));
-await page.exposeFunction('__dbop',spec=>{reqlog.push(spec);if(spec.op!=='select')return {data:null,error:{message:'Stage tests do not write finances'}};let rows=(db[spec.table]||[]).filter(r=>(spec.filters||[]).every(([k,v,op])=>op==='in'?v.includes(r[k]):r[k]===v));if(spec.range)rows=rows.slice(spec.range[0],spec.range[1]+1);return {data:spec.single?rows[0]||null:rows,error:null};});
-await page.exposeFunction('__rpc',()=>({error:{message:'Stage tests do not write finances'}}));
+await page.exposeFunction('__dbop',spec=>{reqlog.push(spec);if(spec.op!=='select')return {data:null,error:{message:'Map tests do not write finances'}};let rows=(db[spec.table]||[]).filter(r=>(spec.filters||[]).every(([k,v,op])=>op==='in'?v.includes(r[k]):r[k]===v));if(spec.range)rows=rows.slice(spec.range[0],spec.range[1]+1);return {data:spec.single?rows[0]||null:rows,error:null};});
+await page.exposeFunction('__rpc',()=>({error:{message:'Map tests do not write finances'}}));
 const load=async()=>{await page.goto('file://'+FILE);await page.waitForFunction(()=>document.getElementById('app').style.display!=='none'&&document.getElementById('loading-screen').style.display==='none'&&_fpGoalsReady&&_fpBillMarksReady);};
 const hideStage=()=>page.evaluate(()=>{document.getElementById('stage-overlay').style.display='none';showView('calendar',null);});
   // T61 Stage guidance shares the complete model used by goals and payments.

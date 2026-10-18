@@ -21,7 +21,7 @@ function make(names, extra={}) {
     crypto:{randomUUID:()=> '11111111-1111-4111-8111-111111111111'},
     _fpMutationBusy:false,_fpMutationVersion:0,_lastDeletedOperation:null,_rpPendingDate:null,_rpDialogVersion:0,_rpHasPending:false,
     fpPendingOperation:()=>null,fpRenderTransactionState(){},fpUpdatePendingNotice(){},panelOpen:false,
-    showView(){},showToast:(...m)=>messages.push(m),renderCalendar(){},renderLoans(){},renderBillsView(){},updateStats(){},dUpdate(){},updateTopbarButtons(){},openSetup(){},loadSavedPurchases(){},shouldShowStageModal(){return false},checkMonthRollover:async()=>{},
+    showView(){},showToast:(...m)=>messages.push(m),renderCalendar(){},renderLoans(){},renderBillsView(){},fpMapBillsThrough(){return null;},updateStats(){},dUpdate(){},updateTopbarButtons(){},openSetup(){},loadSavedPurchases(){},shouldShowStageModal(){return false},checkMonthRollover:async()=>{},
     _els:els,_cache:cache,_messages:messages},extra));
   ['fpPrimaryPaydayKey','fpPaydayBankMatches','fpEffectiveIncomeRows','fpDaysBetween','fpIsCardInterestRow','fpIsStatementRecord','fpEverydayEntryDestination','fpStatementPDFSection','fpPrivateText','fpSafeTransactionRecord','fpStatementPrivateValues','fpPrivateStatementDescription','fpParseBalance','fpCreditCardPaymentEstimate','fpRestoreExpenseEditor','fpLoanRateKnown','fpRound2','fpParseMoney','fpLoanBalanceAmount','fpIsPaycheckRecord','fpPad2','fpIso','fpParseIso','fpInitialCalendarMode','fpDueDateText','fpLinkedCardParts','fpManagedLoan','fpLoanDisplayEntries','fpDebtPayoff','fpDebtPaymentSplit','fpCardRateLabel','fpSaveManagedLoan'].concat(names).forEach(n=>vm.runInContext(grab(n),c)); return c;
 }
