@@ -23,6 +23,7 @@ jobs:
       - run: node phase1/run-recurring-tests.js finpulse-v2-150.html
       - run: node phase1/run-payment-budget-tests.js finpulse-v2-150.html
       - run: node phase1/run-stage-tests.js finpulse-v2-150.html
+      - run: node phase1/run-money-map-tests.js finpulse-v2-150.html
       - run: node phase1/run-statement-auto-tests.js finpulse-v2-150.html
   browser:
     runs-on: ubuntu-latest
@@ -44,6 +45,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Check stage guidance against fictional finances
         run: node phase1/browser/browser-stage-test.js finpulse-v2-150.html
+      - name: Check paycheck map and payment handoff with fictional finances
+        run: node phase1/browser/browser-money-map-test.js finpulse-v2-150.html
       - name: Run browser regression checks against fake backend
         run: node phase1/browser/browser-test-v149.js finpulse-v2-150.html
   database:

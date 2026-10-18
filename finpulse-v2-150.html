@@ -508,6 +508,27 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 
 .payday-check,.payday-day{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:13px;line-height:1.5;}.payday-check[hidden]{display:none;}.payday-check p,.payday-day p{font-size:12px;color:var(--text2);margin:5px 0 10px;}.payday-actions{display:flex;gap:8px;flex-wrap:wrap;}.payday-day{padding:12px;}.payday-day p{margin-bottom:8px;}
 .card-cycle-plan{border:1px solid var(--border);background:var(--surface);border-radius:14px;padding:18px;margin-bottom:18px;font-size:13px;line-height:1.6;}.card-cycle-plan[hidden]{display:none;}.card-cycle-plan h3{font:600 20px 'Playfair Display',serif;margin:6px 0;}.card-cycle-plan p{margin:8px 0;}.card-cycle-plan details{font-size:12px;color:var(--text2);}.card-cycle-plan summary{cursor:pointer;font-weight:600;}.card-cycle-figures{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0;}.card-cycle-figures span{font-size:11px;color:var(--text2);flex:1;min-width:90px;}.card-cycle-figures strong{display:block;font-size:16px;color:var(--text);}.explanation-link{border:0;background:transparent;padding:0;font:inherit;text-decoration:underline;color:var(--accent);cursor:pointer;}
+
+/* Paycheck Map: one reading direction, explicit labels, full-width touch targets. */
+#paycheck-map{max-width:760px;margin-bottom:24px;display:grid;grid-template-columns:1fr 1.3fr;gap:18px;color:var(--text)}
+#paycheck-map h3{font-family:'DM Serif Display',Georgia,serif;font-size:25px;margin:10px 0;line-height:1.2}
+#paycheck-map p{font-size:13px;color:var(--text2);line-height:1.6;margin:10px 0}
+.pm-source,.pm-ripple{border:1px solid var(--border);border-radius:var(--radius);padding:24px;background:var(--surface)}
+.pm-source{background:var(--accent-light,var(--surface2));align-self:stretch}
+.pm-eyebrow{font-size:11px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--accent)}
+.pm-cash{font-family:'DM Serif Display',Georgia,serif;font-size:36px;margin-top:24px;overflow-wrap:anywhere}
+.pm-link{color:var(--accent);font:inherit;font-size:12px;text-decoration:underline;background:none;border:0;padding:8px 0;cursor:pointer}
+#paycheck-map .pm-next{border-top:1px solid var(--border);padding-top:16px;margin-top:18px;font-size:12px}
+.pm-branches{display:grid;gap:10px;border-left:2px solid var(--border);padding-left:18px}
+.pm-branch{position:relative;text-align:left;display:flex;gap:10px;align-items:center;justify-content:space-between;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);cursor:pointer;font:inherit;min-width:0}
+.pm-branch:before{content:'';position:absolute;left:-20px;width:18px;top:50%;border-top:2px solid var(--border)}
+.pm-branch strong{font-size:13px;display:block}.pm-branch small{font-size:11px;color:var(--text2);display:block;margin-top:5px}.pm-branch b{font-size:16px;white-space:nowrap}
+.pm-ripple,.pm-explain{grid-column:1/-1}.pm-split{display:flex;justify-content:space-between;gap:16px;margin:22px 0 12px}.pm-split span{font-size:12px;color:var(--text2)}.pm-split span:last-child{text-align:right}.pm-split strong{display:block;font-family:'DM Serif Display',Georgia,serif;font-size:28px;color:var(--text);margin-top:6px}
+#pm-slider{width:100%;accent-color:var(--accent);min-height:44px;cursor:pointer}.pm-slider-label{font-size:12px;color:var(--text2)}
+.pm-focus{width:100%;background:var(--accent);color:#fff;border:0;border-radius:var(--radius-sm);padding:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;font:inherit;cursor:pointer;margin-top:12px;text-align:left}.pm-focus span{font-size:13px}.pm-focus strong{font-size:14px}.pm-focus:disabled{opacity:.6;cursor:default}
+#paycheck-map .pm-note{font-size:12px;margin-bottom:0}.pm-explain{font-size:12px;color:var(--text2)}.pm-explain summary,.pm-bill-details>summary{cursor:pointer;min-height:44px;align-content:center}.pm-bill-details{max-width:760px}.pm-bill-details>summary{font-weight:600;font-size:15px;margin-bottom:12px}
+@media(max-width:600px){#paycheck-map{grid-template-columns:1fr;gap:14px}.pm-source,.pm-ripple{padding:20px}.pm-cash{margin-top:12px}.pm-branches{margin-left:18px}.pm-focus{align-items:flex-start;flex-direction:column}.pm-branch{padding:14px}.pm-branch b{font-size:15px}}
+
 </style>
 </head>
 <body>
@@ -572,7 +593,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
       <button class="nav-item" onclick="showView('expenses',this)"><span class="nav-dot"></span> Expenses</button>
       <button class="nav-item" onclick="showView('loans',this)"><span class="nav-dot"></span> Loans &amp; Debt</button>
       <button class="nav-item" onclick="showView('plan',this)"><span class="nav-dot"></span> Goals</button>
-      <button class="nav-item" onclick="showView('bills',this)"><span class="nav-dot"></span> Bills<span class="nav-bill-badge" id="bill-badge" style="display:none;"></span></button>
+      <button class="nav-item" onclick="showView('bills',this)"><span class="nav-dot"></span> Paycheck Map<span class="nav-bill-badge" id="bill-badge" style="display:none;"></span></button>
       <button class="nav-item" onclick="showView('history',this)"><span class="nav-dot"></span> Your Story</button>
       <button class="nav-item" onclick="showView('insights',this)"><span class="nav-dot"></span> Money overview</button>
       <div class="nav-label">Tools</div>
@@ -836,13 +857,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 
     <!-- BILLS VIEW -->
     <div id="view-bills" style="display:none;">
-      <div class="topbar"><div><h2>Bills</h2><p>All your recurring payments.</p></div><button class="btn btn-solid" onclick="showView('calendar',null);openDayPanel(null,'bill')">+ Add Bill</button></div>
-      <div class="card" style="max-width:580px;">
-        <div class="card-header"><span class="card-title">Recent overdue &amp; this month</span><span class="card-meta" id="bills-total"></span></div>
-        <p style="padding:12px 16px 0;font-size:12px;line-height:1.5;color:var(--text2);">Mark a payment after you have paid it. This updates your checklist; it does not pay the bill or change your bank balance. The list covers the past 45 days through month end.</p>
+      <div class="topbar"><div><h2>Paycheck Map</h2><p>Know what’s covered. Choose your next move.</p></div><button class="btn btn-solid" onclick="showView('calendar',null);openDayPanel(null,'bill')">+ Add Bill</button></div>
+      <div id="paycheck-map" aria-label="Your paycheck map"></div>
+      <details id="paycheck-bill-list" class="pm-bill-details" open><summary>Your bills · manage payments</summary>
+      <div class="card" style="max-width:760px;">
+        <div class="card-header"><span class="card-title">Upcoming &amp; recently unpaid</span><span class="card-meta" id="bills-total"></span></div>
+        <p style="padding:12px 16px 0;font-size:12px;line-height:1.5;color:var(--text2);">Mark a payment after you have paid it. This updates your checklist; it does not pay the bill or change your bank balance. The list includes recent unpaid bills and upcoming payments through month end or your next payday, whichever is later.</p>
         <div style="padding:8px 16px;font-size:12px;line-height:1.5;"><div id="bill-sync-status" role="status"></div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;"><button class="btn btn-outline" onclick="fpRefreshBillMarks()">Refresh paid status</button><button class="btn btn-outline" onclick="fpSyncLocalBillMarks()">Sync older device marks</button></div></div>
         <div class="card-body"><div class="bill-list" id="bill-list-view"></div></div>
       </div>
+      </details>
     </div>
 
     <!-- LOANS VIEW -->
@@ -5683,7 +5707,7 @@ function updateRpBreakdown() {
     } else {
       btn.disabled = false;
       btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; btn.style.cursor = 'pointer';
-      btn.innerHTML = '&#10003; Record ' + (!_rpIncludeMonthly ? 'Extra' : 'Payment') + ', $' + fmt(totalPaid);
+      btn.textContent = 'I paid $' + fmt(totalPaid) + (!_rpIncludeMonthly ? ' extra' : '');
     }
   }
 }
@@ -5971,12 +5995,85 @@ function fpBillStatusRows(asOf, throughIso) {
   }).filter(function(row) { return row.dates.length > 0; });
 }
 
+// A paycheck window uses today's remaining cash, never a future estimated paycheck.
+function fpPaycheckMapPlan(model,snap,goals,loan) {
+  const end=snap.nextPayday?.date||null,missing=model.missing.slice();
+  if(!end)missing.push('Confirm your next payday.');
+  const rows=model.rows.filter(r=>!end||r.date<end),capacity=fpGoalCapacity(model,goals,null);
+  const sum=key=>fpRound2(rows.reduce((n,r)=>n+(Number(r[key])||0),0));
+  const saved=capacity.reservedSavings,goalDates=new Set(Array.from({length:12},(_,i)=>fpGoalDepositDate(fpParseIso(model.asOf),i+1)));
+  let cash=model.start==null?null:model.start-saved,low=cash,goalTotal=0;
+  rows.forEach(r=>{const deposit=goalDates.has(r.date)?capacity.otherMonthly:0;goalTotal+=deposit;if(cash!==null){cash+=r.net-deposit;low=Math.min(low,cash);}});
+  const problems=[...new Set(missing.concat(capacity.missing))],risks=capacity.risks;
+  const ready=!problems.length&&!risks.length&&model.start!==null&&Number.isFinite(low)&&Number.isFinite(capacity.low);
+  // A one-off extra must fit both this pay window and the longer plan. Leave 20% of the room uncommitted.
+  const room=ready?Math.max(0,Math.min(low-model.buffer,capacity.low-model.buffer)):0;
+  const extra=fpRound2(Math.min(Math.floor(room*.8*100)/100,loan?fpLoanBalanceAmount(loan):0));
+  return {asOf:model.asOf,end,start:model.start,bills:sum('bills'),debt:sum('debt'),spending:sum('spending'),other:sum('other'),income:sum('income'),goals:fpRound2(goalTotal),saved,buffer:model.buffer,low,unassigned:ready?fpRound2(Math.max(0,low-model.buffer)):null,extra,ready,missing:problems,risks,loanId:loan?.id||null,loanName:loan?.description||'',daily:model.daily};
+}
+let _fpMoneyMap=null,_fpRippleExtra=null;
+function fpMoneyMapCurrent() {
+  const snap=fpPrioritySnapshot(new Date(),{paidMarks:fpReadPaidMarks()}),model=fpGoalFinancialModel(new Date());
+  const id=fpFocusedLoanId(),loan=id?fpManagedLoan(id):null;
+  const plan=fpPaycheckMapPlan(model,snap,_fpGoals,loan);
+  if(loan){const status=fpLoanPaymentStatus(loan,plan.asOf),regular=!status.complete&&status.total<=.005?(Number(loan.min_payment||loan.amount)||0):0;plan.extra=Math.min(plan.extra,fpRound2(Math.max(0,fpLoanBalanceAmount(loan)-regular)));}
+  return {...plan,owner:currentUser?.id||null};
+}
+function fpMoneyMapBranch(kind) {
+  if(kind==='bills'){const el=document.getElementById('paycheck-bill-list');el.open=true;el.scrollIntoView({behavior:'smooth',block:'start'});return;}
+  if(kind==='debt'){showView('loans',null);return;}
+  if(kind==='spending'){showView('expenses',null);return;}
+  showView('plan',null);
+}
+function fpRenderMoneyMap() {
+  const el=document.getElementById('paycheck-map');if(!el||!currentUser||document.getElementById('view-bills').style.display==='none')return;
+  const p=fpMoneyMapCurrent(),prior=_fpMoneyMap,chosen=_fpRippleExtra;_fpMoneyMap=p;_fpRippleExtra=p.extra;
+  const amount=v=>v==null?'Not confirmed':'$'+fmt(v),label=p.end?'Until '+fpDateLabel(p.end):'Until your next payday';
+  let message=p.missing[0]||p.risks[0]||'';
+  const action=message?fpMissingMoneyAction(message):null;
+  el.innerHTML='<div class="pm-source"><span class="pm-eyebrow">'+fpEscHtml(label)+'</span><h3>Your money, with a job.</h3><div class="pm-cash">'+amount(p.start)+'</div><p>Available after today’s scheduled payments.</p><button class="pm-link" onclick="openEditBalance()">Check bank balance</button>'+(p.end?'<p class="pm-next">Next expected pay: '+fpEscHtml(fpDateLabel(p.end))+'. We’ll confirm the amount when it arrives.</p>':'')+'</div>'
+    +'<div class="pm-branches">'+[['bills','Bills & subscriptions',p.bills,'See what’s due'],['spending','Everyday spending',p.spending,'Your usual spending, estimated'],['debt','Debt payments',p.debt,'Your scheduled payments'],['goals','Keep protected',p.saved+p.buffer+p.goals,'Savings, goal plans & a cash cushion']].map(([kind,title,value,note])=>'<button class="pm-branch" onclick="fpMoneyMapBranch(\''+kind+'\')"><span><strong>'+title+'</strong><small>'+note+' →</small></span><b>'+amount(value)+'</b></button>').join('')+'</div>'
+    +'<div class="pm-ripple">'+(message?'<h3>One quick check first.</h3><p>'+fpEscHtml(fpSimpleMissing(message))+'</p><button class="btn btn-solid" onclick="fpResolveMoneyDetail(\''+action.kind+'\')">'+fpEscHtml(action.label)+'</button>':p.extra>0?'<span class="pm-eyebrow">Room for an extra payment</span><h3>Up to $'+fmt(p.extra)+' extra for your focus debt.</h3><p>Your bills, everyday spending and protected money come first.</p><div class="pm-split"><span>Leave in your bank<strong id="pm-keep">$'+fmt(fpRound2(p.unassigned-p.extra))+'</strong></span><span>Extra to your focus debt<strong id="pm-extra">$'+fmt(p.extra)+'</strong></span></div><label class="pm-slider-label" for="pm-slider">Choose how much extra to pay</label><input id="pm-slider" type="range" min="0" max="'+p.extra+'" step="0.01" value="'+p.extra+'" oninput="fpRippleChoose(this.value)"><button class="pm-focus" id="pm-focus" onclick="fpMoneyMapPayment()"><span>'+fpEscHtml(p.loanName)+'</span><strong id="pm-focus-amount">Review $'+fmt(p.extra)+' extra →</strong></button><p class="pm-note">Your regular payment stays separate until you review. This extra is just for this time.</p>':'<h3>'+(p.loanId?'Keep your breathing room.':'Your essentials come first.')+'</h3><p>'+(p.loanId?'Keep to your current payments for now. There isn’t dependable room for extra in the saved plan.':'Keep your money available or review your goals.')+'</p><button class="btn btn-outline" onclick="showView(\''+(p.loanId?'loans':'plan')+'\',null)">'+(p.loanId?'Review payments':'Review goals')+'</button>')+'</div>'
+    +'<details class="pm-explain"><summary>How did we work this out?</summary><p>We start with your dated bank balance and account for today’s scheduled payments. Then we set money aside for the days before your next expected payday.</p><p>Everyday spending uses your recent history with room for variation. Protected money includes $'+fmt(p.buffer)+' for surprises'+(p.saved?', plus $'+fmt(p.saved)+' already saved for goals':'')+(p.goals?' and $'+fmt(p.goals)+' in planned goal deposits':'')+'.</p>'+(p.other?'<p>Other scheduled payments: $'+fmt(p.other)+'.</p>':'')+(p.income?'<p>Other expected income in this window: $'+fmt(p.income)+'. It is an estimate until confirmed.</p>':'')+'<p>Money left in your bank is not all spending money: some may be needed after payday. Extra must also fit the longer plan. We leave 20% of the remaining room available. Estimates can change when your pay, spending or balances change.</p></details>';
+  if(p.extra>0&&prior?.owner===p.owner&&prior.asOf===p.asOf&&prior.loanId===p.loanId&&chosen!==null){const keep=Math.min(p.extra,chosen);document.getElementById('pm-slider').value=String(keep);fpRippleChoose(keep);}
+}
+function fpRippleChoose(value) {
+  if(!_fpMoneyMap)return;
+  const n=fpParseMoney(String(value),true);if(n===null)return;
+  _fpRippleExtra=fpRound2(Math.min(_fpMoneyMap.extra,Math.max(0,n)));
+  document.getElementById('pm-keep').textContent='$'+fmt(fpRound2(_fpMoneyMap.unassigned-_fpRippleExtra));
+  document.getElementById('pm-extra').textContent='$'+fmt(_fpRippleExtra);
+  document.getElementById('pm-focus-amount').textContent=_fpRippleExtra>0?'Review $'+fmt(_fpRippleExtra)+' extra →':'Keeping this money available';
+  document.getElementById('pm-focus').disabled=_fpRippleExtra<=0;
+}
+function fpMoneyMapPayment() {
+  const before=_fpMoneyMap,amount=_fpRippleExtra;if(!before||!(amount>0))return;
+  const fresh=fpMoneyMapCurrent();
+  if(fresh.owner!==before.owner||fresh.asOf!==before.asOf||fresh.loanId!==before.loanId||!fresh.ready||fresh.extra<amount-.005){fpRenderMoneyMap();showToast('Your numbers changed. We’ve updated your map.');return;}
+  const loan=fpManagedLoan(fresh.loanId);if(!loan)return;
+  showView('loans',null);recordLoanPayment(loan.id);
+  if(_rpLoanId!==loan.id||_rpHasPending||document.getElementById('record-payment-overlay').style.display!=='flex')return;
+  // Preserve the existing pending-operation, owner and atomic-save guards. Never save from the map.
+  document.getElementById('rp-extra').value=String(amount);
+  const status=fpLoanPaymentStatus(loan,document.getElementById('rp-date').value);
+  // Partially recorded months must not receive a duplicate full monthly payment.
+  _rpIncludeMonthly=!status.complete&&status.total<=.005;
+  document.getElementById('rp-monthly-check').classList.toggle('on',_rpIncludeMonthly);
+  const due=document.getElementById('rp-due-amt');due.style.opacity=_rpIncludeMonthly?'1':'.4';due.style.textDecoration=_rpIncludeMonthly?'none':'line-through';
+  const note=document.getElementById('rp-already-paid');note.style.display='block';note.textContent=_rpIncludeMonthly?'From your map: $'+fmt(amount)+' extra, plus your regular payment. Only confirm after you’ve paid.':'From your map: $'+fmt(amount)+' extra only. Your regular payment is separate. Only confirm after you’ve paid.';
+  updateRpBreakdown();
+}
+
+function fpMapBillsThrough(today) {
+  const p=_fpMoneyMap;return p&&p.owner===currentUser?.id&&p.asOf===fpIso(today)&&p.end?fpIso(fpAddDays(fpParseIso(p.end),-1)):null;
+}
 function renderBillsView() {
+  fpRenderMoneyMap();
   const status=document.getElementById('bill-sync-status');
   if (status) status.textContent=_fpBillMarksReady?'Your payment checklist is up to date.':'Paid status could not be loaded. Refresh before changing marks.';
   const today = new Date();
   const todayDay = today.getDate();
-  const sorted = fpBillStatusRows(today).sort(function(a, b) {
+  const sorted = fpBillStatusRows(today,fpMapBillsThrough(today)).sort(function(a, b) {
     const dateA = a.open.length ? a.open[0].due : a.dates[a.dates.length-1];
     const dateB = b.open.length ? b.open[0].due : b.dates[b.dates.length-1];
     return dateA.localeCompare(dateB);
@@ -6040,7 +6137,7 @@ function renderBillsView() {
 async function fpSetBillPaymentStatus(billId,due,paid) {
   if(!currentUser||_fpBillMarkBusy)return false;
   if(!_fpBillMarksReady){showToast('Refresh paid status before changing a mark.','error');return false;}
-  const today=new Date(),row=fpBillStatusRows(today).find(x=>String(x.bill.id)===String(billId));
+  const today=new Date(),row=fpBillStatusRows(today,fpMapBillsThrough(today)).find(x=>String(x.bill.id)===String(billId));
   if(!row||!row.dates.includes(due)||typeof paid!=='boolean')return false;
   const state=fpBillPaidFor(row.bill,due,fpIso(today),transactions,fpReadPaidMarks());
   if(paid&&state)return false;
@@ -6058,8 +6155,9 @@ async function toggleBillPaid(billId) {
   const uid=currentUser.id, today=new Date(), todayIso=fpIso(today);
   const monthFirst=todayIso.slice(0,8)+'01', last=fpIso(new Date(today.getFullYear(),today.getMonth()+1,0,12));
   const monthDues=fpOccurrences(bill,monthFirst,last);
+  const mapThrough=fpMapBillsThrough(today),through=mapThrough&&mapThrough>last?mapThrough:last;
   const from=fpIso(fpAddDays(today,-fpPriorityConfig().OVERDUE_LOOKBACK));
-  const dates=fpOccurrences(bill,from,last), marks=fpReadPaidMarks();
+  const dates=fpOccurrences(bill,from,through), marks=fpReadPaidMarks();
   const open=dates.filter(function(d){return !fpBillPaidFor(bill,d,todayIso,transactions,marks)});
   let rows, message;
   if (dates.length && !open.length) {
@@ -6287,6 +6385,7 @@ function fpResolveMoneyDetail(kind) {
 function fpRefreshOpenMoneyViews(skipPlan=false) {
   if(!currentUser)return;
   const visible=id=>{const e=document.getElementById(id);return e&&e.style.display!=='none'&&e.getClientRects().length>0;};
+  if(visible('view-bills'))fpRenderMoneyMap();
   if(!skipPlan&&visible('view-plan'))renderPlan();
   if(visible('whatif-overlay')&&currentWhatIfLoan) {
     const loan=fpManagedLoan(currentWhatIfLoan.id);
