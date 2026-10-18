@@ -1,0 +1,17 @@
+
+## Dialogs and bill clarity
+Cancel buttons keep their native keyboard action; Enter in a field submits only the active dialog, once. Escape and backdrop clicks close only the top dialog with its own cleanup. Dialogs trap keyboard focus, restore the opener, and scroll within short phone screens. The loan-payment record has an explicit Close action. Loan editing preserves confirmed 0% and unknown rates separately and rejects fractional cents. Bills disclose each scheduled date and remaining amount; cleared rows remain readable and the check has a 44px target. The debt explainer removes an unsupported 78% success claim and describes smallest-balance versus highest-interest approaches with the CFPB source: https://www.consumerfinance.gov/archive/blog/how-reduce-your-debt/ . The spending split describes FinPulse classifications without claiming a ratio proves financial health.
+
+Individual bill dates now offer Mark paid or Undo for that occurrence. Recorded expense payments are identified separately and cannot be undone through paid marks. The date list remains open while a status changes; unscheduled dates are rejected. Existing records are acknowledged in the fallback priority instead of asking for the same setup again.
+
+## Core-flow audit: debt and everyday entry
+Loan entry preserves unknown APR separately from explicit 0%, validates exact cents and a real due date, and uses the entered statement payment without silently replacing invalid input. Credit-card estimates support 0% and are capped at the balance plus estimated interest. All open debts, including student-only plans, offer payment comparisons. Payment recording requires a known APR unless recovering an already submitted operation; the monthly interest split is labeled an estimate to reconcile with the lender statement. Extra payments reject fractional cents.
+
+Expense entry records money already spent directly. Before-you-buy decisions remain in their explicit calculator. Closing a delete confirmation restores the expense editor; deletion explains immediate Undo. Signed balance forms reject malformed currency and setup validates the income schedule without a follow-up popup. The extra calendar warning appears only for a negative estimate from a current dated balance; it no longer imposes an unrelated $1,000 threshold.
+
+Debt cards label payoff time and total repayment as estimates, retain repayment cents, and explain that applying a payment comparison changes the calendar plan only. Future one-time expense records are labeled Scheduled. Cancelling expense deletion restores typed drafts as well as the editor markup.
+
+Loan editing can correct the monthly due date and schedule start without changing recorded payments. Removing a loan now asks for confirmation directly, with immediate Undo, rather than requiring a reason that was never saved. Debt payoff totals preserve estimated cents; progress does not claim completion while a balance remains. Phone debt actions have 44px touch targets. Saving income keeps the next step in Today rather than launching another delayed popup.
+
+On narrow phones, debt comparisons place readable full-width text above the actions instead of squeezing it beside them. Dialog accessible names use the product action, including Import statements, rather than internal component names.
+Editing the statement payment also updates the comparison baseline; applying a hypothetical calendar plan preserves that statement baseline.

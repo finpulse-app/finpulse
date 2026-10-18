@@ -1,0 +1,182 @@
+# FinPulse product functionality pass
+
+This pass prioritizes working everyday features. Login,
+security configuration and public launch setup are deferred at the user's request.
+
+## Working additions
+
+- The home screen leads with the Today action and direct Add expense, Add bill
+  and Before you buy shortcuts. Entry shortcuts retain today's date and the
+  correct one-time or monthly default without saving until confirmed. A quieter
+  month summary names the viewed month; month controls sit with the calendar.
+  Starting balance uses a keyboard-accessible button only in the current month.
+- Phone sessions begin with Agenda. Scheduled days and today appear first;
+  quiet dates remain available in a simple expandable list. Month is one tap
+  away and a chosen view survives navigation. Desktop sessions begin with Month.
+  Cards, controls and forms use more readable spacing and consistent surfaces.
+  Fractional dollar amounts display both cent digits.
+- Statement previews show categories and allow corrections to description, date,
+  amount, expense/income direction and expense category before saving. Corrections
+  recheck duplicates, preserve unrelated selection and update totals. Invalid or
+  unfinished corrections block import. Pending saves retain their UUIDs and lock
+  corrections; Check saved import confirms the same batch and clears its draft.
+  Close, Cancel and Escape discard an unsaved draft consistently.
+- Your Story separates recorded one-time income and expenses from whole-month
+  calendar estimates. A bank balance correction is never called earned income
+  or savings. Current/future totals use the same full-month calendar events, and
+  every plotted balance is explicitly an estimate. Past records retain exact
+  cents and exclude future-dated records, recurring schedules and loan balances.
+- Debt introductions describe the balances and payment plan without promising
+  the fastest possible way out of debt.
+- New months carry calendar estimates from the latest usable saved month instead
+  of reusing an older global balance. Zero balances and December-to-January dates
+  are preserved. Opening the account does not save a projected month balance or
+  show a delayed explanation popup. A balance from an earlier month offers a
+  direct check on the Today card. Explicit corrections use the existing dated
+  balance editor, preserve prior records and retain missed-payment reminders.
+  An older bank balance is shown with its date as a reference; only a balance
+  already recorded today is prefilled. A new current amount must be entered.
+  Calendar projections and recurring schedules include the full requested range
+  instead of silently stopping after sixty or forty months.
+- A Today card before the calendar gives one next action: confirm a dated balance,
+  review an overdue payment, confirm income, inspect a shortfall, add a bill or
+  check a purchase. It stays tied to today's records when browsing another month.
+  Missing balance dates keep the overdue reminder visible. Unconfirmed pay is
+  explained before a possible shortfall is attributed to spending. Shortcuts
+  open the working editors and views without saving or moving money.
+- Quick expense entry recognizes the full amount in `Rent $1,200`, preserves
+  merchant numbers such as `7-eleven $6.50`, and rejects ambiguous prices or
+  fractional cents while keeping the entered text. Category and item entry use
+  the same exact currency validation.
+- Add Expense starts as a one-time charge. Add Bill starts as a monthly
+  obligation. Both shortcuts use today's actual date even after browsing another
+  calendar month; selecting a specific day retains that date. Category changes
+  preserve both the typed description and amount.
+- Quick entry includes an editable date. Changing it keeps the draft, category
+  and repeat choice and starts the saved recurring obligation on that date.
+- Income editing rejects a cleared amount instead of saving zero. Explicit zero
+  remains available for users without income. Nonzero paychecks require a valid
+  date and amounts retain exact cents. Additional income uses the same amount
+  and date validation. Statement amounts outside the supported range are marked
+  unreadable during the preview instead of reaching a rejected import save.
+- Goal deadlines show the monthly amount needed and the number of deposits,
+  assuming the first deposit is one month from today with month-end clamping.
+  A shortcut prepares that monthly amount in the editor; saving remains explicit.
+  Past and near deadlines ask for an updated target or the remaining amount
+  instead of inventing monthly deposits. Editing progress focuses saved savings.
+
+- Goals: create a target, record saved progress, set an optional monthly plan/date,
+  edit it, archive it and restore it. Goals are account-owned and load across devices.
+  The progress bar uses recorded savings, not calendar estimates. The timeline is
+  arithmetic using the user's planned monthly amount; it does not move money.
+- Calendar agenda: switch between the month grid and a readable daily list. The
+  list includes every day, scheduled items and the same projected balances as the
+  grid. Each day opens the existing transaction editor. Grid days work by keyboard.
+- Expenses: search saved records by name, category or date, clear the search and
+  export a CSV report. Searching does not change monthly totals.
+- Data export: CSV reports preserve quotes, newlines and cents and protect text
+  from spreadsheet formula interpretation. JSON includes transactions, settings,
+  dated balances, goals, account bill status and device purchase notes. These are
+  exports; a JSON restore workflow is not implemented in this pass.
+- Loans: enter the actual statement payment, including zero-interest loans.
+  Credit-card estimates remain editable. Changing an APR or balance preserves a
+  payment the user already entered.
+- Future Value: entered amounts preserve cents, support zero and reject malformed
+  input without displaying stale amounts, milestone values or chart data.
+- Navigation and design: clearer Goals navigation, active states for all view
+  changes, return to the top when changing screens, keyboard card controls,
+  comfortable spacing and responsive stacked goal forms.
+- Routine account loading no longer opens a delayed stage modal over a working
+  editor. Save failures keep goal inputs; retry reuses the goal's UUID. Late goal
+  refreshes cannot replace a newly confirmed save.
+
+## Verification
+
+The PR's latest checks contain the exact verified head and counts. Browser tests
+exercise the actual goal form, save/reload/edit/archive/restore, injected failures,
+lost confirmations, agenda day selection, search, downloads, calculator inputs and statement-payment loan forms.
+Database tests run the financial-goals migration against disposable PostgreSQL.
+Real-account preview review is read-only; no sample goal or transaction is saved
+to the existing account. Test dependencies run on GitHub, with no local installs.
+
+The financial_goals table is additive and separate from transactions. A new goal
+does not change a loan balance, payment history or calendar cash. Existing repair
+checks remain required. Eighteen missing historical comparisons and twelve skips
+are not counted as passes.
+
+## Functionality first: fewer steps
+
+Future Value now starts with the purchase cost, compares one purchase or a monthly
+habit, and offers one-tap 5/10/20/30-year comparisons. Monthly amounts are invested
+at the end of each month, using an annual effective rate. It separates amounts
+contributed from illustrated growth/loss and shows zero money left to grow from
+the amount spent. The default 10% is explicitly an illustration for an S&P 500
+scenario, not a measured historical/current return. Assumptions are expandable.
+The explanation links to the [SEC compounding calculator](https://www.investor.gov/financial-tools-calculators/calculators/compound-interest-calculator).
+
+A goal shortcut prepares a draft with zero recorded savings for review; it never
+automatically moves money or saves a goal. Priority buttons open the relevant
+balance editor, Bills, Loans, Expenses or Goals. Balance/income shortcuts return
+to the current month, even when reviewing an old calendar.
+
+Repeating expenses can be added weekly, every two weeks, monthly or yearly, using
+the full amount charged each time. The repeat control preserves typed text and
+amounts. Expense editing can change or stop the repeat schedule without deleting
+the original record. The legacy category form also preserves annual charges
+instead of converting them into monthly estimates.
+
+The calculator's one-click skip action records an avoided purchase on the current
+device with Undo. It never changes a transaction, bank balance or saved-goal
+progress. For monthly habits it records only this month's choice. Repeated clicks
+do not duplicate the same calculator choice. Storage failures retain the pending
+purchase, and Undo persists removal of the final note. First-day totals parse the
+local date correctly in negative-offset time zones.
+
+## Purchase cash-flow check
+
+Future Value can compare the same purchase against dated account cash flow in one
+click. It shows the lowest balance before and after, the first projected shortfall,
+and compares buying today with waiting until the next scheduled payday. Monthly
+mode counts purchases on their real dates, including short months. The calculation
+uses the existing calendar and an everyday-spending reserve when its history is
+usable. It is independent of the long-term investing assumption.
+
+An undated or stale balance asks for a current balance. Its editor opens over the
+calculator and confirmed saves refresh the comparison in place. Missing spending,
+income or payment details keep the comparison explicitly incomplete. Waiting never
+hides an earlier shortfall. Comparisons themselves do not write finances, paid
+status, goals or purchase notes. Automatic allocation remains disabled.
+
+## Payment records and missed bills
+
+Loan payment entry shows an editable payment date, defaulting to today regardless
+of the calendar month being viewed. Pending retries retain their original date.
+Regular-payment defaults match the loan ID (or an exact legacy name), exclude
+extra-only payments, and share the calendar's settlement rules for early payments
+across month boundaries. A renamed loan still matches its recorded payments.
+
+Cash projections retain every open bill or loan occurrence within the existing
+45-day overdue review window. Paying the newest occurrence does not hide an older
+one. Amounts owed before the dated balance are deducted once, and separate overdue
+occurrences have distinct priority-action IDs.
+
+## Onboarding and empty-state clarity
+
+Setup now asks for a bank balance in plain language, explains negative balances and optional regular income, and avoids the Financial Triage label. An empty debt list offers the existing statement-upload flow alongside manual debt entry. Search-empty messages distinguish no matches from no saved records without changing monthly totals. A period with no scheduled bills says No scheduled bills, reserving All cleared for an actual payment checklist. These changes do not import, save or alter financial records until the user confirms an existing flow.
+
+Import review displays Spent, Received and Card payment instead of signed amounts. Ambiguous card files ask the user to identify a recognizable purchase using its description and unsigned dollar amount; the reader handles the underlying signs. The obsolete signed-example selector is removed. The PDF/CSV file picker is verified explicitly. An already-open older CSV-only page must be refreshed to load the PDF reader.
+
+## Multi-page Amex statement parsing
+
+The PDF reader recognizes New Charges as purchases after Payments and Credits, carries that section through continued pages, and separately recognizes fees and interest. Posting-date asterisks are accepted, so payment rows are counted as excluded instead of silently ignored. A merchant containing the word credit is not automatically a refund. Amex formatted account endings retain only the last four digits; explicitly labeled Pay Over Time APR table rows can supply the card rate without using penalty-rate warnings. A five-page fictional PDF exercises these transitions using the actual PDF.js reader. No user statement is included in the repository or CI.
+
+
+## Apple statements, hard statement facts and goal feasibility
+
+Apple Card reading uses positioned first-page minimum/due columns, current Total Balance rather than Previous Total Balance, and the explicit APR row. Daily Cash is separated from actual purchase amounts. Original financed device prices are not inserted as one-time spending. A single review creates regular card debt and its 0% financing component together, with the combined minimum counted once. Inconsistent component totals block confirmation. Paired upserts retain IDs on retries, preserve original balances and enforce owner isolation; fictional PDFs and disposable PostgreSQL tests cover them.
+
+Statement purchases and income are read-only in preview and saved views. Users can exclude an import row; they can edit their own manually added everyday expenses. Bill entry routes to Bills, including one-time bill schedules; debt/financing entry routes to Loans & Debt. Single recognizable subscriptions are offered as possibilities for confirmation, never silently added or treated as proven recurrence.
+
+Goals now show whether their payment and deadline fit the current finances. Estimates include recurring income, scheduled bills (including yearly charges and card subscriptions), debt/0% financing minimums, everyday spending from up to 90 days of history, scheduled one-time costs, all other active goal commitments and recorded savings, and exact cash dates over the next 12 months. Savings plans use stable first-of-month dates, so reopening a goal the next day does not move its monthly schedule. A positive average cannot hide a shortage before payday. A small positive current balance can still support a plan beginning next month or later if intervening costs stay covered and the cash cushion is covered from the first savings date; that start date is shown. Supported start dates over the next year are compared so an impractical pennies-per-month plan is not chosen when waiting briefly yields a useful payment and earlier finish. Missing income/balance/paid-status/spending/debt details prevent confident advice. Unrealistic goals offer both a supported monthly amount and a completion date; one button fills both for review without saving.
+
+Estimates protect the existing $500 cushion, include the existing 25% everyday-spending allowance and leave 20% of remaining monthly room uncommitted. Recorded goal savings are assumed included in the entered bank balance; holding them elsewhere makes this conservative. Current debt payments remain budgeted until the user updates the debt, and longer goal dates assume costs and income continue. No investment return or future pay increase is assumed. Assessments refresh on financial changes and never transfer money, change savings progress or rewrite goals automatically.
